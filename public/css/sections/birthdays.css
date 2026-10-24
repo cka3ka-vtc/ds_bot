@@ -1,0 +1,301 @@
+/* ============================================================
+   Дни рождения
+   ============================================================ */
+.birthdays-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.birthdays-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.bd-template-hint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.bd-template-hint code {
+  background: var(--surface-3);
+  color: #a5adff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+/* ---------- Табы шаблонов ---------- */
+.bd-template-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: fit-content;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+.bd-template-tabs button {
+  padding: 8px 16px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: background .18s, color .18s;
+}
+.bd-template-tabs button:hover { color: var(--text); background: var(--surface-3); }
+.bd-template-tabs button.active { background: var(--accent); color: #fff; }
+
+/* ---------- Требуемые роли — chips ---------- */
+.bd-role-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  min-height: 4px;
+}
+.bd-role-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.bd-role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--text);
+}
+.bd-role-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.bd-role-chip button {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  margin-left: 2px;
+  transition: background .15s, color .15s;
+}
+.bd-role-chip button:hover {
+  background: var(--danger-soft);
+  color: #f87171;
+}
+
+/* ---------- Кнопка "Добавить" ---------- */
+.btn-bd-add {
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border-light);
+}
+.btn-bd-add:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.btn-bd-add svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+}
+
+/* ---------- Список ДР ---------- */
+.birthday-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.birthday-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color .18s, background .18s, opacity .18s;
+}
+.birthday-card:hover {
+  border-color: var(--border-light);
+  background: var(--surface-3);
+}
+
+.birthday-card.active {
+  border-color: rgba(34, 197, 94, .35);
+  background: linear-gradient(135deg, var(--surface-2), rgba(34, 197, 94, .05));
+}
+.birthday-card.active:hover {
+  border-color: rgba(34, 197, 94, .55);
+  background: linear-gradient(135deg, var(--surface-3), rgba(34, 197, 94, .08));
+}
+
+.birthday-card.disabled {
+  opacity: .55;
+}
+.birthday-card.disabled:hover {
+  opacity: .75;
+}
+
+.birthday-card-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.birthday-card-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.birthday-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.birthday-card-title {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.birthday-card-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.birthday-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(107, 116, 136, .15);
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: .2px;
+}
+.birthday-badge.soon {
+  background: var(--warning-soft);
+  color: #fbbf24;
+}
+.birthday-badge.today {
+  background: var(--success-soft);
+  color: #4ade80;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, .2);
+}
+.birthday-badge.off {
+  background: rgba(107, 116, 136, .12);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.birthday-card-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.birthday-card-actions .icon-btn {
+  width: 30px;
+  height: 30px;
+}
+.birthday-card-actions .icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ---------- Пагинация ---------- */
+.bd-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding-top: 10px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.bd-pagination-btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  transition: background .15s, color .15s, border-color .15s;
+  font-family: inherit;
+}
+.bd-pagination-btn:hover:not(:disabled):not(.active) {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.bd-pagination-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  cursor: default;
+}
+.bd-pagination-btn:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+
+.bd-pagination-ellipsis {
+  min-width: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  user-select: none;
+  padding: 0 2px;
+}
+
+/* ---------- Адаптив ---------- */
+@media (max-width: 1280px) {
+  .birthdays-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .birthday-card { flex-wrap: wrap; }
+  .birthday-badge { margin-left: auto; }
+}

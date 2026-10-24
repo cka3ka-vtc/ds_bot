@@ -1,0 +1,66 @@
+/* ============================================================
+   Анонсы — стили формы редактора (карточка использует .list-card)
+   ============================================================ */
+.announcement-list { gap: 14px; }
+
+.ann-icon-input { font-family: 'Inter', monospace; font-size: 13px; }
+
+.ann-status-toggle {
+  display: flex; gap: 10px; align-items: center;
+  height: 40px; padding: 0 13px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); cursor: pointer;
+  transition: border-color .18s;
+}
+.ann-status-toggle:hover { border-color: var(--border-light); }
+.ann-status-toggle span { font-size: 13px; color: var(--text); }
+
+/* Tabs */
+.ann-tabs {
+  display: flex; gap: 4px; margin-bottom: 20px; padding: 4px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 10px; width: fit-content; max-width: 100%; flex-wrap: wrap;
+}
+.ann-tab {
+  padding: 8px 16px; border-radius: 7px;
+  font-size: 12.5px; font-weight: 600; color: var(--text-muted);
+  transition: background .18s, color .18s;
+}
+.ann-tab:hover { color: var(--text); background: var(--surface-3); }
+.ann-tab.active { background: var(--accent); color: #fff; }
+.ann-tab-content { display: none; }
+.ann-tab-content.active { display: block; animation: fadeUp .25s ease; }
+
+/* Общие элементы формы для редакторов */
+.form-section {
+  padding: 16px; margin-bottom: 16px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.form-section:last-child { margin-bottom: 0; }
+.form-section-title {
+  font-size: 13px; font-weight: 700; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.form-section-title::before { content: ''; width: 3px; height: 14px; background: var(--accent); border-radius: 2px; }
+.form-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+.radio-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.radio-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; background: var(--surface-3);
+  border: 1px solid transparent; border-radius: 8px;
+  cursor: pointer; font-size: 13px; color: var(--text-dim);
+  transition: border-color .15s, background .15s;
+}
+.radio-row:hover { border-color: var(--border-light); color: var(--text); }
+.radio-row:has(input:checked) {
+  border-color: var(--accent); background: rgba(88, 101, 242, .08);
+  color: var(--text); font-weight: 500;
+}
+.sched-options, .event-options, .mention-options { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.sched-options.active, .event-options.active, .mention-options.active { display: block; }
+
+.msg-editor-top {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--border);
+}

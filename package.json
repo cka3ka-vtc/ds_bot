@@ -1,0 +1,13 @@
+{
+  "name": "ckazka-dev-panel",
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "express": "^4.21.1",
+    "zod": "^3.23.8"
+  }
+}

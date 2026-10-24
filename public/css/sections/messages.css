@@ -1,0 +1,145 @@
+/* ============================================================
+   Общая карточка для Сообщений / Анонсов / Отложенных / Автоудаления
+   ============================================================ */
+.messages-list { display: flex; flex-direction: column; gap: 12px; }
+
+.list-card {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 16px 18px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.list-card:hover { border-color: var(--border-light); box-shadow: 0 4px 20px rgba(0, 0, 0, .18); }
+
+/* --- Статус: активно / отправлено — зелёный --- */
+.list-card.active,
+.list-card.sent { border-color: rgba(34, 197, 94, .45); }
+.list-card.active:hover,
+.list-card.sent:hover { border-color: rgba(34, 197, 94, .65); box-shadow: 0 4px 22px rgba(34, 197, 94, .12); }
+
+/* --- Статус: ожидает отправки — жёлтый --- */
+.list-card.scheduled { border-color: rgba(245, 158, 11, .45); }
+.list-card.scheduled:hover { border-color: rgba(245, 158, 11, .65); box-shadow: 0 4px 22px rgba(245, 158, 11, .12); }
+
+/* --- Статус: сообщение удалено — красный --- */
+.list-card.deleted { border-color: rgba(239, 68, 68, .35); }
+.list-card.deleted:hover { border-color: rgba(239, 68, 68, .55); box-shadow: 0 4px 22px rgba(239, 68, 68, .1); }
+
+/* ---------- HEAD ---------- */
+.list-card-head { display: flex; align-items: center; gap: 14px; }
+
+.list-card-icon {
+  width: 44px; height: 44px; border-radius: 11px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, rgba(88, 101, 242, .18), rgba(139, 92, 246, .08));
+  border: 1px solid rgba(88, 101, 242, .18);
+  color: #a5adff; flex-shrink: 0;
+  transition: background .2s, border-color .2s, color .2s;
+}
+.list-card-icon svg { width: 20px; height: 20px; stroke: currentColor; }
+.list-card-icon i { font-size: 18px; line-height: 1; }
+
+.list-card.active .list-card-icon,
+.list-card.sent .list-card-icon {
+  background: linear-gradient(135deg, rgba(34, 197, 94, .18), rgba(34, 197, 94, .06));
+  border-color: rgba(34, 197, 94, .28); color: #4ade80;
+}
+.list-card.scheduled .list-card-icon {
+  background: linear-gradient(135deg, rgba(245, 158, 11, .18), rgba(245, 158, 11, .06));
+  border-color: rgba(245, 158, 11, .28); color: #fbbf24;
+}
+.list-card.deleted .list-card-icon {
+  background: linear-gradient(135deg, rgba(239, 68, 68, .18), rgba(239, 68, 68, .06));
+  border-color: rgba(239, 68, 68, .28); color: #f87171;
+}
+
+.list-card-title-block { flex: 1; min-width: 0; }
+.list-card-title {
+  font-size: 15px; font-weight: 650; letter-spacing: -.15px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text);
+}
+
+/* ---------- ACTIONS ---------- */
+.list-card-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.list-card-actions .icon-btn { width: 34px; height: 34px; border-radius: 9px; }
+.list-card-actions .icon-btn svg { width: 15px; height: 15px; }
+
+.actions-divider {
+  width: 1px; height: 18px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ---------- DROPDOWN (⋮) ---------- */
+.actions-dropdown { position: relative; display: inline-flex; }
+.actions-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 230px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+  padding: 4px;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.actions-dropdown-menu[hidden] { display: none; }
+.actions-dropdown-menu button {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 6px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--text-dim); text-align: left;
+  width: 100%;
+  transition: background .15s, color .15s;
+}
+.actions-dropdown-menu button:hover:not(:disabled) { background: var(--accent-soft); color: #a5adff; }
+.actions-dropdown-menu button.danger { color: #f87171; }
+.actions-dropdown-menu button.danger:hover:not(:disabled) { background: var(--danger-soft); color: #fca5a5; }
+.actions-dropdown-menu button:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+.actions-dropdown-menu svg {
+  width: 14px; height: 14px;
+  stroke: currentColor; fill: none;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+/* ---------- FOOTER ---------- */
+.list-card-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding-top: 12px; border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.list-card-info-left {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; font-size: 12px; color: var(--text-muted);
+  flex: 1; min-width: 0;
+}
+.list-card-info-right {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; flex-shrink: 0;
+}
+
+.list-meta-item { display: inline-flex; align-items: center; gap: 5px; }
+.list-meta-item svg { width: 13px; height: 13px; stroke: currentColor; opacity: .7; flex-shrink: 0; }
+.info-sep { color: var(--text-muted); opacity: .5; font-size: 11px; }
+
+/* ---------- SWITCH ---------- */
+.list-card .switch.on { background: var(--accent); border-color: var(--accent); }
+.list-card.active .switch.on { background: var(--success); border-color: var(--success); }
+
+/* ---------- Адаптив ---------- */
+@media (max-width: 640px) {
+  .list-card-head { flex-wrap: wrap; }
+  .list-card-actions { width: 100%; justify-content: flex-end; padding-top: 8px; }
+  .list-card-footer { flex-direction: column; align-items: stretch; }
+  .list-card-info-left, .list-card-info-right { width: 100%; }
+  .list-card-info-right { justify-content: flex-end; }
+}
