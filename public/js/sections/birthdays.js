@@ -1,3 +1,7 @@
+/* ============================================================
+   Дни рождения: список + настройки + шаблон поздравления.
+   ============================================================ */
+
 import { state } from '../state.js';
 import { api } from '../api.js';
 import { escapeHtml, pluralize } from '../utils.js';
@@ -19,15 +23,21 @@ const MONTHS = [
 const DEFAULT_SINGLE = {
   displayMode: 'embed-color', accentColor: '#5865F2',
   title: 'С днём рождения, {user}!', subtitle: '', thumbnail: '',
-  blocks: [{ id: 'bd-def-s', type: 'text', content: 'Поздравляем! 🎂 Тебе исполнилось **{age}**!' }]
+  blocks: [{
+    id: 'bd-def-s', type: 'text',
+    content: 'Поздравляем! 🎂 Тебе исполняется **{age}**!'
+  }]
 };
+
 const DEFAULT_NOYEAR = {
   displayMode: 'embed-color', accentColor: '#5865F2',
   title: 'С днём рождения, {user}!', subtitle: '', thumbnail: '',
-  blocks: [{ id: 'bd-def-n', type: 'text', content: 'Поздравляем с днём рождения! 🎉 Всего наилучшего в новом году жизни!' }]
+  blocks: [{
+    id: 'bd-def-n', type: 'text',
+    content: 'Поздравляем с днём рождения! 🎉 Всего наилучшего в новом году жизни!'
+  }]
 };
 
-/* Пагинация: 8 карточек на страницу */
 const BIRTHDAYS_PAGE_SIZE = 6;
 
 let editorInstance = null;
@@ -35,6 +45,10 @@ let currentTab = 'single';
 let birthdaysToolbar = null;
 let currentBirthdayPage = 1;
 let currentGuildId = null;
+
+/* ============================================================
+   Данные
+   ============================================================ */
 
 function getData() {
   const fallback = {
@@ -56,7 +70,13 @@ function getData() {
   };
 }
 
-function getMember(userId) { return state.members.find(m => m.id === userId); }
+function getMember(userId) {
+  return state.members.find(m => m.id === userId);
+}
+
+/* ============================================================
+   Утилиты
+   ============================================================ */
 
 function pluralDays(n) {
   const a = Math.abs(n) % 100, l = a % 10;
@@ -65,6 +85,7 @@ function pluralDays(n) {
   if (l > 1 && l < 5) return 'дня';
   return 'дней';
 }
+
 function pluralYears(n) {
   const a = Math.abs(n) % 100, l = a % 10;
   if (a > 10 && a < 20) return 'лет';
@@ -72,10 +93,12 @@ function pluralYears(n) {
   if (l === 1) return 'год';
   return 'лет';
 }
+
 function getAge(user, now = new Date()) {
   if (!user.year) return null;
   return now.getFullYear() - user.year;
 }
+
 function daysUntilBirthday(day, month) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -83,17 +106,20 @@ function daysUntilBirthday(day, month) {
   if (target < today) target = new Date(now.getFullYear() + 1, month - 1, day);
   return Math.round((target - today) / 86400000);
 }
+
 function subtitleFor(user) {
   if (!user.day || !user.month) return 'Дата рождения не указана';
   const age = getAge(user);
   const dateStr = `${user.day} ${MONTHS[user.month - 1]}`;
   return age !== null ? `${age} ${pluralYears(age)} · ${dateStr}` : dateStr;
 }
+
 function badgeText(days) {
   if (days === 0) return 'Сегодня';
   if (days === 1) return 'Завтра';
   return `Через ${days} ${pluralDays(days)}`;
 }
+
 function isBirthdayActive(user, settings) {
   if (user.enabled === false) return false;
   if (!settings.enabled) return false;
@@ -103,13 +129,13 @@ function isBirthdayActive(user, settings) {
 }
 
 /* ============================================================
-   Рендер раздела
+   Рендер
    ============================================================ */
+
 export function renderBirthdaysView() {
   const root = document.getElementById('view-birthdays');
   if (!root) return;
 
-  /* При смене гильдии — сбрасываем страницу на первую */
   if (state.guildId !== currentGuildId) {
     currentBirthdayPage = 1;
     currentGuildId = state.guildId;
@@ -122,17 +148,17 @@ export function renderBirthdaysView() {
       <div class="birthdays-two-col">
         <div class="card">
           <div class="card-header">
-            <div><h2>Настройки поздравлений</h2><p>Время, часовой пояс и роль</p></div>
+            <div><h2>Настройки поздравлений</h2><p>Время, канал и роль</p></div>
           </div>
           <div class="card-body">
             <div class="editor-grid">
               <div class="form-group">
                 <label>Время поздравления</label>
                 <input type="time" class="input" data-bd-time value="${escapeHtml(data.settings.time || '09:00')}">
-                <span class="hint">Используется время сервера</span>
+                <span class="hint">Опрос раз в час</span>
               </div>
               <div class="form-group">
-                <label>Автопоздравления</label>
+                <label>Опоздравление</label>
                 <label class="ann-status-toggle">
                   <input type="checkbox" data-bd-enabled ${data.settings.enabled ? 'checked' : ''}>
                   <span>Включено</span>
@@ -142,31 +168,29 @@ export function renderBirthdaysView() {
             <div class="form-group">
               <label>Роль именинника</label>
               ${rolePickerHTML({ id: 'bd_role', value: data.settings.roleId || '' })}
-              <span class="hint">Роль будет выдана в день рождения</span>
+              <span class="hint">Выдаётся в день рождения</span>
             </div>
             <div class="form-group">
-              <label>Канал для поздравления</label>
+              <label>Канал для поздравлений</label>
               ${channelPickerHTML({ id: 'bd_channel' })}
             </div>
-
             <div class="form-group">
               <label>Требуемые роли (проверка)</label>
-              <span class="hint" style="display:block;margin-bottom:8px;">Поздравляем только тех, у кого есть хотя бы одна из этих ролей. Пусто — проверка отключена.</span>
+              <span class="hint" style="display:block;margin-bottom:8px;">Поздравляем только участников с одной из этих ролей. Пусто — без проверки.</span>
               <div class="bd-role-chips" data-bd-role-chips></div>
               ${rolePickerHTML({ id: 'bd_required_role', placeholder: 'Добавить роль...' })}
             </div>
-
             <div class="toggle-row">
               <div class="toggle-info">
                 <strong>Снимать роль на следующий день</strong>
-                <span>Автоматически убирать роль после завершения дня рождения</span>
+                <span>Роль будет снята после праздника</span>
               </div>
               <button type="button" class="switch ${data.settings.roleRemoveNextDay !== false ? 'on' : ''}" data-bd-role-remove></button>
             </div>
             <div class="toggle-row">
               <div class="toggle-info">
                 <strong>Удалять сообщение на следующий день</strong>
-                <span>Сообщение с поздравлением будет удалено в полночь</span>
+                <span>Сообщение-поздравление удалится</span>
               </div>
               <button type="button" class="switch ${data.settings.autoDeleteMessage ? 'on' : ''}" data-bd-delete-msg></button>
             </div>
@@ -175,9 +199,9 @@ export function renderBirthdaysView() {
 
         <div class="card">
           <div class="card-header">
-            <div><h2>Ближайшие дни рождения</h2><p>Пользователи с датой рождения</p></div>
+            <div><h2>Список дней рождения</h2><p>Все пользователи с ДР</p></div>
             <button type="button" class="btn btn-sm btn-bd-add" data-bd-add>
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <i class="fa-solid fa-plus"></i>
               <span>Добавить</span>
             </button>
           </div>
@@ -189,12 +213,12 @@ export function renderBirthdaysView() {
 
       <div class="card">
         <div class="card-header">
-          <div><h2>Шаблон поздравления</h2><p>Используйте переменные для персонализации</p></div>
+          <div><h2>Шаблон поздравления</h2><p>Используйте плейсхолдеры для персонализации</p></div>
         </div>
         <div class="card-body">
           <div class="bd-template-hint">
-            <code>{user}</code> — упоминание (mention)
-            <code>{age}</code> — возраст (только для шаблона «с годом»)
+            <code>{user}</code> — упоминание
+            <code>{age}</code> — возраст (только для года)
           </div>
           <div class="bd-template-tabs">
             <button type="button" data-tpl-tab="single" class="${currentTab === 'single' ? 'active' : ''}">С годом</button>
@@ -206,7 +230,7 @@ export function renderBirthdaysView() {
     </div>
   `;
 
-  /* === Настройки === */
+  /* ---- Настройки ---- */
   const timeInput = root.querySelector('[data-bd-time]');
   timeInput.addEventListener('input', () => { data.settings.time = timeInput.value; });
 
@@ -228,7 +252,7 @@ export function renderBirthdaysView() {
     }
   }
 
-  /* === Chips требуемых ролей === */
+  /* ---- Роли ---- */
   const chipsContainer = root.querySelector('[data-bd-role-chips]');
 
   function renderRoleChips() {
@@ -245,7 +269,7 @@ export function renderBirthdaysView() {
         <span class="bd-role-chip" data-role-id="${rid}">
           <span class="bd-role-chip-dot" style="background:${color};"></span>
           <span>${escapeHtml(name)}</span>
-          <button type="button" data-remove-role="${rid}" aria-label="Удалить">×</button>
+          <button type="button" data-remove-role="${rid}" aria-label="Удалить">✕</button>
         </span>
       `;
     }).join('');
@@ -270,17 +294,17 @@ export function renderBirthdaysView() {
       renderRoleChips();
       const picker = root.querySelector('[data-role-picker="bd_required_role"]');
       if (picker) {
-        const input = picker.querySelector('[data-role-input="bd_required_role"]');
-        const hidden = picker.querySelector('[data-role-hidden="bd_required_role"]');
-        const icon = picker.querySelector('.role-input-icon');
-        if (input) input.value = '';
-        if (hidden) hidden.value = '';
-        if (icon) icon.innerHTML = '';
+        const inp = picker.querySelector('[data-role-input="bd_required_role"]');
+        const hid = picker.querySelector('[data-role-hidden="bd_required_role"]');
+        const ico = picker.querySelector('.role-input-icon');
+        if (inp) inp.value = '';
+        if (hid) hid.value = '';
+        if (ico) ico.innerHTML = '';
       }
     }
   });
 
-  /* === Toggles === */
+  /* ---- Toggles ---- */
   const roleRemoveBtn = root.querySelector('[data-bd-role-remove]');
   roleRemoveBtn.addEventListener('click', () => {
     data.settings.roleRemoveNextDay = !(data.settings.roleRemoveNextDay !== false);
@@ -293,7 +317,7 @@ export function renderBirthdaysView() {
     deleteMsgBtn.classList.toggle('on', data.settings.autoDeleteMessage);
   });
 
-  /* === Список + тулбар === */
+  /* ---- Список ---- */
   const listContainer = root.querySelector('[data-bd-list]');
   const listParent = listContainer.parentNode;
   listParent.querySelectorAll('.list-toolbar, .bulk-panel').forEach(el => el.remove());
@@ -316,11 +340,10 @@ export function renderBirthdaysView() {
       ],
       actions: [
         { id: 'enable', label: 'Включить', handler: ids => bulkToggleBirthdays(ids, true) },
-        { id: 'disable', label: 'Отключить', handler: ids => bulkToggleBirthdays(ids, false) },
+        { id: 'disable', label: 'Выключить', handler: ids => bulkToggleBirthdays(ids, false) },
         { id: 'delete', label: 'Удалить', danger: true, handler: bulkDeleteBirthdays }
       ],
       selectableSelector: '.birthday-card',
-      /* При смене поиска/фильтра — сбрасываем на 1-ю страницу */
       onFilterChange: () => { currentBirthdayPage = 1; }
     });
     birthdaysToolbar.refresh();
@@ -328,12 +351,12 @@ export function renderBirthdaysView() {
     renderBirthdayListItems(listContainer, []);
   }
 
-  /* === Кнопка добавления === */
+  /* ---- Добавление ---- */
   root.querySelector('[data-bd-add]').addEventListener('click', () => {
     openBirthdayModal(data, () => renderBirthdaysView());
   });
 
-  /* === Редактор шаблонов === */
+  /* ---- Редактор шаблона ---- */
   const editorContainer = root.querySelector('[data-bd-editor]');
 
   function getTemplateFor(tab) {
@@ -350,7 +373,7 @@ export function renderBirthdaysView() {
 
   function mountEditor() {
     if (editorInstance) { editorInstance.unmount(); editorInstance = null; }
-    editorInstance = new Editor('birthday', {
+    editorInstance = new Editor('birthdays', {
       getRoleName: () => null,
       previewUser: '<span class="dp-mention">@Иван</span>',
       previewAge: currentTab === 'single' ? '30' : null,
@@ -379,24 +402,31 @@ export function renderBirthdaysView() {
 }
 
 /* ============================================================
-   Рендер списка (с пагинацией по BIRTHDAYS_PAGE_SIZE)
+   Список
    ============================================================ */
+
 function renderBirthdayListItems(container, items) {
   const data = getData();
 
   if (!items.length) {
     if (!data.users.length) {
-      container.innerHTML = emptyState(
-        '<path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/><path d="M2 21h20"/>',
-        'Пока нет дней рождения', 'Нажмите «Добавить»'
-      );
+      container.innerHTML = emptyState({
+        icon: 'fa-cake-candles',
+        title: 'Пока нет дней рождения',
+        text: 'Добавьте первого именинника — кнопка «Добавить» в шапке.',
+        ctaLabel: 'Добавить',
+        ctaAction: 'add-bd'
+      });
+      container.querySelector('[data-add-bd]')?.addEventListener('click', () => {
+        openBirthdayModal(data, () => renderBirthdaysView());
+      });
     } else {
       container.innerHTML = noResultsHTML();
     }
     return;
   }
 
-  /* Сортировка по ближайшим — ДО пагинации, чтобы страницы шли по порядку */
+  /* Сортировка по близости */
   const sorted = [...items]
     .filter(u => u.day && u.month)
     .map(u => ({ ...u, _days: daysUntilBirthday(u.day, u.month) }))
@@ -465,16 +495,25 @@ function bindCardActions(container, data) {
       const userId = btn.dataset.bdRemove;
       const member = getMember(userId);
       const name = member?.displayName || member?.username || userId;
-      const ok = await confirmDialog({ title: 'Удаление дня рождения', text: `Удалить ДР «${name}»?`, actionText: 'Удалить' });
+
+      const ok = await confirmDialog({
+        title: 'Удаление ДР',
+        text: `Удалить ДР «${name}»?`,
+        actionText: 'Удалить'
+      });
       if (!ok) return;
+
       const fresh = getData();
       fresh.users = fresh.users.filter(x => x.userId !== userId);
       state.birthdays = fresh;
+
       try {
         await api.setData(state.guildId, 'birthdays', fresh);
         renderBirthdaysView();
         toast('Удалено');
-      } catch (e) { toast(e.message, { type: 'error' }); }
+      } catch (e) {
+        toast(e.message, { type: 'error' });
+      }
     });
   });
 }
@@ -482,9 +521,10 @@ function bindCardActions(container, data) {
 /* ============================================================
    Пагинация
    ============================================================ */
+
 function renderPagination(totalPages) {
   const btn = (page, label, extraClass = '', disabled = false) =>
-    `<button type="button" class="bd-pagination-btn ${extraClass}" data-page-btn="${page}" ${disabled ? 'disabled' : ''} aria-label="${page === 'prev' ? 'Назад' : page === 'next' ? 'Вперёд' : 'Страница ' + page}">${label}</button>`;
+    `<button type="button" class="bd-pagination-btn ${extraClass}" data-page-btn="${page}" ${disabled ? 'disabled' : ''}>${label}</button>`;
 
   const items = [];
   items.push(btn('prev', '‹', '', currentBirthdayPage === 1));
@@ -516,10 +556,8 @@ function bindPagination(container, totalPages) {
       else newPage = parseInt(val, 10);
 
       if (!newPage || newPage < 1 || newPage > totalPages || newPage === currentBirthdayPage) return;
-
       currentBirthdayPage = newPage;
 
-      /* Через toolbar — сохраняем активные фильтр и поиск */
       if (birthdaysToolbar && birthdaysToolbar.el.isConnected) {
         birthdaysToolbar.refresh();
       } else {
@@ -530,8 +568,9 @@ function bindPagination(container, totalPages) {
 }
 
 /* ============================================================
-   Точечный рефреш (вызывается из SSE)
+   SSE-обновление
    ============================================================ */
+
 export function refreshBirthdaysList() {
   if (birthdaysToolbar && birthdaysToolbar.el.isConnected) {
     birthdaysToolbar.refresh();
@@ -543,17 +582,19 @@ export function refreshBirthdaysList() {
 }
 
 /* ============================================================
-   Массовые действия
+   Bulk
    ============================================================ */
+
 async function bulkToggleBirthdays(userIds, enabled) {
   const fresh = getData();
   const affected = fresh.users.filter(u => userIds.includes(u.userId));
   for (const u of affected) u.enabled = enabled;
+
   try {
     state.birthdays = fresh;
     await api.setData(state.guildId, 'birthdays', fresh);
     renderBirthdaysView();
-    toast(`${enabled ? 'Включено' : 'Отключено'}: ${affected.length}`);
+    toast(`${enabled ? 'Включено' : 'Выключено'}: ${affected.length}`);
   } catch (e) {
     toast('Ошибка: ' + e.message, { type: 'error' });
   }
@@ -561,11 +602,12 @@ async function bulkToggleBirthdays(userIds, enabled) {
 
 async function bulkDeleteBirthdays(userIds) {
   const ok = await confirmDialog({
-    title: 'Удаление дней рождения',
+    title: 'Удаление',
     text: `Удалить ${userIds.length} ${pluralize(userIds.length, ['запись', 'записи', 'записей'])}?`,
     actionText: 'Удалить'
   });
   if (!ok) return;
+
   try {
     const fresh = getData();
     fresh.users = fresh.users.filter(u => !userIds.includes(u.userId));
@@ -581,6 +623,7 @@ async function bulkDeleteBirthdays(userIds) {
 /* ============================================================
    Модалка добавления/редактирования
    ============================================================ */
+
 function openBirthdayModal(data, onSaved, existing = null) {
   const isEdit = !!existing;
   const isEnabled = existing?.enabled !== false;
@@ -596,6 +639,7 @@ function openBirthdayModal(data, onSaved, existing = null) {
     const v = i + 1;
     return `<option value="${v}" ${existing?.day === v ? 'selected' : ''}>${v}</option>`;
   }).join('');
+
   const monthOptions = MONTHS.map((m, i) => {
     const v = i + 1;
     return `<option value="${v}" ${existing?.month === v ? 'selected' : ''}>${m}</option>`;
@@ -607,30 +651,24 @@ function openBirthdayModal(data, onSaved, existing = null) {
       ${memberPickerHTML({ id: 'bd_member', value: existing?.userId || '' })}
     </div>
     <div class="editor-grid" style="grid-template-columns:1fr 1fr 1fr;">
-      <div class="form-group">
-        <label>День</label>
-        <select class="input" data-bd-day>${dayOptions}</select>
-      </div>
-      <div class="form-group">
-        <label>Месяц</label>
-        <select class="input" data-bd-month>${monthOptions}</select>
-      </div>
-      <div class="form-group">
-        <label>Год</label>
-        <input type="number" class="input" data-bd-year placeholder="Необязательно" min="1900" max="2100" value="${existing?.year || ''}">
-      </div>
+      <div class="form-group"><label>День</label><select class="input" data-bd-day>${dayOptions}</select></div>
+      <div class="form-group"><label>Месяц</label><select class="input" data-bd-month>${monthOptions}</select></div>
+      <div class="form-group"><label>Год</label><input type="number" class="input" data-bd-year placeholder="Необязательно" min="1900" max="2100" value="${existing?.year || ''}"></div>
     </div>
-    <span class="hint" style="display:block;margin-top:-10px;margin-bottom:14px;">Год нужен для расчёта возраста. Если не указан — используется шаблон «без года».</span>
+    <span class="hint" style="display:block;margin-top:-10px;margin-bottom:14px;">Год нужен только для расчёта возраста.</span>
     <label class="check-row">
       <input type="checkbox" data-bd-user-enabled ${isEnabled ? 'checked' : ''}>
       <div class="check-row-info">
-        <strong>Отправлять поздравление</strong>
+        <strong>Поздравлять</strong>
         <span>Если выключено — бот не поздравит и не выдаст роль</span>
       </div>
     </label>
   `;
 
-  const m = modal({ title: isEdit ? 'Редактировать день рождения' : 'Добавить день рождения', body, footer });
+  const m = modal({
+    title: isEdit ? 'Редактировать ДР' : 'Добавить ДР',
+    body, footer
+  });
 
   if (existing?.userId) {
     const member = getMember(existing.userId);
@@ -681,22 +719,28 @@ function openBirthdayModal(data, onSaved, existing = null) {
       await api.setData(state.guildId, 'birthdays', fresh);
       m.close();
       onSaved?.();
-      toast(isEdit ? 'День рождения обновлён' : 'День рождения добавлен');
+      toast(isEdit ? 'Обновлено' : 'Добавлено');
     } catch (e) {
       toast(e.message || 'Ошибка', { type: 'error' });
     }
   });
 }
 
+/* ============================================================
+   Сохранение
+   ============================================================ */
+
 export async function saveBirthdays() {
   const data = getData();
   const root = document.getElementById('view-birthdays');
   if (root?._bdSaveCurrentTemplate) root._bdSaveCurrentTemplate();
+
   if (editorInstance) {
     const cfg = editorInstance.getConfig();
     if (currentTab === 'single') data.template = cfg;
     else if (currentTab === 'noYear') data.templateNoYear = cfg;
   }
+
   try {
     await api.setData(state.guildId, 'birthdays', data);
     state.birthdays = data;

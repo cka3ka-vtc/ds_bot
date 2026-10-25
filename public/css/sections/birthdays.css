@@ -1,11 +1,9 @@
 /* ============================================================
-   Дни рождения
+   Дни рождения: двухколоночный лэйаут, карточки пользователей,
+   tabs для шаблонов, chips для ролей, пагинация.
    ============================================================ */
-.birthdays-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
+
+.birthdays-layout { display: flex; flex-direction: column; gap: 16px; }
 
 .birthdays-two-col {
   display: grid;
@@ -14,6 +12,7 @@
   align-items: flex-start;
 }
 
+/* ---------- Hint ---------- */
 .bd-template-hint {
   display: flex;
   flex-wrap: wrap;
@@ -31,7 +30,7 @@
   font-size: 12px;
 }
 
-/* ---------- Табы шаблонов ---------- */
+/* ---------- Tabs ---------- */
 .bd-template-tabs {
   display: flex;
   gap: 4px;
@@ -55,7 +54,7 @@
 .bd-template-tabs button:hover { color: var(--text); background: var(--surface-3); }
 .bd-template-tabs button.active { background: var(--accent); color: #fff; }
 
-/* ---------- Требуемые роли — chips ---------- */
+/* ---------- Role chips ---------- */
 .bd-role-chips {
   display: flex;
   flex-wrap: wrap;
@@ -80,50 +79,33 @@
   color: var(--text);
 }
 .bd-role-chip-dot {
-  width: 8px;
-  height: 8px;
+  width: 8px; height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 .bd-role-chip button {
-  width: 18px;
-  height: 18px;
+  width: 18px; height: 18px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1;
+  font-size: 11px;
   margin-left: 2px;
   transition: background .15s, color .15s;
 }
-.bd-role-chip button:hover {
-  background: var(--danger-soft);
-  color: #f87171;
-}
+.bd-role-chip button:hover { background: var(--danger-soft); color: #f87171; }
 
-/* ---------- Кнопка "Добавить" ---------- */
+/* ---------- Кнопка «Добавить» ---------- */
 .btn-bd-add {
   background: var(--surface-3);
   color: var(--text);
   border: 1px solid var(--border-light);
 }
-.btn-bd-add:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-.btn-bd-add svg {
-  width: 14px;
-  height: 14px;
-  stroke: currentColor;
-}
+.btn-bd-add:hover { background: var(--surface-2); color: var(--text); }
+.btn-bd-add i { font-size: 11px; }
 
-/* ---------- Список ДР ---------- */
-.birthday-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+/* ---------- Список ---------- */
+.birthday-list { display: flex; flex-direction: column; gap: 8px; }
 
 .birthday-card {
   display: flex;
@@ -135,30 +117,16 @@
   border-radius: var(--radius-sm);
   transition: border-color .18s, background .18s, opacity .18s;
 }
-.birthday-card:hover {
-  border-color: var(--border-light);
-  background: var(--surface-3);
-}
-
+.birthday-card:hover { border-color: var(--border-light); background: var(--surface-3); }
 .birthday-card.active {
   border-color: rgba(34, 197, 94, .35);
   background: linear-gradient(135deg, var(--surface-2), rgba(34, 197, 94, .05));
 }
-.birthday-card.active:hover {
-  border-color: rgba(34, 197, 94, .55);
-  background: linear-gradient(135deg, var(--surface-3), rgba(34, 197, 94, .08));
-}
-
-.birthday-card.disabled {
-  opacity: .55;
-}
-.birthday-card.disabled:hover {
-  opacity: .75;
-}
+.birthday-card.disabled { opacity: .55; }
+.birthday-card.disabled:hover { opacity: .75; }
 
 .birthday-card-avatar {
-  width: 42px;
-  height: 42px;
+  width: 42px; height: 42px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   display: grid;
@@ -169,11 +137,7 @@
   flex-shrink: 0;
   overflow: hidden;
 }
-.birthday-card-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
+.birthday-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
 .birthday-card-info {
   flex: 1;
@@ -228,14 +192,8 @@
   gap: 4px;
   flex-shrink: 0;
 }
-.birthday-card-actions .icon-btn {
-  width: 30px;
-  height: 30px;
-}
-.birthday-card-actions .icon-btn svg {
-  width: 14px;
-  height: 14px;
-}
+.birthday-card-actions .icon-btn { width: 30px; height: 30px; }
+.birthday-card-actions .icon-btn i { font-size: 11px; }
 
 /* ---------- Пагинация ---------- */
 .bd-pagination {
@@ -247,7 +205,6 @@
   margin-top: 4px;
   border-top: 1px solid var(--border);
 }
-
 .bd-pagination-btn {
   min-width: 32px;
   height: 32px;
@@ -262,7 +219,6 @@
   border: 1px solid var(--border);
   color: var(--text-dim);
   transition: background .15s, color .15s, border-color .15s;
-  font-family: inherit;
 }
 .bd-pagination-btn:hover:not(:disabled):not(.active) {
   background: var(--surface-3);
@@ -274,11 +230,7 @@
   border-color: var(--accent);
   cursor: default;
 }
-.bd-pagination-btn:disabled {
-  opacity: .35;
-  cursor: not-allowed;
-}
-
+.bd-pagination-btn:disabled { opacity: .35; cursor: not-allowed; }
 .bd-pagination-ellipsis {
   min-width: 24px;
   text-align: center;
@@ -290,11 +242,8 @@
 
 /* ---------- Адаптив ---------- */
 @media (max-width: 1280px) {
-  .birthdays-two-col {
-    grid-template-columns: 1fr;
-  }
+  .birthdays-two-col { grid-template-columns: 1fr; }
 }
-
 @media (max-width: 640px) {
   .birthday-card { flex-wrap: wrap; }
   .birthday-badge { margin-left: auto; }

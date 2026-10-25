@@ -1,33 +1,105 @@
+/* ============================================================
+   Zod-схемы для валидации всех данных, приходящих через API.
+
+   Единая точка правды о структуре данных:
+   - изменения в UI → сначала обновите схему здесь
+   - сервер не примет невалидный объект
+   ============================================================ */
+
 import { z } from 'zod';
 
-const Snowflake = z.string().regex(/^\d{17,20}$/, 'Некорректный ID');
+/* ---------- Общие примитивы ---------- */
+
+const Snowflake = z.string().regex(/^\d{17,20}$/, 'Некорректный Discord ID');
 const HexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Некорректный цвет');
-const UrlString = z.string().url().optional().or(z.literal(''));
+const UrlOrEmpty = z.string().url().optional().or(z.literal(''));
+
+/* ---------- Блоки Discord-сообщений ---------- */
 
 const Block = z.discriminatedUnion('type', [
-  z.object({ id: z.string(), type: z.literal('text'), content: z.string().max(4000) }),
-  z.object({ id: z.string(), type: z.literal('sections'), title: z.string(), listStyle: z.enum(['numeric', 'dot']), items: z.array(z.string()) }),
-  z.object({ id: z.string(), type: z.literal('separator'), divider: z.boolean(), spacing: z.number().int().min(1).max(2) }),
-  z.object({ id: z.string(), type: z.literal('image'), url: z.string().optional() }),
-  z.object({ id: z.string(), type: z.literal('images'), urls: z.array(z.string()) }),
-  z.object({ id: z.string(), type: z.literal('file'), url: z.string().optional() }),
-  z.object({ id: z.string(), type: z.literal('thumbnail'), url: UrlString }),
-  z.object({ id: z.string(), type: z.literal('buttons'), buttons: z.array(z.object({
-    id: z.string(), label: z.string().max(80), url: z.string(), emoji: z.string().optional(), disabled: z.boolean().optional()
-  })).max(5) }),
-  z.object({ id: z.string(), type: z.literal('role-buttons'), buttons: z.array(z.object({
-    id: z.string(), label: z.string().max(80), style: z.enum(['primary', 'secondary', 'success', 'danger']),
-    roleId: z.string(), emoji: z.string().optional(),
-    ephemeral: z.any().optional()
-  })).max(5) }),
-  z.object({ id: z.string(), type: z.literal('select-menu'), customId: z.string().optional(),
-    placeholder: z.string().max(150).optional(), minValues: z.number().int().min(1).max(25).optional(),
-    maxValues: z.number().int().min(1).max(25).optional(),
-    options: z.array(z.object({ label: z.string().max(100), value: z.string().max(100),
-      description: z.string().max(100).optional(), emoji: z.string().optional() })).max(25)
+  z.object({
+    id: z.string(),
+    type: z.literal('text'),
+    content: z.string().max(4000)
   }),
-  z.object({ id: z.string(), type: z.literal('footer'), content: z.string().max(4000) })
+  z.object({
+    id: z.string(),
+    type: z.literal('sections'),
+    title: z.string(),
+    listStyle: z.enum(['numeric', 'dot']),
+    items: z.array(z.string())
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('separator'),
+    divider: z.boolean(),
+    spacing: z.number().int().min(1).max(2)
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('image'),
+    url: z.string().optional()
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('images'),
+    urls: z.array(z.string())
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('file'),
+    url: z.string().optional()
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('thumbnail'),
+    url: UrlOrEmpty
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('buttons'),
+    buttons: z.array(z.object({
+      id: z.string(),
+      label: z.string().max(80),
+      url: z.string(),
+      emoji: z.string().optional(),
+      disabled: z.boolean().optional()
+    })).max(5)
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('role-buttons'),
+    buttons: z.array(z.object({
+      id: z.string(),
+      label: z.string().max(80),
+      style: z.enum(['primary', 'secondary', 'success', 'danger']),
+      roleId: z.string(),
+      emoji: z.string().optional(),
+      ephemeral: z.any().optional()
+    })).max(5)
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('select-menu'),
+    customId: z.string().optional(),
+    placeholder: z.string().max(150).optional(),
+    minValues: z.number().int().min(1).max(25).optional(),
+    maxValues: z.number().int().min(1).max(25).optional(),
+    options: z.array(z.object({
+      label: z.string().max(100),
+      value: z.string().max(100),
+      description: z.string().max(100).optional(),
+      emoji: z.string().optional()
+    })).max(25)
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('footer'),
+    content: z.string().max(4000)
+  })
 ]);
+
+/* ---------- Конфиг сообщения (используется во всех разделах) ---------- */
 
 const MessageConfig = z.object({
   displayMode: z.enum(['flat', 'embed', 'embed-color']),
@@ -37,6 +109,8 @@ const MessageConfig = z.object({
   thumbnail: z.string().optional(),
   blocks: z.array(Block).max(40)
 });
+
+/* ---------- Общие подструктуры ---------- */
 
 const MentionSchema = z.object({
   type: z.enum(['none', 'everyone', 'role', 'user']),
@@ -57,12 +131,23 @@ const ProfileSchema = z.object({
   companySince: z.string().nullable().optional()
 }).optional();
 
-export const RulesSchema = MessageConfig.extend({ channelId: z.string().optional() });
+/* ============================================================
+   Схемы разделов
+   ============================================================ */
+
+export const RulesSchema = MessageConfig.extend({
+  channelId: z.string().optional()
+});
 
 export const MessagesSchema = z.object({
   items: z.array(z.object({
-    id: z.string(), name: z.string().max(100), channelId: z.string(), channelName: z.string().optional(),
-    config: MessageConfig, createdAt: z.string().optional(), updatedAt: z.string().optional(),
+    id: z.string(),
+    name: z.string().max(100),
+    channelId: z.string(),
+    channelName: z.string().optional(),
+    config: MessageConfig,
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional(),
     lastSentAt: z.string().nullable().optional(),
     lastMessageId: z.string().nullable().optional(),
     messageDeleted: z.boolean().optional()
@@ -71,16 +156,28 @@ export const MessagesSchema = z.object({
 
 export const AnnouncementsSchema = z.object({
   items: z.array(z.object({
-    id: z.string(), name: z.string().max(100), channelId: z.string(), channelName: z.string().optional(),
+    id: z.string(),
+    name: z.string().max(100),
+    channelId: z.string(),
+    channelName: z.string().optional(),
     icon: z.string().max(64).optional(),
     enabled: z.boolean(),
     config: MessageConfig,
-    schedule: z.object({ type: z.enum(['manual', 'interval', 'daily', 'weekly', 'monthly']),
-      intervalMinutes: z.number().optional(), time: z.string().optional(),
-      dayOfWeek: z.number().optional(), dayOfMonth: z.number().optional() }),
+    schedule: z.object({
+      type: z.enum(['manual', 'interval', 'daily', 'weekly', 'monthly']),
+      intervalMinutes: z.number().optional(),
+      time: z.string().optional(),
+      dayOfWeek: z.number().optional(),
+      dayOfMonth: z.number().optional()
+    }),
     autoDelete: AutoDeleteSchema,
-    eventTime: z.object({ enabled: z.boolean(), type: z.enum(['daily', 'weekly', 'monthly']),
-      time: z.string().optional(), dayOfWeek: z.number().optional(), dayOfMonth: z.number().optional() }),
+    eventTime: z.object({
+      enabled: z.boolean(),
+      type: z.enum(['daily', 'weekly', 'monthly']),
+      time: z.string().optional(),
+      dayOfWeek: z.number().optional(),
+      dayOfMonth: z.number().optional()
+    }),
     mention: MentionSchema,
     nextRunAt: z.number().nullable().optional(),
     lastSentAt: z.string().nullable().optional(),
@@ -145,13 +242,25 @@ export const BirthdaysSchema = z.object({
   templateNoYear: MessageConfig.optional()
 });
 
-/* Шаблон профиля теперь — полноценный MessageConfig (или null) */
 export const ProfilesSchema = z.object({
   settings: z.object({
     channelId: z.string().optional().or(z.literal('')),
     requiredRoleIds: z.array(z.string()).optional(),
     template: MessageConfig.nullable().optional()
   })
+});
+
+export const SettingsSchema = z.object({
+  botEnabled: z.boolean(),
+  modules: z.object({
+    announcements: z.boolean(),
+    autodelete: z.boolean(),
+    birthdays: z.boolean(),
+    profiles: z.boolean()
+  }),
+  prefix: z.string().max(10),
+  language: z.enum(['ru', 'en']),
+  logChannel: z.string()
 });
 
 export const AutodeleteQueueSchema = z.object({
@@ -162,22 +271,52 @@ export const AutodeleteQueueSchema = z.object({
   }))
 });
 
-export const SettingsSchema = z.object({
-  botEnabled: z.boolean(),
-  modules: z.object({ announcements: z.boolean(), autodelete: z.boolean(), birthdays: z.boolean(), profiles: z.boolean() }),
-  prefix: z.string().max(10),
-  language: z.enum(['ru', 'en']),
-  logChannel: z.string()
+/* ============================================================
+   Схемы для отдельных эндпоинтов
+   ============================================================ */
+
+export const SendBodySchema = z.object({
+  clearChannel: z.boolean().optional()
 });
 
-export const SendBodySchema = z.object({ clearChannel: z.boolean().optional() });
-export const SendMessageSchema = z.object({ messageId: z.string(), clearChannel: z.boolean().optional() });
-export const SendAnnouncementSchema = z.object({ announcementId: z.string(), clearChannel: z.boolean().optional() });
-export const SendDelayedSchema = z.object({ itemId: z.string(), clearChannel: z.boolean().optional() });
+export const SendMessageSchema = z.object({
+  messageId: z.string(),
+  clearChannel: z.boolean().optional()
+});
 
-export const GuildIdSchema = z.string().regex(/^\d{17,20}$/);
+export const SendAnnouncementSchema = z.object({
+  announcementId: z.string(),
+  clearChannel: z.boolean().optional()
+});
+
+export const SendDelayedSchema = z.object({
+  itemId: z.string(),
+  clearChannel: z.boolean().optional()
+});
+
+export const GuildIdSchema = Snowflake;
 
 export const SectionSchema = z.enum([
-  'rules', 'messages', 'announcements', 'delayed', 'autodelete', 'birthdays',
-  'profiles', 'autodelete-queue', 'settings', 'logs'
+  'rules', 'messages', 'announcements', 'delayed', 'autodelete',
+  'birthdays', 'profiles', 'autodelete-queue', 'settings', 'logs'
 ]);
+
+export const TokenSchema = z.object({
+  token: z.string().min(20, 'Токен слишком короткий')
+});
+
+/* ============================================================
+   Конфиг активного бота (activity / status)
+   ============================================================ */
+
+export const ActivitySchema = z.object({
+  type: z.enum(['PLAYING', 'WATCHING', 'LISTENING', 'COMPETING', 'STREAMING']),
+  text: z.string().min(1).max(128),
+  url: z.string().url().nullable().optional()
+});
+
+export const BotUpsertSchema = z.object({
+  label: z.string().min(1).max(50),
+  token: z.string().min(20),
+  activity: ActivitySchema.optional()
+});

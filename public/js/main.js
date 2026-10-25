@@ -1,168 +1,419 @@
+/* ============================================================
+   Точка входа панели.
+
+   Здесь:
+   - инициализация (bot-info, список серверов)
+   - hash-роутер (переход между разделами)
+   - обработчики кнопок в шапке
+   - статус бота в сайдбаре (ping каждые 15 с)
+   ============================================================ */
+
 import { api } from './api.js';
-import { state } from './state.js';
+import { state, resetState } from './state.js';
 import { toast } from './ui.js';
-import { renderServerSelect, switchServer } from './sections/server-select.js';
-import { saveRules, getRulesEditor, triggerSendRules } from './sections/rules.js';
-import { createMessageFlow } from './sections/messages.js';
-import { createAnnouncementFlow } from './sections/announcements.js';
-import { createDelayedFlow } from './sections/delayed.js';
-import { createAutodeleteFlow } from './sections/autodelete.js';
-import { saveBirthdays } from './sections/birthdays.js';
-import { saveProfiles } from './sections/profiles.js';
-import { clearAllLogs } from './sections/logs.js';
-import { downloadJSON, pickJSONFile } from './utils.js';
+import { navigate, onRouteChange, parseHash } from './router.js';
+import { escapeHtml } from './utils.js';
+
+/* ============================================================
+   Метаданные разделов (заголовок + подзаголовок)
+   ============================================================ */
 
 const PAGE_META = {
-  dashboard:     { title: 'Дашборд', sub: 'Обзор активности и статистика сервера' },
-  rules:         { title: 'Правила', sub: 'Описание правил сервера, и выдача ролей' },
-  messages:      { title: 'Сообщения', sub: 'Закрепленное сообщение для канала' },
-  announcements: { title: 'Анонсы', sub: 'Автоматические сообщения по расписанию' },
-  delayed:       { title: 'Отложенные', sub: 'Автоматическая отправка отложенных сообщений' },
-  autodelete:    { title: 'Автоудаление', sub: 'Автоматическое удаление сообщений в канале' },
-  birthdays:     { title: 'Дни рождения', sub: 'Поздравления и ближайшие события' },
-  profiles:      { title: 'Пользователи', sub: 'Профили, ссылки и информация о вступлении' },
-  logs:          { title: 'Логи', sub: 'Журнал действий и работы бота' }
+  dashboard:     { title: 'Дашборд',         sub: 'Обзорная статистика и активность' },
+  rules:         { title: 'Правила и роли',  sub: 'Правила сервера и выдача ролей' },
+  messages:      { title: 'Сообщения',       sub: 'Закреплённые сообщения для каналов' },
+  announcements: { title: 'Объявления',      sub: 'Периодические сообщения по расписанию' },
+  delayed:       { title: 'Отложенные',      sub: 'Отправка сообщений в заданный момент' },
+  autodelete:    { title: 'Автоудаление',    sub: 'Автоматическая очистка каналов' },
+  birthdays:     { title: 'Дни рождения',    sub: 'Поздравления и выдача ролей' },
+  profiles:      { title: 'Профили',         sub: 'Информация о пользователях' },
+  commands:      { title: 'Команды',         sub: 'Доступность и права' },
+  settings:      { title: 'Настройки',       sub: 'Боты, статус и поведение' },
+  logs:          { title: 'Логи',            sub: 'Журнал действий и работ бота' }
 };
 
-const CREATE_BTN_BY_SECTION = {
-  messages: 'createMessageBtn',
+/* Какую «создать»-кнопку показывать в каждом разделе */
+const CREATE_BTN = {
+  messages:      'createMessageBtn',
   announcements: 'createAnnouncementBtn',
-  delayed: 'createDelayedBtn',
-  autodelete: 'createAutodeleteBtn',
-  profiles: 'createProfileBtn'
+  delayed:       'createDelayedBtn',
+  autodelete:    'createAutodeleteBtn',
+  profiles:      'createProfileBtn'
 };
-
-const ALL_CREATE_BTNS = [
+const ALL_CREATE = [
   'createMessageBtn', 'createAnnouncementBtn', 'createDelayedBtn',
   'createAutodeleteBtn', 'createProfileBtn'
 ];
 
+/* Разделы, для которых есть история версий */
+const BACKUP_SECTIONS = new Set([
+  'rules', 'messages', 'announcements', 'delayed',
+  'autodelete', 'birthdays', 'profiles'
+]);
+
+/* ============================================================
+   Переключение раздела
+   ============================================================ */
+
+/**
+ * Показывает один раздел и обновляет topbar.
+ * @param {string} name
+ */
 export function switchView(name) {
   state.currentSection = name;
-  document.querySelectorAll('.nav-item').forEach(i => {
-    const active = i.dataset.view === name;
-    i.classList.toggle('active', active);
-    if (active) i.setAttribute('aria-current', 'page');
-    else i.removeAttribute('aria-current');
-  });
-  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
-  const meta = PAGE_META[name];
-  if (meta) {
-    document.getElementById('pageTitle').textContent = meta.title;
-    document.getElementById('pageSub').textContent = meta.sub;
-  }
 
-  ALL_CREATE_BTNS.forEach(id => {
+  /* Sidebar */
+  document.querySelectorAll('.nav-item').forEach(i => {
+    i.classList.toggle('active', i.dataset.view === name);
+  });
+
+  /* Views */
+  document.querySelectorAll('.view').forEach(v => {
+    v.classList.toggle('active', v.id === 'view-' + name);
+  });
+
+  /* Topbar title */
+  const meta = PAGE_META[name] || PAGE_META.dashboard;
+  document.getElementById('pageTitle').textContent = meta.title;
+  document.getElementById('pageSub').textContent = meta.sub;
+
+  /* Кнопки «создать» */
+  ALL_CREATE.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
-  const createId = CREATE_BTN_BY_SECTION[name];
-  if (createId) {
-    const el = document.getElementById(createId);
+  if (CREATE_BTN[name]) {
+    const el = document.getElementById(CREATE_BTN[name]);
     if (el) el.style.display = 'inline-flex';
   }
 
-  const rulesShow = name === 'rules' ? 'inline-flex' : 'none';
-  document.getElementById('exportBtn').style.display = rulesShow;
-  document.getElementById('importBtn').style.display = rulesShow;
-  document.getElementById('sendRulesBtn').style.display = rulesShow;
+  /* Кнопки «экспорт/импорт/отправить» — только для правил */
+  const isRules = name === 'rules';
+  document.getElementById('exportBtn').style.display = isRules ? 'inline-flex' : 'none';
+  document.getElementById('importBtn').style.display = isRules ? 'inline-flex' : 'none';
+  document.getElementById('sendRulesBtn').style.display = isRules ? 'inline-flex' : 'none';
 
-  const saveShow = (name === 'rules' || name === 'birthdays' || name === 'profiles') ? 'inline-flex' : 'none';
-  document.getElementById('saveBtn').style.display = saveShow;
+  /* «Сохранить» */
+  const saveShow = ['rules', 'birthdays', 'profiles', 'commands'].includes(name);
+  document.getElementById('saveBtn').style.display = saveShow ? 'inline-flex' : 'none';
 
+  /* «История» */
+  const histBtn = document.getElementById('historyBtn');
+  if (histBtn) histBtn.style.display = BACKUP_SECTIONS.has(name) ? 'inline-flex' : 'none';
+
+  /* На мобилке закрываем сайдбар */
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('overlay').classList.remove('show');
 
-  if (name === 'dashboard') import('./sections/dashboard.js').then(m => m.renderDashboard());
-  if (name === 'messages') import('./sections/messages.js').then(m => m.renderMessagesList());
-  if (name === 'announcements') import('./sections/announcements.js').then(m => m.renderAnnouncementsList());
-  if (name === 'delayed') import('./sections/delayed.js').then(m => m.renderDelayedList());
-  if (name === 'autodelete') import('./sections/autodelete.js').then(m => m.renderAutodeleteList());
-  if (name === 'birthdays') import('./sections/birthdays.js').then(m => m.renderBirthdaysView());
-  if (name === 'profiles') import('./sections/profiles.js').then(m => m.renderProfilesView());
-  if (name === 'logs') import('./sections/logs.js').then(m => m.renderLogsView());
+  /* Ленивая загрузка содержимого */
+  const loaders = {
+    dashboard:     () => import('./sections/dashboard.js').then(m => m.renderDashboard()),
+    rules:         () => import('./sections/rules.js').then(m => m.renderRulesView()),
+    messages:      () => import('./sections/messages.js').then(m => m.renderMessagesList()),
+    announcements: () => import('./sections/announcements.js').then(m => m.renderAnnouncementsList()),
+    delayed:       () => import('./sections/delayed.js').then(m => m.renderDelayedList()),
+    autodelete:    () => import('./sections/autodelete.js').then(m => m.renderAutodeleteList()),
+    birthdays:     () => import('./sections/birthdays.js').then(m => m.renderBirthdaysView()),
+    profiles:      () => import('./sections/profiles.js').then(m => m.renderProfilesView()),
+    commands:      () => import('./sections/commands.js').then(m => m.renderCommandsView()),
+    settings:      () => import('./sections/settings.js').then(m => m.renderSettingsView()),
+    logs:          () => import('./sections/logs.js').then(m => m.renderLogsView())
+  };
+
+  loaders[name]?.()?.catch(e => {
+    console.error(`[main] render ${name}:`, e);
+    toast(`Ошибка загрузки раздела: ${e.message}`, { type: 'error' });
+  });
 }
 
+/* ============================================================
+   Роутер
+   ============================================================ */
+
+/**
+ * Применяет маршрут: показывает либо экран выбора, либо панель.
+ * @param {{ guildId: string|null, section: string|null }} route
+ */
+async function applyRoute(route) {
+  /* Нет гильдии — экран выбора */
+  if (!route.guildId) {
+    resetState();
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('serverSelect').style.display = 'flex';
+
+    const { renderServerSelect } = await import('./sections/server-select.js');
+    renderServerSelect();
+    return;
+  }
+
+  /* Гильдия есть, но данные ещё не загружены — загружаем */
+  if (state.guildId !== route.guildId) {
+    const { enterGuild } = await import('./sections/server-select.js');
+    await enterGuild(route.guildId);
+  } else {
+    /* Данные в памяти — просто показываем app */
+    document.getElementById('serverSelect').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+  }
+
+  switchView(route.section || 'dashboard');
+}
+
+onRouteChange(applyRoute);
+
+/* ============================================================
+   Инициализация
+   ============================================================ */
+
 (async () => {
+  /* Инфо о боте */
   try { state.bot = await api.botInfo(); }
   catch { state.bot = { username: 'Ckaзka Dev', avatar: null }; }
-  renderServerSelect();
+
+  /* Список серверов */
+  try {
+    const { renderServerSelect } = await import('./sections/server-select.js');
+    await renderServerSelect();
+  } catch (e) {
+    console.error('[main] renderServerSelect failed:', e);
+    const grid = document.getElementById('serverGrid');
+    if (grid) {
+      grid.innerHTML = `<div class="empty-state"><p>Ошибка загрузки серверов</p><span>${escapeHtml(e.message)}</span></div>`;
+    }
+  }
+
+  await refreshBotStats();
+
+  /* Если в URL есть гильдия — сразу туда */
+  const initial = parseHash();
+  if (initial.guildId) await applyRoute(initial);
 })();
+
+/* ============================================================
+   Статистика бота
+   ============================================================ */
+
+async function refreshBotStats() {
+  try {
+    const stats = await api.botStats();
+    const $ = (id) => document.getElementById(id);
+    if ($('statGuilds')) $('statGuilds').textContent = stats.guilds ?? '—';
+    if ($('statUsers'))  $('statUsers').textContent  = stats.users  ?? '—';
+    if ($('statPing'))   $('statPing').textContent   = stats.ping >= 0 ? stats.ping : '—';
+    if ($('statUptime')) $('statUptime').textContent = formatUptime(stats.uptimeMs);
+  } catch {}
+}
+
+function formatUptime(ms) {
+  if (!ms) return '—';
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}ч ${m}м`;
+  return `${m}м`;
+}
+
+setInterval(refreshBotStats, 30_000);
+
+/* ============================================================
+   Навигация
+   ============================================================ */
 
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', (e) => {
     e.preventDefault();
-    switchView(item.dataset.view);
+    if (!state.guildId) return;
+    navigate(state.guildId, item.dataset.view);
   });
 });
 
-document.getElementById('currentServerBtn').addEventListener('click', switchServer);
+document.getElementById('currentServerBtn').addEventListener('click', () => {
+  navigate(null, null);
+});
 
 document.getElementById('menuBtn').addEventListener('click', () => {
   document.getElementById('sidebar').classList.add('open');
   document.getElementById('overlay').classList.add('show');
 });
+
 document.getElementById('overlay').addEventListener('click', () => {
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('overlay').classList.remove('show');
 });
 
-document.getElementById('saveBtn').addEventListener('click', () => {
-  if (state.currentSection === 'rules') return saveRules();
-  if (state.currentSection === 'birthdays') return saveBirthdays();
-  if (state.currentSection === 'profiles') return saveProfiles();
+/* ============================================================
+   Кнопки в шапке
+   ============================================================ */
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  const s = state.currentSection;
+  try {
+    if (s === 'rules') {
+      const m = await import('./sections/rules.js');
+      m.saveRules();
+    } else if (s === 'birthdays') {
+      const m = await import('./sections/birthdays.js');
+      m.saveBirthdays();
+    } else if (s === 'profiles') {
+      const m = await import('./sections/profiles.js');
+      m.saveProfiles();
+    } else if (s === 'commands') {
+      const m = await import('./sections/commands.js');
+      m.saveCommands();
+    }
+  } catch (e) {
+    toast('Ошибка сохранения: ' + e.message, { type: 'error' });
+  }
 });
 
-document.getElementById('sendRulesBtn').addEventListener('click', () => triggerSendRules());
+document.getElementById('sendRulesBtn').addEventListener('click', async () => {
+  try {
+    const m = await import('./sections/rules.js');
+    m.triggerSendRules();
+  } catch (e) {
+    toast('Ошибка: ' + e.message, { type: 'error' });
+  }
+});
 
-document.getElementById('exportBtn').addEventListener('click', () => {
-  const ed = getRulesEditor();
-  if (!ed) return;
-  downloadJSON(ed.getConfig(), `${(state.guild?.name || 'guild').replace(/[^a-z0-9]/gi,'_')}_rules.json`);
-  toast('JSON экспортирован');
+document.getElementById('copyLinkBtn').addEventListener('click', () => {
+  if (!state.guildId) return;
+  const url = `${location.origin}${location.pathname}#/guilds/${state.guildId}/${state.currentSection}`;
+  navigator.clipboard?.writeText(url)
+    .then(() => toast('Ссылка скопирована'))
+    .catch(() => toast(url, { duration: 8000 }));
+});
+
+document.getElementById('historyBtn').addEventListener('click', async () => {
+  const section = state.currentSection;
+  if (!BACKUP_SECTIONS.has(section)) return;
+  try {
+    const { openBackupsModal } = await import('./backups.js');
+    await openBackupsModal(section);
+  } catch (e) {
+    toast('Модуль истории не загружен: ' + e.message, { type: 'error' });
+  }
+});
+
+document.getElementById('exportBtn').addEventListener('click', async () => {
+  try {
+    const m = await import('./sections/rules.js');
+    const ed = m.getRulesEditor();
+    if (!ed) return;
+    const { downloadJSON } = await import('./utils.js');
+    const safeName = (state.guild?.name || 'guild').replace(/[^a-z0-9]/gi, '_');
+    downloadJSON(ed.getConfig(), `${safeName}_rules.json`);
+    toast('JSON экспортирован');
+  } catch (e) {
+    toast('Ошибка экспорта: ' + e.message, { type: 'error' });
+  }
 });
 
 document.getElementById('importBtn').addEventListener('click', async () => {
+  const { pickJSONFile } = await import('./utils.js');
   const data = await pickJSONFile();
-  if (!data) return toast('Файл не выбран или повреждён', { type: 'error' });
+  if (!data) return toast('Файл не выбран', { type: 'error' });
+
+  /* Валидация через сервер */
   try {
-    const { renderRulesView } = await import('./sections/rules.js');
-    state.rules = normalizeRules(data);
-    renderRulesView();
+    const r = await api.validateData(state.guildId, 'rules', data);
+    if (!r.ok) {
+      const lines = r.errors.slice(0, 4).map(e => `• ${e.path || 'root'}: ${e.message}`).join('\n');
+      return toast(`Файл не прошёл валидацию:\n${lines}`, { type: 'error', duration: 8000 });
+    }
+  } catch (e) {
+    return toast('Ошибка валидации: ' + e.message, { type: 'error' });
+  }
+
+  try {
+    const m = await import('./sections/rules.js');
+    state.rules = m.normalizeRules(data);
+    m.renderRulesView();
     await api.setData(state.guildId, 'rules', state.rules);
     toast('Правила импортированы');
-  } catch (e) { toast(e.message, { type: 'error' }); }
+  } catch (e) {
+    toast(e.message, { type: 'error' });
+  }
 });
 
-function normalizeRules(rules) {
-  const base = { channelId: '', displayMode: 'embed-color', accentColor: '#5865F2', title: '', subtitle: '', thumbnail: '', blocks: [] };
-  if (!rules || typeof rules !== 'object') return base;
-  const merged = { ...base, ...rules };
-  if (!Array.isArray(merged.blocks)) merged.blocks = [];
-  return merged;
-}
+/* ============================================================
+   Кнопки «Создать»
+   ============================================================ */
+
+document.getElementById('createMessageBtn').addEventListener('click', async () => {
+  const m = await import('./sections/messages.js');
+  m.createMessageFlow();
+});
+
+document.getElementById('createAnnouncementBtn').addEventListener('click', async () => {
+  const m = await import('./sections/announcements.js');
+  m.createAnnouncementFlow();
+});
+
+document.getElementById('createDelayedBtn').addEventListener('click', async () => {
+  const m = await import('./sections/delayed.js');
+  m.createDelayedFlow();
+});
+
+document.getElementById('createAutodeleteBtn').addEventListener('click', async () => {
+  const m = await import('./sections/autodelete.js');
+  m.createAutodeleteFlow();
+});
+
+document.getElementById('createProfileBtn').addEventListener('click', async () => {
+  const m = await import('./sections/profiles.js');
+  m.createProfileFlow();
+});
+
+document.getElementById('clearLogsBtn').addEventListener('click', async () => {
+  const m = await import('./sections/logs.js');
+  m.clearAllLogs();
+});
+
+/* ============================================================
+   Ctrl+S
+   ============================================================ */
 
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === 's' && state.guildId) {
     e.preventDefault();
-    if (state.currentSection === 'rules') saveRules();
-    else if (state.currentSection === 'birthdays') saveBirthdays();
-    else if (state.currentSection === 'profiles') saveProfiles();
+    document.getElementById('saveBtn')?.click();
   }
 });
+
+/* ============================================================
+   beforeunload
+   ============================================================ */
+
+window.addEventListener('beforeunload', (e) => {
+  if (!document.querySelector('.modal .unsaved-dot')) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
+/* ============================================================
+   Автообновление статуса бота в сайдбаре
+   ============================================================ */
+
+setInterval(async () => {
+  try {
+    const stats = await api.botStats();
+    const el = document.getElementById('botStatus');
+    const txt = document.getElementById('botStatusText');
+    const ping = document.getElementById('botStatusPing');
+    if (!el || !txt) return;
+
+    el.classList.toggle('on', stats.online);
+    txt.textContent = stats.online ? (stats.tag || 'Подключён') : 'Выключен';
+    if (ping) ping.textContent = stats.online && stats.ping >= 0 ? `${stats.ping} мс` : '';
+  } catch {}
+}, 15_000);
+
+/* ============================================================
+   Закрытие dropdown-менюшек по клику снаружи
+   ============================================================ */
 
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.actions-dropdown')) {
     document.querySelectorAll('.actions-dropdown-menu').forEach(m => m.setAttribute('hidden', ''));
   }
 });
-
-document.getElementById('createMessageBtn').addEventListener('click', createMessageFlow);
-document.getElementById('createAnnouncementBtn').addEventListener('click', createAnnouncementFlow);
-document.getElementById('createDelayedBtn').addEventListener('click', createDelayedFlow);
-document.getElementById('createAutodeleteBtn').addEventListener('click', createAutodeleteFlow);
-document.getElementById('createProfileBtn').addEventListener('click', async () => {
-  const m = await import('./sections/profiles.js');
-  m.createProfileFlow?.();
-});
-document.getElementById('clearLogsBtn').addEventListener('click', clearAllLogs);

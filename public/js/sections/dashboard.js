@@ -1,11 +1,19 @@
+/* ============================================================
+   Дашборд: чек-лист, компактные stat-карточки, ближайшие ДР,
+   последние действия, график активности за 7 дней.
+   ============================================================ */
+
 import { state } from '../state.js';
 import { escapeHtml, formatNumber, pluralize } from '../utils.js';
+import { buildOnboardingChecklist, bindChecklist } from '../onboarding-checklist.js';
 
-const UPCOMING_BIRTHDAYS_LIMIT = 8;
+/* Сколько ДР показывать в блоке */
+const UPCOMING_LIMIT = 8;
 
 /* ============================================================
-   Дашборд: статистика, ближайшие ДР, последние логи, график.
+   Рендер
    ============================================================ */
+
 export function renderDashboard() {
   const root = document.getElementById('view-dashboard');
   if (!root) return;
@@ -16,6 +24,7 @@ export function renderDashboard() {
   const birthdays = state.birthdays || { users: [] };
   const logs = state.logs || [];
 
+  /* Метрики */
   const activeAnn = announcements.filter(a => a.enabled).length;
   const pendingDelayed = delayed.filter(d => d.publishAt && !d.lastSentAt).length;
   const users = Array.isArray(birthdays.users) ? birthdays.users : [];
@@ -24,7 +33,7 @@ export function renderDashboard() {
     .filter(u => u.day && u.month && u.enabled !== false)
     .map(u => ({ ...u, _days: daysUntil(u.day, u.month) }))
     .sort((a, b) => a._days - b._days)
-    .slice(0, UPCOMING_BIRTHDAYS_LIMIT);
+    .slice(0, UPCOMING_LIMIT);
 
   const upcoming7 = users.filter(u => {
     if (!u.day || !u.month || u.enabled === false) return false;
@@ -37,93 +46,90 @@ export function renderDashboard() {
 
   root.innerHTML = `
     <div class="dashboard-grid">
+      ${buildOnboardingChecklist()}
+
       <div class="dash-stats">
-        <button class="dash-stat clickable" data-goto="dashboard">
-          <div class="dash-stat-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <button class="dash-stat" data-goto="dashboard">
+          <div class="dash-stat-icon"><i class="fa-solid fa-users"></i></div>
+          <div class="dash-stat-body">
+            <span class="dash-stat-label">Участники</span>
+            <span class="dash-stat-value">${formatNumber(guild.memberCount || 0)}</span>
           </div>
-          <div class="dash-stat-label">Участники</div>
-          <div class="dash-stat-value">${formatNumber(guild.memberCount || 0)}</div>
-          <div class="dash-stat-hint">${formatNumber(guild.onlineCount || 0)} онлайн</div>
         </button>
-
-        <button class="dash-stat clickable" data-goto="announcements">
-          <div class="dash-stat-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-8v18l-18-8z"/><line x1="11.6" y1="11.6" x2="8" y2="18"/></svg>
+        <button class="dash-stat" data-goto="announcements">
+          <div class="dash-stat-icon accent"><i class="fa-solid fa-bullhorn"></i></div>
+          <div class="dash-stat-body">
+            <span class="dash-stat-label">Активных объявлений</span>
+            <span class="dash-stat-value">${activeAnn}</span>
           </div>
-          <div class="dash-stat-label">Анонсы</div>
-          <div class="dash-stat-value">${activeAnn}</div>
-          <div class="dash-stat-hint">из ${announcements.length} активных</div>
         </button>
-
-        <button class="dash-stat clickable" data-goto="delayed">
-          <div class="dash-stat-icon warning">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <button class="dash-stat" data-goto="delayed">
+          <div class="dash-stat-icon warning"><i class="fa-solid fa-clock"></i></div>
+          <div class="dash-stat-body">
+            <span class="dash-stat-label">Отложек в ожидании</span>
+            <span class="dash-stat-value">${pendingDelayed}</span>
           </div>
-          <div class="dash-stat-label">Отложенные</div>
-          <div class="dash-stat-value">${pendingDelayed}</div>
-          <div class="dash-stat-hint">ожидают отправки</div>
         </button>
-
-        <button class="dash-stat clickable" data-goto="birthdays">
-          <div class="dash-stat-icon success">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/><path d="M2 21h20"/></svg>
+        <button class="dash-stat" data-goto="birthdays">
+          <div class="dash-stat-icon success"><i class="fa-solid fa-cake-candles"></i></div>
+          <div class="dash-stat-body">
+            <span class="dash-stat-label">ДР за 7 дней</span>
+            <span class="dash-stat-value">${upcoming7}</span>
           </div>
-          <div class="dash-stat-label">Дни рождения</div>
-          <div class="dash-stat-value">${upcoming7}</div>
-          <div class="dash-stat-hint">в ближайшие 7 дней</div>
         </button>
       </div>
 
       <div class="dash-row">
         <div class="dash-card">
           <div class="dash-card-header">
-            <h3>Ближайшие дни рождения</h3>
+            <h3><i class="fa-solid fa-cake-candles"></i> Ближайшие дни рождения</h3>
             <a href="#" data-goto="birthdays">Все →</a>
           </div>
-          <div class="dash-card-body">
-            ${renderUpcomingBirthdays(bdaysUpcoming)}
-          </div>
+          <div class="dash-card-body">${renderUpcomingBirthdays(bdaysUpcoming)}</div>
         </div>
 
         <div class="dash-card">
           <div class="dash-card-header">
-            <h3>Последние события</h3>
+            <h3><i class="fa-solid fa-list"></i> Последние действия</h3>
             <a href="#" data-goto="logs">Все →</a>
           </div>
-          <div class="dash-card-body">
-            ${renderRecentLogs(recentLogs)}
-          </div>
+          <div class="dash-card-body">${renderRecentLogs(recentLogs)}</div>
         </div>
       </div>
 
       <div class="dash-card">
         <div class="dash-card-header">
-          <h3>Отправки за последние 7 дней ${renderTodayBadge(logs)}</h3>
+          <h3><i class="fa-solid fa-chart-line"></i> Активность за 7 дней ${renderTodayBadge(logs)}</h3>
         </div>
-        <div class="dash-card-body">
-          ${renderDetailedChart(logs)}
-        </div>
+        <div class="dash-card-body">${renderDetailedChart(logs)}</div>
       </div>
     </div>
   `;
 
+  /* Чек-лист — вешаем обработчики после вставки HTML */
+  bindChecklist(root);
+
+  /* Клики по карточкам и «Все →» */
   root.querySelectorAll('[data-goto]').forEach(el => {
-    el.addEventListener('click', (e) => {
+    el.addEventListener('click', async (e) => {
       e.preventDefault();
-      goTo(el.dataset.goto);
+      const { navigate } = await import('../router.js');
+      navigate(state.guildId, el.dataset.goto);
     });
   });
 }
 
 /* ============================================================
-   Ближайшие ДР
+   Блок «Ближайшие ДР»
    ============================================================ */
+
 function renderUpcomingBirthdays(items) {
   if (!items.length) {
-    return `<div class="dash-empty">Пока нет записей с датой рождения</div>`;
+    return `<div class="dash-empty"><i class="fa-solid fa-cake-candles"></i><p>Нет ближайших ДР</p></div>`;
   }
-  const MONTHS = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+
+  const MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+
   return `<div class="dash-bday-list">${items.map(u => {
     const member = (state.members || []).find(m => m.id === u.userId);
     const name = member?.displayName || member?.username || `ID: ${u.userId}`;
@@ -132,10 +138,10 @@ function renderUpcomingBirthdays(items) {
 
     let badgeClass = '';
     let badgeText = '';
-    if (u._days === 0) { badgeClass = 'today'; badgeText = 'Сегодня'; }
-    else if (u._days === 1) { badgeClass = 'soon'; badgeText = 'Завтра'; }
-    else if (u._days <= 7) { badgeClass = 'soon'; badgeText = `Через ${u._days} дн.`; }
-    else { badgeText = `Через ${u._days} дн.`; }
+    if (u._days === 0)      { badgeClass = 'today'; badgeText = 'Сегодня'; }
+    else if (u._days === 1) { badgeClass = 'soon';  badgeText = 'Завтра'; }
+    else if (u._days <= 7)  { badgeClass = 'soon';  badgeText = `${u._days} дн`; }
+    else                    {                     badgeText = `${u._days} дн`; }
 
     return `
       <div class="dash-bday">
@@ -151,15 +157,17 @@ function renderUpcomingBirthdays(items) {
 }
 
 /* ============================================================
-   Последние события
+   Блок «Последние действия»
    ============================================================ */
+
 function renderRecentLogs(items) {
   if (!items.length) {
-    return `<div class="dash-empty">Пока нет событий</div>`;
+    return `<div class="dash-empty"><i class="fa-solid fa-list"></i><p>Нет событий</p></div>`;
   }
+
   return `<div class="dash-logs">${items.map(l => `
     <div class="dash-log-item">
-      <div class="dash-log-level ${escapeHtml(l.level)}"></div>
+      <div class="dash-log-level ${l.level}"></div>
       <div class="dash-log-body">
         <div class="dash-log-msg">${escapeHtml(l.message)}</div>
         <div class="dash-log-time">${new Date(l.timestamp).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}</div>
@@ -169,13 +177,14 @@ function renderRecentLogs(items) {
 }
 
 /* ============================================================
-   Детальная статистика отправок
+   График за 7 дней
    ============================================================ */
+
 const CHART_CATEGORIES = [
   { key: 'messages',      label: 'Сообщения',    types: ['message_send'],                       color: 'var(--accent)' },
-  { key: 'announcements', label: 'Анонсы',       types: ['announcement_send', 'autopost_send'], color: 'var(--accent-2)' },
+  { key: 'announcements', label: 'Объявления',   types: ['announcement_send', 'autopost_send'], color: 'var(--accent-2)' },
   { key: 'delayed',       label: 'Отложенные',   types: ['delayed_send'],                       color: '#f59e0b' },
-  { key: 'birthdays',     label: 'Дни рождения', types: ['birthday_send'],                      color: '#22c55e' },
+  { key: 'birthdays',     label: 'Дни рождения', types: ['birthday_send'],                     color: '#22c55e' },
   { key: 'rules',         label: 'Правила',      types: ['rules_send'],                         color: '#06b6d4' }
 ];
 
@@ -183,13 +192,10 @@ function renderTodayBadge(logs) {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayMs = todayStart.getTime();
-
   const sendTypes = new Set(CHART_CATEGORIES.flatMap(c => c.types));
-  const todayCount = logs.filter(l => {
-    if (!sendTypes.has(l.type)) return false;
-    return new Date(l.timestamp).getTime() >= todayMs;
-  }).length;
-
+  const todayCount = logs.filter(l =>
+    sendTypes.has(l.type) && new Date(l.timestamp).getTime() >= todayMs
+  ).length;
   return `<span class="dash-chart-today">Сегодня: ${todayCount}</span>`;
 }
 
@@ -198,9 +204,10 @@ function renderDetailedChart(logs) {
   const hasAnyData = logs.some(l => sendTypes.has(l.type));
 
   if (!hasAnyData) {
-    return `<div class="dash-empty">Пока нет отправок. Данные появятся после первой публикации.</div>`;
+    return `<div class="dash-empty"><i class="fa-solid fa-chart-line"></i><p>Пока нет данных. График появится после первой отправки.</p></div>`;
   }
 
+  /* Собираем статистику по 7 дням */
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -209,7 +216,7 @@ function renderDetailedChart(logs) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const dayStart = d.getTime();
-    const dayEnd = dayStart + 86400000;
+    const dayEnd = dayStart + 86_400_000;
 
     const counts = {};
     let total = 0;
@@ -227,7 +234,7 @@ function renderDetailedChart(logs) {
   const maxTotal = Math.max(1, ...days.map(d => d.total));
   const DAY_LABELS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
-  /* Суммы за неделю по категориям */
+  /* Суммы за неделю для сводки */
   const weekTotals = {};
   for (const cat of CHART_CATEGORIES) {
     weekTotals[cat.key] = days.reduce((s, d) => s + d.counts[cat.key], 0);
@@ -236,14 +243,8 @@ function renderDetailedChart(logs) {
 
   return `
     <div class="dash-chart-legend">
-      ${CHART_CATEGORIES.map(c => `
-        <span class="dash-legend-item">
-          <span class="dash-legend-dot" style="background:${c.color}"></span>
-          ${c.label}
-        </span>
-      `).join('')}
+      ${CHART_CATEGORIES.map(c => `<span class="dash-legend-item"><span class="dash-legend-dot" style="background:${c.color}"></span>${c.label}</span>`).join('')}
     </div>
-
     <div class="dash-chart dash-chart-stacked">
       ${days.map(d => {
         const h = d.total === 0 ? 0 : Math.max(15, (d.total / maxTotal) * 100);
@@ -254,8 +255,7 @@ function renderDetailedChart(logs) {
               ${CHART_CATEGORIES.map(c => {
                 const n = d.counts[c.key];
                 if (!n) return '';
-                const pct = (n / d.total) * 100;
-                return `<div class="dash-chart-seg" style="height:${pct}%;background:${c.color}" title="${c.label}: ${n}"></div>`;
+                return `<div class="dash-chart-seg" style="height:${(n / d.total) * 100}%;background:${c.color}" title="${c.label}: ${n}"></div>`;
               }).join('')}
             </div>
             <div class="dash-chart-label">${DAY_LABELS[d.date.getDay()]}<br><span style="opacity:.6">${String(d.date.getDate()).padStart(2, '0')}</span></div>
@@ -263,34 +263,23 @@ function renderDetailedChart(logs) {
         `;
       }).join('')}
     </div>
-
     <div class="dash-chart-summary">
       <div class="dash-summary-title">За неделю: <strong>${weekTotal}</strong> ${pluralize(weekTotal, ['отправка', 'отправки', 'отправок'])}</div>
       <div class="dash-summary-table">
-        ${CHART_CATEGORIES.map(c => `
-          <div class="dash-summary-row">
-            <span class="dash-summary-dot" style="background:${c.color}"></span>
-            <span class="dash-summary-name">${c.label}</span>
-            <span class="dash-summary-value">${weekTotals[c.key]}</span>
-          </div>
-        `).join('')}
+        ${CHART_CATEGORIES.map(c => `<div class="dash-summary-row"><span class="dash-summary-dot" style="background:${c.color}"></span><span class="dash-summary-name">${c.label}</span><span class="dash-summary-value">${weekTotals[c.key]}</span></div>`).join('')}
       </div>
     </div>
   `;
 }
 
 /* ============================================================
-   Утилиты
+   Утилита: сколько дней до ДР
    ============================================================ */
+
 function daysUntil(day, month) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   let target = new Date(now.getFullYear(), month - 1, day);
   if (target < today) target = new Date(now.getFullYear() + 1, month - 1, day);
-  return Math.round((target - today) / 86400000);
-}
-
-async function goTo(view) {
-  const { switchView } = await import('../main.js');
-  switchView(view);
+  return Math.round((target - today) / 86_400_000);
 }

@@ -1,15 +1,10 @@
 /* ============================================================
-   Пользователи (профили)
+   Профили: карточки пользователей + настройки шаблона.
    ============================================================ */
-.profiles-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
 
-/* ============================================================
-   Настройки профиля
-   ============================================================ */
+.profiles-layout { display: flex; flex-direction: column; gap: 16px; }
+
+/* ---------- Hint ---------- */
 .prof-template-hint {
   display: flex;
   flex-wrap: wrap;
@@ -51,25 +46,12 @@
   font-size: 11px;
 }
 
-/* ============================================================
-   Ссылки в превью редактора
-   ============================================================ */
-.dp-link {
-  color: #00a8fc;
-  text-decoration: none;
-}
-.dp-link:hover {
-  text-decoration: underline;
-}
+/* ---------- Ссылки (в превью) ---------- */
+.dp-link { color: #00a8fc; text-decoration: none; }
+.dp-link:hover { text-decoration: underline; }
 
-/* ============================================================
-   Список профилей
-   ============================================================ */
-.profiles-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
+/* ---------- Список профилей ---------- */
+.profiles-list { display: flex; flex-direction: column; gap: 10px; }
 
 .profile-card {
   display: flex;
@@ -93,8 +75,7 @@
 }
 
 .profile-card-avatar {
-  width: 44px;
-  height: 44px;
+  width: 44px; height: 44px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   display: grid;
@@ -105,11 +86,7 @@
   flex-shrink: 0;
   overflow: hidden;
 }
-.profile-card-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
+.profile-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
 .profile-card-info {
   flex: 1;
@@ -137,9 +114,9 @@
   flex-shrink: 0;
 }
 .profile-card-actions .icon-btn { width: 30px; height: 30px; }
-.profile-card-actions .icon-btn svg { width: 14px; height: 14px; }
+.profile-card-actions .icon-btn i { font-size: 11px; }
 
-/* ===== Ссылки ===== */
+/* ---------- Ссылки в карточке ---------- */
 .profile-links {
   display: flex;
   flex-wrap: wrap;
@@ -166,9 +143,9 @@
   border-color: rgba(88, 101, 242, .3);
 }
 .profile-link-icon { display: flex; align-items: center; }
-.profile-link-icon svg { width: 12px; height: 12px; stroke: currentColor; }
+.profile-link-icon i { font-size: 10px; }
 
-/* ===== Стаж в компании ===== */
+/* ---------- Компания ---------- */
 .profile-company {
   display: flex;
   align-items: center;
@@ -177,61 +154,15 @@
   font-size: 12px;
   color: var(--text-muted);
 }
-.profile-company svg {
-  width: 14px;
-  height: 14px;
-  stroke: currentColor;
+.profile-company i {
+  font-size: 12px;
   flex-shrink: 0;
   opacity: .7;
 }
 .profile-company strong { color: var(--text); font-weight: 600; }
 .profile-duration { color: #a5adff; font-weight: 500; }
 
-/* ===== Чипы ролей (переиспользуют .bd-role-*) ===== */
-.bd-role-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
-  min-height: 4px;
-}
-.bd-role-empty {
-  font-size: 12px;
-  color: var(--text-muted);
-  font-style: italic;
-}
-.bd-role-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 6px 4px 10px;
-  background: var(--surface-3);
-  border: 1px solid var(--border-light);
-  border-radius: 20px;
-  font-size: 12px;
-  color: var(--text);
-}
-.bd-role-chip-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.bd-role-chip button {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1;
-  margin-left: 2px;
-  transition: background .15s, color .15s;
-}
-.bd-role-chip button:hover { background: var(--danger-soft); color: #f87171; }
-
-/* ===== Адаптив ===== */
+/* ---------- Адаптив ---------- */
 @media (max-width: 640px) {
   .profile-links, .profile-company { padding-left: 0; }
   .profile-card-head { flex-wrap: wrap; }

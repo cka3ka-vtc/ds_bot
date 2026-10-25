@@ -1,0 +1,128 @@
+/* ============================================================
+   Стили раздела «Настройки» + команд (cmd-row).
+   ============================================================ */
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 20px;
+}
+
+/* ---------- Bot list ---------- */
+.bot-list { display: flex; flex-direction: column; gap: 10px; }
+.bot-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.bot-item.active {
+  border-color: rgba(34, 197, 94, .4);
+  background: linear-gradient(135deg, var(--surface-2), rgba(34, 197, 94, .06));
+}
+.bot-item-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: #a5adff;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 15px;
+}
+.bot-item-info { flex: 1; min-width: 0; }
+.bot-item-info strong { display: block; font-size: 13.5px; }
+.bot-item-info span {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.bot-item-info span i { font-size: 8px; }
+
+/* ---------- Stats ---------- */
+.settings-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.settings-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.settings-stat span {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+.settings-stat strong { font-size: 15px; font-weight: 700; color: var(--text); }
+
+/* ---------- Commands ---------- */
+.cmd-row {
+  padding: 0;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.cmd-row.is-disabled { opacity: .6; }
+.cmd-row-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.cmd-row-head:hover { background: var(--surface-3); }
+.cmd-row-icon {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: #a5adff;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+.cmd-row-title { flex: 1; min-width: 0; }
+.cmd-name { font-size: 14px; font-weight: 700; font-family: monospace; color: var(--text); }
+.cmd-desc { font-size: 12px; color: var(--text-muted); }
+
+.cmd-expand-btn {
+  width: 26px; height: 26px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  transition: transform .2s, background .15s;
+}
+.cmd-expand-btn:hover { background: var(--surface-3); color: var(--text); }
+.cmd-expand-btn.open { transform: rotate(180deg); }
+.cmd-expand-btn i { font-size: 12px; }
+
+.cmd-row-body {
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.cmd-subs {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+.cmd-sub { display: flex; gap: 10px; align-items: baseline; font-size: 12px; padding: 3px 0; }
+.cmd-sub-name { font-family: monospace; color: #a5adff; font-weight: 600; min-width: 130px; }
+.cmd-sub-desc { color: var(--text-muted); }

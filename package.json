@@ -1,9 +1,15 @@
 {
   "name": "ckazka-dev-panel",
-  "version": "2.0.0",
+  "version": "3.0.0",
+  "description": "Discord bot control panel with web UI",
   "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --watch server.js"
   },
   "dependencies": {
     "discord.js": "^14.16.3",

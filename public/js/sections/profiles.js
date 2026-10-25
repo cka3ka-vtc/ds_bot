@@ -1,6 +1,13 @@
+/* ============================================================
+   Профили: настройка канала/ролей/шаблона + карточки пользователей.
+
+   ВАЖНО: удаление профиля очищает только `user.profile`
+   (ссылки и дата в компании), но НЕ сам ДР.
+   ============================================================ */
+
 import { state } from '../state.js';
 import { api } from '../api.js';
-import { escapeHtml, pluralize, formatDuration } from '../utils.js';
+import { escapeHtml, formatDuration } from '../utils.js';
 import { toast, modal, confirmDialog, emptyState } from '../ui.js';
 import {
   channelPickerHTML, bindChannelPicker, channelIcon,
@@ -16,7 +23,6 @@ const MONTHS = [
   'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
 ];
 
-/* Дефолтный шаблон профиля (MessageConfig) */
 const DEFAULT_PROFILE_CONFIG = {
   displayMode: 'flat',
   accentColor: '#5865F2',
@@ -25,9 +31,9 @@ const DEFAULT_PROFILE_CONFIG = {
   thumbnail: '',
   blocks: [
     { id: 'prof-def-1', type: 'text', content: '**{mention}**' },
-    { id: 'prof-def-2', type: 'text', content: '📅 Дата рождения: {birthday}' },
+    { id: 'prof-def-2', type: 'text', content: '🎂 Дата рождения: {birthday}' },
     { id: 'prof-def-3', type: 'text', content: '🔗 Ссылки: {links}' },
-    { id: 'prof-def-4', type: 'text', content: '👔 В компании с: {companySince}\n⏳ Стаж: {companyDuration}' }
+    { id: 'prof-def-4', type: 'text', content: '📅 В компании с: {companySince}\n⏳ Стаж: {companyDuration}' }
   ]
 };
 
@@ -39,6 +45,7 @@ let draftGuildId = null;
 /* ============================================================
    Данные
    ============================================================ */
+
 function getBirthdaysData() {
   const fallback = {
     settings: {
@@ -46,9 +53,7 @@ function getBirthdaysData() {
       roleRemoveNextDay: true, autoDeleteMessage: false,
       requiredRoleIds: [], _pending: []
     },
-    users: [],
-    template: null,
-    templateNoYear: null
+    users: [], template: null, templateNoYear: null
   };
   if (!state.birthdays) return structuredClone(fallback);
   return {
@@ -78,6 +83,11 @@ function ensureProfile(user) {
   return user.profile || { vtc: '', steam: '', haulmp: '', truckersmp: '', companySince: null };
 }
 
+function hasAnyProfileData(profile) {
+  if (!profile) return false;
+  return !!(profile.vtc || profile.steam || profile.haulmp || profile.truckersmp || profile.companySince);
+}
+
 function subtitleFor(user) {
   if (!user.day || !user.month) return 'Дата рождения не указана';
   const dateStr = `${user.day} ${MONTHS[user.month - 1]}${user.year ? ` ${user.year}` : ''}`;
@@ -87,11 +97,11 @@ function subtitleFor(user) {
 /* ============================================================
    Рендер
    ============================================================ */
+
 export function renderProfilesView() {
   const root = document.getElementById('view-profiles');
   if (!root) return;
 
-  /* Сброс черновика при смене гильдии */
   if (state.guildId !== draftGuildId) {
     draftSettings = getProfilesSettings();
     draftGuildId = state.guildId;
@@ -117,8 +127,8 @@ export function renderProfilesView() {
           </div>
 
           <div class="form-group">
-            <label>Требуемые роли (проверка)</label>
-            <span class="hint" style="display:block;margin-bottom:8px;">Команды доступны пользователям хотя бы с одной из этих ролей. Пусто — проверка отключена.</span>
+            <label>Требуемые роли</label>
+            <span class="hint" style="display:block;margin-bottom:8px;">Если не заданы — доступно всем. Если заданы — только участникам с одной из ролей.</span>
             <div class="bd-role-chips" data-prof-role-chips></div>
             ${rolePickerHTML({ id: 'profiles_required_role', placeholder: 'Добавить роль...' })}
           </div>
@@ -127,7 +137,7 @@ export function renderProfilesView() {
 
       <div class="card">
         <div class="card-header">
-          <div><h2>Шаблон вывода информации</h2><p>Используйте токены и кнопки для персонализации</p></div>
+          <div><h2>Шаблон вывода информации</h2><p>Используйте плейсхолдеры</p></div>
         </div>
         <div class="card-body">
           <div class="prof-template-hint">
@@ -151,7 +161,7 @@ export function renderProfilesView() {
     </div>
   `;
 
-  /* === Канал === */
+  /* ---- Канал ---- */
   const chanHint = root.querySelector('#profiles_channel_hint');
   const chanHidden = root.querySelector('[data-hidden="profiles_channel"]');
   const chanInput = root.querySelector('[data-input="profiles_channel"]');
@@ -177,13 +187,13 @@ export function renderProfilesView() {
     }
   });
 
-  /* === Роли === */
+  /* ---- Роли ---- */
   const chipsContainer = root.querySelector('[data-prof-role-chips]');
 
   function renderChips() {
     const ids = draftSettings.requiredRoleIds || [];
     if (!ids.length) {
-      chipsContainer.innerHTML = '<span class="bd-role-empty">Не задано — команды доступны всем</span>';
+      chipsContainer.innerHTML = '<span class="bd-role-empty">Не задано — доступно всем</span>';
       return;
     }
     chipsContainer.innerHTML = ids.map(rid => {
@@ -194,7 +204,7 @@ export function renderProfilesView() {
         <span class="bd-role-chip" data-role-id="${rid}">
           <span class="bd-role-chip-dot" style="background:${color};"></span>
           <span>${escapeHtml(name)}</span>
-          <button type="button" data-remove-role="${rid}" aria-label="Удалить">×</button>
+          <button type="button" data-remove-role="${rid}" aria-label="Удалить">✕</button>
         </span>
       `;
     }).join('');
@@ -229,18 +239,14 @@ export function renderProfilesView() {
     }
   });
 
-  /* === Шаблон через Editor === */
+  /* ---- Editor ---- */
   const editorContainer = root.querySelector('[data-prof-editor]');
-
   if (editorInstance) { editorInstance.unmount(); editorInstance = null; }
-
-  editorInstance = new Editor('profiles', {
-    getRoleName: () => null
-  });
+  editorInstance = new Editor('profiles', { getRoleName: () => null });
   editorInstance.mount(editorContainer);
   editorInstance.load(draftSettings.template || DEFAULT_PROFILE_CONFIG);
 
-  /* === Список === */
+  /* ---- Список ---- */
   const listContainer = root.querySelector('[data-prof-list]');
   const listParent = listContainer.parentNode;
   listParent.querySelectorAll('.list-toolbar, .bulk-panel').forEach(el => el.remove());
@@ -258,7 +264,7 @@ export function renderProfilesView() {
         return `${m?.displayName || ''} ${m?.username || ''}`.trim();
       },
       filters: [
-        { id: 'birthday', label: 'С датой рождения', fn: u => u.day && u.month },
+        { id: 'birthday', label: 'С ДР', fn: u => u.day && u.month },
         { id: 'links', label: 'Со ссылками', fn: u => {
           const p = ensureProfile(u);
           return !!(p.vtc || p.steam || p.haulmp || p.truckersmp);
@@ -277,22 +283,22 @@ export function renderProfilesView() {
 }
 
 /* ============================================================
-   Публичный flow для кнопки «Добавить пользователя» в шапке
+   Создание профиля из шапки
    ============================================================ */
+
 export function createProfileFlow() {
   openProfileModal(null, () => renderProfilesView());
 }
 
 /* ============================================================
-   Сохранение (из main.js по кнопке «Сохранить»)
+   Сохранение
    ============================================================ */
+
 export async function saveProfiles() {
   if (!draftSettings) draftSettings = getProfilesSettings();
 
   let template = draftSettings.template;
-  if (editorInstance) {
-    template = editorInstance.getConfig();
-  }
+  if (editorInstance) template = editorInstance.getConfig();
 
   try {
     const payload = {
@@ -314,18 +320,22 @@ export async function saveProfiles() {
 }
 
 /* ============================================================
-   Список карточек (без изменений от предыдущей версии)
+   Список
    ============================================================ */
+
 function renderProfileList(container, items) {
   const data = getBirthdaysData();
 
   if (!items.length) {
     if (!data.users.length) {
-      container.innerHTML = emptyState(
-        '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
-        'Пока нет пользователей',
-        'Нажмите «Добавить пользователя» в шапке'
-      );
+      container.innerHTML = emptyState({
+        icon: 'fa-users',
+        title: 'Пока нет пользователей',
+        text: 'Нажмите «Добавить профиль» в шапке.',
+        ctaLabel: 'Добавить',
+        ctaAction: 'add-prof'
+      });
+      container.querySelector('[data-add-prof]')?.addEventListener('click', createProfileFlow);
     } else {
       container.innerHTML = noResultsHTML();
     }
@@ -354,15 +364,15 @@ function renderProfileCard(u) {
   const profile = ensureProfile(u);
 
   const links = [];
-  if (profile.vtc) links.push({ icon: 'vtc', url: profile.vtc, label: 'VTC' });
-  if (profile.steam) links.push({ icon: 'steam', url: profile.steam, label: 'Steam' });
-  if (profile.haulmp) links.push({ icon: 'truck', url: profile.haulmp, label: 'HaulMP' });
-  if (profile.truckersmp) links.push({ icon: 'truck', url: profile.truckersmp, label: 'TruckersMP' });
+  if (profile.vtc) links.push({ icon: 'fa-link', url: profile.vtc, label: 'VTC' });
+  if (profile.steam) links.push({ icon: 'fa-steam', url: profile.steam, label: 'Steam' });
+  if (profile.haulmp) links.push({ icon: 'fa-truck', url: profile.haulmp, label: 'HaulMP' });
+  if (profile.truckersmp) links.push({ icon: 'fa-truck', url: profile.truckersmp, label: 'TruckersMP' });
 
   const linksHtml = links.length
     ? `<div class="profile-links">${links.map(l => `
         <a class="profile-link" href="${escapeHtml(l.url)}" target="_blank" rel="noopener noreferrer">
-          <span class="profile-link-icon">${getLinkIcon(l.icon)}</span>
+          <span class="profile-link-icon"><i class="fa-${l.icon === 'fa-steam' ? 'brands' : 'solid'} ${l.icon}"></i></span>
           <span>${l.label}</span>
         </a>
       `).join('')}</div>`
@@ -376,6 +386,11 @@ function renderProfileCard(u) {
       </div>`
     : '';
 
+  const hasData = hasAnyProfileData(profile);
+  const deleteBtn = hasData
+    ? `<button type="button" class="icon-btn danger" data-prof-remove="${u.userId}" title="Очистить профиль">${ICONS.delete}</button>`
+    : '';
+
   return `
     <div class="profile-card" data-prof-id="${u.userId}">
       <div class="profile-card-head">
@@ -386,7 +401,7 @@ function renderProfileCard(u) {
         </div>
         <div class="profile-card-actions">
           <button type="button" class="icon-btn" data-prof-edit="${u.userId}" title="Редактировать">${ICONS.edit}</button>
-          <button type="button" class="icon-btn danger" data-prof-remove="${u.userId}" title="Удалить">${ICONS.delete}</button>
+          ${deleteBtn}
         </div>
       </div>
       ${linksHtml}
@@ -404,31 +419,46 @@ function bindProfileActions(container, data) {
   });
 
   container.querySelectorAll('[data-prof-remove]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const userId = btn.dataset.profRemove;
-      const member = getMember(userId);
-      const name = member?.displayName || member?.username || userId;
-      const ok = await confirmDialog({
-        title: 'Удаление пользователя',
-        text: `Удалить профиль «${name}»?\nВнимание: если у пользователя была дата рождения — она тоже удалится.`,
-        actionText: 'Удалить'
-      });
-      if (!ok) return;
-      try {
-        const fresh = getBirthdaysData();
-        fresh.users = fresh.users.filter(x => x.userId !== userId);
-        state.birthdays = { ...(state.birthdays || {}), ...fresh };
-        await api.setData(state.guildId, 'birthdays', fresh);
-        renderProfilesView();
-        toast('Пользователь удалён');
-      } catch (e) { toast('Ошибка: ' + e.message, { type: 'error' }); }
-    });
+    btn.addEventListener('click', () => deleteProfile(btn.dataset.profRemove));
   });
 }
 
+/**
+ * Очищает ТОЛЬКО user.profile — сам ДР и запись пользователя сохраняются.
+ */
+async function deleteProfile(userId) {
+  const member = getMember(userId);
+  const name = member?.displayName || member?.username || userId;
+
+  const ok = await confirmDialog({
+    title: 'Очистить профиль?',
+    text: `Очистить профиль пользователя «${name}»?\n\nДень рождения и запись пользователя сохранятся — удаляются только ссылки (VTC, Steam, HaulMP, TruckersMP) и дата вступления в компанию.`,
+    actionText: 'Очистить'
+  });
+  if (!ok) return;
+
+  try {
+    const fresh = getBirthdaysData();
+    const idx = fresh.users.findIndex(u => u.userId === userId);
+    if (idx < 0) return toast('Пользователь не найден', { type: 'error' });
+
+    fresh.users[idx].profile = {
+      vtc: '', steam: '', haulmp: '', truckersmp: '', companySince: null
+    };
+
+    state.birthdays = { ...(state.birthdays || {}), ...fresh };
+    await api.setData(state.guildId, 'birthdays', fresh);
+    renderProfilesView();
+    toast('Профиль очищен');
+  } catch (e) {
+    toast('Ошибка: ' + e.message, { type: 'error' });
+  }
+}
+
 /* ============================================================
-   Модалка добавления/редактирования пользователя
+   Модалка добавления/редактирования профиля
    ============================================================ */
+
 function openProfileModal(existing, onSaved) {
   const isEdit = !!existing;
   const profile = existing ? ensureProfile(existing) : { vtc: '', steam: '', haulmp: '', truckersmp: '', companySince: null };
@@ -444,6 +474,7 @@ function openProfileModal(existing, onSaved) {
     const v = i + 1;
     return `<option value="${v}" ${existing?.day === v ? 'selected' : ''}>${v}</option>`;
   }).join('');
+
   const monthOptions = '<option value="">—</option>' + MONTHS.map((m, i) => {
     const v = i + 1;
     return `<option value="${v}" ${existing?.month === v ? 'selected' : ''}>${m}</option>`;
@@ -470,7 +501,7 @@ function openProfileModal(existing, onSaved) {
       <label class="check-row" style="margin-top:0;">
         <input type="checkbox" data-prof-bday-enabled ${existing?.enabled !== false ? 'checked' : ''}>
         <div class="check-row-info">
-          <strong>Отправлять поздравление</strong>
+          <strong>Поздравлять</strong>
           <span>Если выключено — бот не поздравит и не выдаст роль</span>
         </div>
       </label>
@@ -490,13 +521,13 @@ function openProfileModal(existing, onSaved) {
         <label>Дата вступления</label>
         <input type="date" class="input" data-prof-company-since value="${companySinceVal}">
         <span class="hint" data-prof-company-hint>
-          ${profile.companySince ? `Стаж: ${escapeHtml(formatDuration(profile.companySince) || '—')}` : 'Заполните, чтобы отображать стаж в компании'}
+          ${profile.companySince ? `Стаж: ${escapeHtml(formatDuration(profile.companySince) || '—')}` : 'Заполните, чтобы отображать стаж'}
         </span>
       </div>
     </div>
   `;
 
-  const m = modal({ title: isEdit ? 'Редактировать пользователя' : 'Добавить пользователя', body, footer });
+  const m = modal({ title: isEdit ? 'Редактировать профиль' : 'Добавить профиль', body, footer });
 
   if (existing?.userId) {
     const member = getMember(existing.userId);
@@ -512,7 +543,10 @@ function openProfileModal(existing, onSaved) {
   const companyInput = m.bodyEl.querySelector('[data-prof-company-since]');
   const companyHint = m.bodyEl.querySelector('[data-prof-company-hint]');
   companyInput.addEventListener('input', () => {
-    if (!companyInput.value) { companyHint.textContent = 'Заполните, чтобы отображать стаж в компании'; return; }
+    if (!companyInput.value) {
+      companyHint.textContent = 'Заполните, чтобы отображать стаж';
+      return;
+    }
     const iso = new Date(companyInput.value + 'T00:00:00').toISOString();
     const dur = formatDuration(iso);
     companyHint.textContent = dur ? `Стаж: ${dur}` : 'Некорректная дата';
@@ -568,7 +602,7 @@ function openProfileModal(existing, onSaved) {
       await api.setData(state.guildId, 'birthdays', fresh);
       m.close();
       onSaved?.();
-      toast(isEdit ? 'Пользователь обновлён' : 'Пользователь добавлен');
+      toast(isEdit ? 'Обновлено' : 'Добавлено');
     } catch (e) {
       toast(e.message || 'Ошибка', { type: 'error' });
     }
@@ -576,8 +610,9 @@ function openProfileModal(existing, onSaved) {
 }
 
 /* ============================================================
-   Рефреш из SSE
+   SSE-обновление
    ============================================================ */
+
 export function refreshProfilesList() {
   if (profilesToolbar && profilesToolbar.el.isConnected) {
     profilesToolbar.refresh();
@@ -591,6 +626,7 @@ export function refreshProfilesList() {
 /* ============================================================
    Утилиты
    ============================================================ */
+
 function daysUntilBirthday(day, month) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -603,17 +639,7 @@ function formatDate(iso) {
   if (!iso) return '';
   try {
     return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  } catch { return ''; }
-}
-
-function getLinkIcon(kind) {
-  switch (kind) {
-    case 'steam':
-      return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0a12 12 0 0 0-11.99 11.6l5.6 2.3a3.5 3.5 0 0 1 2-.62l2.5-3.63V9.5a4.5 4.5 0 1 1 4.5 4.5h-.1l-3.58 2.55a3.5 3.5 0 0 1-6.93-.74L.42 14.5A12 12 0 1 0 12 0zm-4.7 17.44a2.63 2.63 0 0 1-1.2-.32l1.44.6a2.13 2.13 0 0 0 2.73-1.15 2.14 2.14 0 0 0-1.15-2.75l-.66-.27a2.63 2.63 0 0 1 3.2 1.37 2.63 2.63 0 0 1-4.36 2.52zm8.35-5.44a3 3 0 1 1 3-3 3 3 0 0 1-3 3z"/></svg>';
-    case 'truck':
-      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>';
-    case 'vtc':
-    default:
-      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+  } catch {
+    return '';
   }
 }

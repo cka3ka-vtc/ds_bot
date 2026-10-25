@@ -1,9 +1,14 @@
+/* ============================================================
+   Логи: список групп с фильтрами по уровню.
+   ============================================================ */
+
 import { state } from '../state.js';
 import { api } from '../api.js';
 import { escapeHtml } from '../utils.js';
 import { toast, confirmDialog, emptyState } from '../ui.js';
 import { updateLogsBadge } from './helpers.js';
 
+/* Текущий фильтр */
 let currentFilter = 'all';
 
 const LEVEL_LABELS = {
@@ -13,9 +18,31 @@ const LEVEL_LABELS = {
   error: 'Ошибки'
 };
 
+const SECTION_INTRO = `
+  <div class="section-intro">
+    <h2><i class="fa-solid fa-list"></i> Логи</h2>
+    <p>Журнал действий бота: отправки, ошибки, изменения. Записи группируются по типу события — удобно искать проблемные места.</p>
+    <ul>
+      <li>Фильтр по уровню: ошибки / предупреждения / инфо</li>
+      <li>Клик на группу — раскрыть детали</li>
+      <li>Хранятся последние 500 записей</li>
+    </ul>
+  </div>
+`;
+
+/* ============================================================
+   Рендер
+   ============================================================ */
+
 export async function renderLogsView() {
   const container = document.getElementById('logsList');
   if (!container) return;
+
+  /* Section-intro один раз */
+  const parent = container.parentNode;
+  if (!parent.querySelector('.section-intro')) {
+    parent.insertAdjacentHTML('afterbegin', SECTION_INTRO);
+  }
 
   try {
     const data = await api.logs(state.guildId);
@@ -23,11 +50,17 @@ export async function renderLogsView() {
     updateLogsBadge();
 
     if (!data.items?.length) {
-      container.innerHTML = emptyState(
-        '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
-        'Пока нет записей',
-        'Здесь появятся действия и события бота'
-      );
+      container.innerHTML = emptyState({
+        icon: 'fa-list',
+        title: 'Пока нет записей',
+        text: 'Как только бот что-то сделает — здесь появится запись.',
+        ctaLabel: 'К объявлениям',
+        ctaAction: 'goto-ann'
+      });
+      container.querySelector('[data-goto-ann]')?.addEventListener('click', async () => {
+        const { navigate } = await import('../router.js');
+        navigate(state.guildId, 'announcements');
+      });
       return;
     }
 
@@ -42,8 +75,7 @@ export async function renderLogsView() {
       <div class="logs-toolbar">
         ${['all', 'info', 'warn', 'error'].map(lvl => `
           <button type="button" class="logs-filter-btn ${currentFilter === lvl ? 'active' : ''}" data-log-filter="${lvl}">
-            ${LEVEL_LABELS[lvl]}
-            <span class="logs-filter-count">${counts[lvl]}</span>
+            ${LEVEL_LABELS[lvl]}<span class="logs-filter-count">${counts[lvl]}</span>
           </button>
         `).join('')}
       </div>
@@ -53,24 +85,33 @@ export async function renderLogsView() {
     container.querySelectorAll('[data-log-filter]').forEach(btn => {
       btn.addEventListener('click', () => {
         currentFilter = btn.dataset.logFilter;
-        container.querySelectorAll('[data-log-filter]').forEach(b => b.classList.toggle('active', b === btn));
+        container.querySelectorAll('[data-log-filter]').forEach(b => {
+          b.classList.toggle('active', b === btn);
+        });
         renderGroups(container.querySelector('[data-logs-groups]'), data.groups || []);
       });
     });
 
     renderGroups(container.querySelector('[data-logs-groups]'), data.groups || []);
   } catch (e) {
-    container.innerHTML = emptyState(
-      '<circle cx="12" cy="12" r="10"/>',
-      'Не удалось загрузить логи',
-      e.message
-    );
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <h3 class="empty-state-title">Не удалось загрузить</h3>
+        <p class="empty-state-text">${escapeHtml(e.message)}</p>
+      </div>
+    `;
   }
 }
+
+/* ============================================================
+   Группы
+   ============================================================ */
 
 function renderGroups(container, groups) {
   if (!container) return;
 
+  /* Фильтр по уровню */
   const filtered = groups
     .map(g => ({
       ...g,
@@ -81,9 +122,11 @@ function renderGroups(container, groups) {
     .filter(g => g.logs.length > 0);
 
   if (!filtered.length) {
-    container.innerHTML = `<div class="empty-state" style="padding:32px 20px;">
-      <span style="font-size:13px;">Нет записей по фильтру «${LEVEL_LABELS[currentFilter]}»</span>
-    </div>`;
+    container.innerHTML = `
+      <div class="empty-state" style="padding:32px 20px;">
+        <p class="empty-state-text">Нет записей по фильтру «${LEVEL_LABELS[currentFilter]}»</p>
+      </div>
+    `;
     return;
   }
 
@@ -92,7 +135,7 @@ function renderGroups(container, groups) {
       <button type="button" class="log-group-header" data-log-group-toggle aria-expanded="${i === 0}">
         <span class="log-group-type">${escapeHtml(g.type)}</span>
         <div class="log-group-stats">
-          <span>${g.count} ${g.count === 1 ? 'запись' : 'записей'}</span>
+          <span>${g.count} записей</span>
           ${g.errorCount > 0 ? `<span class="err">${g.errorCount} err</span>` : ''}
           ${g.warnCount > 0 ? `<span class="warn">${g.warnCount} warn</span>` : ''}
         </div>
@@ -117,6 +160,7 @@ function renderGroups(container, groups) {
     </div>
   `).join('');
 
+  /* Toggle групп */
   container.querySelectorAll('[data-log-group-toggle]').forEach(btn => {
     btn.addEventListener('click', () => {
       const group = btn.closest('.log-group');
@@ -126,6 +170,10 @@ function renderGroups(container, groups) {
   });
 }
 
+/* ============================================================
+   Очистка
+   ============================================================ */
+
 export async function clearAllLogs() {
   const ok = await confirmDialog({
     title: 'Очистить логи',
@@ -133,6 +181,7 @@ export async function clearAllLogs() {
     actionText: 'Очистить'
   });
   if (!ok) return;
+
   try {
     await api.clearLogs(state.guildId);
     state.logs = [];

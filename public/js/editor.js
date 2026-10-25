@@ -1,21 +1,55 @@
+/* ============================================================
+   Редактор блоков сообщений (Components v2).
+
+   Позволяет:
+   - добавлять/удалять/переупорядочивать блоки
+   - редактировать текст с toolbar (bold, italic, code, …)
+   - настраивать кнопки-ссылки и кнопки-роли
+   - видеть живой preview справа
+   - хранить историю (undo/redo)
+   - автосохранять черновик в localStorage
+
+   Работает в контекстах: rules, message, announcement, delayed,
+   birthdays, profiles, ephemeral (для кнопок-ролей).
+   ============================================================ */
+
 import { state, loadCollapsed, saveCollapsed } from './state.js';
 import { uid, escapeHtml, formatDateByCode, debounce } from './utils.js';
-import { channelPickerHTML, bindChannelPicker, rolePickerHTML, bindRolePicker, emojiPickerHTML, bindEmojiPicker, positionPopup, channelIcon } from './pickers.js';
+import {
+  channelPickerHTML, bindChannelPicker,
+  rolePickerHTML, bindRolePicker,
+  emojiPickerHTML, bindEmojiPicker,
+  positionPopup, channelIcon
+} from './pickers.js';
 import { toast } from './ui.js';
 
-const LIMITS = { MAX_BLOCKS: 40, MAX_BUTTONS: 5, MAX_TEXT: 4000, MAX_LABEL: 80 };
+/* ============================================================
+   Константы и словари
+   ============================================================ */
 
-const TYPE_LABELS = {
-  text: 'Текст', sections: 'Секция', separator: 'Разделитель',
-  image: 'Картинка', images: 'Картинки', file: 'Файл',
-  buttons: 'Кнопки', 'role-buttons': 'Кнопки ролей', footer: 'Футер'
+const LIMITS = {
+  MAX_BLOCKS: 40,
+  MAX_BUTTONS: 5,
+  MAX_TEXT: 4000,
+  MAX_LABEL: 80
 };
 
+const TYPE_LABELS = {
+  text: 'Текст',
+  sections: 'Секции',
+  separator: 'Разделитель',
+  image: 'Картинка',
+  images: 'Картинки',
+  file: 'Файл',
+  buttons: 'Кнопки',
+  'role-buttons': 'Кнопки ролей',
+  footer: 'Подпись'
+};
+
+/* Не поддерживаемые типы из старых версий — вычищаем при загрузке */
 const UNSUPPORTED_TYPES = new Set(['thumbnail', 'select-menu']);
 
-const COLLAPSE_KEY = (guildId, context) => `nexus_editor_collapsed_${guildId || 'x'}_${context}`;
-
-/* Форматы, которые вставляются как {token} (единый обработчик) */
+/* Токены, требующие {format} → редактор вставляет в текст */
 const TOKEN_FORMATS = new Set([
   'role', 'until', 'user', 'age',
   'mention', 'birthday', 'links',
@@ -23,6 +57,7 @@ const TOKEN_FORMATS = new Set([
   'companySince', 'companyDuration'
 ]);
 
+/* Токены профиля (для контекста 'profiles') */
 const PROFILE_TOKENS = [
   ['mention', '{mention}', 'Упоминание'],
   ['birthday', '{birthday}', 'Дата рождения'],
@@ -36,7 +71,15 @@ const PROFILE_TOKENS = [
   ['companyDuration', '{companyDuration}', 'Стаж']
 ];
 
+/* ============================================================
+   Класс Editor
+   ============================================================ */
+
 export class Editor {
+  /**
+   * @param {'rules'|'message'|'announcement'|'delayed'|'birthdays'|'profiles'|'ephemeral'} context
+   * @param {object} [opts]
+   */
   constructor(context, opts = {}) {
     this.context = context;
     this.config = this._defaultConfig();
@@ -53,6 +96,8 @@ export class Editor {
     this._dragSrcIndex = -1;
     this._keyHandler = null;
   }
+
+  /* ---------- Жизненный цикл ---------- */
 
   mount(rootEl) {
     this._root = rootEl;
@@ -88,37 +133,41 @@ export class Editor {
   }
 
   getConfig() { return this.config; }
+
   markSaved() {
     this._savedSnapshot = this._serialize();
     this.unsaved = false;
     this._updateUnsavedIndicator();
   }
+
   isDirty() { return this._serialize() !== this._savedSnapshot; }
+
+  /* ---------- Настройки ---------- */
 
   _defaultConfig() {
     return {
-      channelId: '', displayMode: 'embed-color', accentColor: '#5865F2',
-      title: '', subtitle: '', thumbnail: '', blocks: []
+      channelId: '',
+      displayMode: 'embed-color',
+      accentColor: '#5865F2',
+      title: '',
+      subtitle: '',
+      thumbnail: '',
+      blocks: []
     };
   }
 
-  _loadCollapseState() {
-    try {
-      const raw = localStorage.getItem(COLLAPSE_KEY(state.guildId, this.context));
-      return raw ? JSON.parse(raw) : {};
-    } catch { return {}; }
-  }
+  /* ---------- Свёрнутые состояния ---------- */
 
-  _saveCollapseState(s) {
-    try { localStorage.setItem(COLLAPSE_KEY(state.guildId, this.context), JSON.stringify(s)); } catch {}
+  _loadCollapseState() {
+    return { has: (k) => loadCollapsed(this.context).has(k) };
   }
 
   _applyCollapseState() {
     if (!this._root) return;
-    const s = this._loadCollapseState();
+    const collapsed = loadCollapsed(this.context);
     this._root.querySelectorAll('[data-collapse-key]').forEach(card => {
       const key = card.dataset.collapseKey;
-      card.classList.toggle('collapsed', !!s[key]);
+      card.classList.toggle('collapsed', collapsed.has(key));
     });
   }
 
@@ -130,13 +179,16 @@ export class Editor {
         const card = btn.closest('[data-collapse-key]');
         if (!card) return;
         const key = card.dataset.collapseKey;
+        const collapsed = loadCollapsed(this.context);
         const isCollapsed = card.classList.toggle('collapsed');
-        const s = this._loadCollapseState();
-        s[key] = isCollapsed;
-        this._saveCollapseState(s);
+        if (isCollapsed) collapsed.add(key);
+        else collapsed.delete(key);
+        saveCollapsed(this.context);
       });
     });
   }
+
+  /* ---------- Layout ---------- */
 
   _renderLayout() {
     const bot = state.bot || { username: 'Ckaзka Dev', avatar: null };
@@ -150,9 +202,7 @@ export class Editor {
         <div class="card editor-collapsible" data-collapse-key="settings">
           <div class="card-header" data-collapse-toggle>
             <div><h2>Настройки сообщения</h2><p>Режим, оформление</p></div>
-            <span class="collapse-chevron" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-            </span>
+            <span class="collapse-chevron"><i class="fa-solid fa-chevron-down"></i></span>
           </div>
           <div class="card-body">
             ${showChannelPicker ? `
@@ -165,7 +215,7 @@ export class Editor {
               <div class="form-group" style="margin-bottom:0;">
                 <label>Режим отображения</label>
                 <div class="segmented-control" data-mode-seg>
-                  <button type="button" data-value="flat" class="seg-btn">Обычный</button>
+                  <button type="button" data-value="flat" class="seg-btn">Плоский</button>
                   <button type="button" data-value="embed" class="seg-btn">Блок</button>
                   <button type="button" data-value="embed-color" class="seg-btn active">Цветной</button>
                 </div>
@@ -175,20 +225,27 @@ export class Editor {
                 <div class="color-picker-compact"><input type="color" data-accent-color value="#5865F2"></div>
               </div>
             </div>
-            <div class="form-group" style="margin-top:18px;"><label>Заголовок</label><input class="input" data-title-input maxlength="4000"></div>
-            <div class="form-group"><label>Подзаголовок</label><input class="input" data-subtitle-input maxlength="4000"></div>
-            <div class="form-group"><label>Thumbnail (URL)</label><input class="input" data-thumbnail-input placeholder="https://..."></div>
+            <div class="form-group" style="margin-top:18px;">
+              <label>Заголовок</label>
+              <input class="input" data-title-input maxlength="4000">
+            </div>
+            <div class="form-group">
+              <label>Подзаголовок</label>
+              <input class="input" data-subtitle-input maxlength="4000">
+            </div>
+            <div class="form-group">
+              <label>Thumbnail (URL)</label>
+              <input class="input" data-thumbnail-input placeholder="https://...">
+            </div>
           </div>
         </div>
 
         <div class="card editor-collapsible" data-collapse-key="blocks">
           <div class="card-header" data-collapse-toggle>
-            <div><h2>Блоки</h2><p>Тяните за <b>⠿</b> для изменения порядка</p></div>
+            <div><h2>Блоки</h2><p>Тяните за <b>⋮⋮</b> для изменения порядка</p></div>
             <div class="header-right">
               <span class="badge idle" data-block-count>0 блоков</span>
-              <span class="collapse-chevron" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-              </span>
+              <span class="collapse-chevron"><i class="fa-solid fa-chevron-down"></i></span>
             </div>
           </div>
           <div class="card-body">
@@ -200,7 +257,9 @@ export class Editor {
 
       <div class="preview-col">
         <div class="card">
-          <div class="card-header"><div><h2>Предпросмотр</h2><p>Как это увидят участники</p></div></div>
+          <div class="card-header">
+            <div><h2>Предпросмотр</h2><p>Как это увидит участник</p></div>
+          </div>
           <div class="card-body">
             <div class="discord-preview">
               <div class="dp-author">
@@ -220,15 +279,22 @@ export class Editor {
     this._previewEl = this._root.querySelector('[data-preview]');
     this._blocksEl = this._root.querySelector('[data-blocks]');
     this._countEl = this._root.querySelector('[data-block-count]');
+
     this._bindStaticControls();
     this._bindCollapseToggles();
   }
 
   _addMenuButtons() {
     const items = [
-      ['text', '+ Текст'], ['sections', '+ Секция'], ['separator', '+ Разделитель'],
-      ['image', '+ Картинка'], ['images', '+ Картинки'], ['file', '+ Файл'],
-      ['buttons', '+ Кнопки'], ['role-buttons', '+ Кнопки ролей'], ['footer', '+ Футер']
+      ['text', '+ Текст'],
+      ['sections', '+ Секции'],
+      ['separator', '+ Разделитель'],
+      ['image', '+ Картинка'],
+      ['images', '+ Картинки'],
+      ['file', '+ Файл'],
+      ['buttons', '+ Кнопки'],
+      ['role-buttons', '+ Кнопки ролей'],
+      ['footer', '+ Подпись']
     ];
     return items.map(([type, label]) => `<button type="button" data-add="${type}">${label}</button>`).join('');
   }
@@ -248,6 +314,7 @@ export class Editor {
       });
     }
 
+    /* Режим отображения */
     const seg = root.querySelector('[data-mode-seg]');
     if (seg) {
       seg.querySelectorAll('.seg-btn').forEach(btn => {
@@ -262,28 +329,40 @@ export class Editor {
       });
     }
 
+    /* Цвет */
     const colorInput = root.querySelector('[data-accent-color]');
-    if (colorInput) colorInput.addEventListener('input', () => {
-      this.config.accentColor = colorInput.value;
-      this._renderPreview();
-      this._markDirtyDebounced();
-    });
+    if (colorInput) {
+      colorInput.addEventListener('input', () => {
+        this.config.accentColor = colorInput.value;
+        this._renderPreview();
+        this._markDirtyDebounced();
+      });
+    }
 
+    /* Заголовок / подзаголовок / thumbnail */
     const titleInput = root.querySelector('[data-title-input]');
     const subtitleInput = root.querySelector('[data-subtitle-input]');
     const thumbInput = root.querySelector('[data-thumbnail-input]');
+
     if (titleInput) titleInput.addEventListener('input', () => { this.config.title = titleInput.value; this._renderPreview(); this._markDirtyDebounced(); });
     if (subtitleInput) subtitleInput.addEventListener('input', () => { this.config.subtitle = subtitleInput.value; this._renderPreview(); this._markDirtyDebounced(); });
     if (thumbInput) thumbInput.addEventListener('input', () => { this.config.thumbnail = thumbInput.value.trim(); this._renderPreview(); this._markDirtyDebounced(); });
 
+    /* Меню «добавить блок» */
     const addMenu = root.querySelector('[data-add-menu]');
     if (addMenu) {
       addMenu.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-add]');
         if (!btn) return;
         const type = btn.dataset.add;
-        if (this.config.blocks.length >= LIMITS.MAX_BLOCKS) return toast('Достигнут лимит блоков', { type: 'error' });
-        if (type === 'footer' && this.config.blocks.some(b => b.type === 'footer')) return toast('Футер уже добавлен', { type: 'error' });
+
+        if (this.config.blocks.length >= LIMITS.MAX_BLOCKS) {
+          return toast('Достигнут лимит блоков', { type: 'error' });
+        }
+        if (type === 'footer' && this.config.blocks.some(b => b.type === 'footer')) {
+          return toast('Подпись уже добавлена', { type: 'error' });
+        }
+
         this.config.blocks.push(this._createBlock(type));
         this._snapshot();
         this._renderAll();
@@ -291,13 +370,21 @@ export class Editor {
       });
     }
 
+    /* Undo/Redo */
     if (this._keyHandler) document.removeEventListener('keydown', this._keyHandler);
     this._keyHandler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); this._undo(); }
-      else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); this._redo(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        this._undo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        this._redo();
+      }
     };
     document.addEventListener('keydown', this._keyHandler);
   }
+
+  /* ---------- Рендер ---------- */
 
   _renderAll() {
     if (!this._root) return;
@@ -311,19 +398,25 @@ export class Editor {
   _renderSettings() {
     const root = this._root;
     if (!root || !this.config) return;
+
     if (root.querySelector('[data-mode-seg]')) {
       root.querySelectorAll('[data-mode-seg] .seg-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.value === this.config.displayMode);
       });
     }
+
     const colorInput = root.querySelector('[data-accent-color]');
     if (colorInput) colorInput.value = this.config.accentColor || '#5865F2';
+
     const titleInput = root.querySelector('[data-title-input]');
     if (titleInput) titleInput.value = this.config.title || '';
+
     const subtitleInput = root.querySelector('[data-subtitle-input]');
     if (subtitleInput) subtitleInput.value = this.config.subtitle || '';
+
     const thumbInput = root.querySelector('[data-thumbnail-input]');
     if (thumbInput) thumbInput.value = this.config.thumbnail || '';
+
     this._updateColorVisibility();
   }
 
@@ -352,8 +445,8 @@ export class Editor {
     if (!this.config) return;
     const container = this._blocksEl;
     if (!container) return;
-    const collapsed = loadCollapsed(this.context);
 
+    /* Footer всегда последний */
     this.config.blocks.sort((a, b) => {
       if (a.type === 'footer' && b.type !== 'footer') return 1;
       if (a.type !== 'footer' && b.type === 'footer') return -1;
@@ -365,15 +458,16 @@ export class Editor {
       return;
     }
 
-    container.innerHTML = this.config.blocks.map((b, i) => this._renderBlock(b, i, collapsed)).join('');
+    container.innerHTML = this.config.blocks.map((b, i) => this._renderBlock(b, i)).join('');
 
+    /* Биндинги (один раз) */
     if (!container._bound) {
       container._bound = true;
-
       container.addEventListener('click', (e) => this._handleBlockClick(e));
       container.addEventListener('input', (e) => this._handleBlockInput(e));
       container.addEventListener('change', (e) => this._handleBlockInput(e));
 
+      /* Drag & drop */
       container.addEventListener('dragstart', (e) => {
         const handle = e.target.closest('[data-drag-handle]');
         if (!handle) { e.preventDefault(); return; }
@@ -463,23 +557,22 @@ export class Editor {
     return this._findButtonById(realId);
   }
 
-  _renderBlock(block, idx, collapsed) {
+  _renderBlock(block, idx) {
     const label = TYPE_LABELS[block.type] || block.type;
-    const isCollapsed = collapsed.has(block.id);
     const isFooter = block.type === 'footer';
     const nextIsFooter = this.config.blocks[idx + 1]?.type === 'footer';
 
     return `
-      <div class="block-card ${isCollapsed ? 'collapsed' : ''}" data-block-id="${block.id}" data-idx="${idx}">
+      <div class="block-card" data-block-id="${block.id}" data-idx="${idx}">
         <div class="block-head">
-          <span class="block-drag-handle" data-drag-handle draggable="true" aria-label="Перетащить блок">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+          <span class="block-drag-handle" data-drag-handle draggable="true" aria-label="Перетащить">
+            <i class="fa-solid fa-grip-vertical"></i>
           </span>
           <span class="block-type-tag" data-toggle-collapse>${label}</span>
           <div class="block-actions">
-            ${!isFooter ? `<button type="button" data-action="up" title="Вверх"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg></button>` : ''}
-            ${!isFooter && !nextIsFooter ? `<button type="button" data-action="down" title="Вниз"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>` : ''}
-            <button type="button" class="danger" data-action="remove" title="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+            ${!isFooter ? `<button type="button" data-action="up" title="Вверх"><i class="fa-solid fa-chevron-up"></i></button>` : ''}
+            ${!isFooter && !nextIsFooter ? `<button type="button" data-action="down" title="Вниз"><i class="fa-solid fa-chevron-down"></i></button>` : ''}
+            <button type="button" class="danger" data-action="remove" title="Удалить"><i class="fa-solid fa-trash"></i></button>
           </div>
         </div>
         <div class="block-body">${this._renderBlockBody(block)}</div>
@@ -501,7 +594,7 @@ export class Editor {
           <div class="sub-item-row">
             <label style="display:flex;gap:8px;font-size:12px;color:var(--text-dim);cursor:pointer;align-items:center;">
               <input type="checkbox" data-field="divider" ${block.divider !== false ? 'checked' : ''}>
-              Показывать линию
+              Показать линию
             </label>
             <select class="input" data-field="spacing" style="width:auto;margin-left:auto;">
               <option value="1" ${block.spacing == 1 ? 'selected' : ''}>Маленький отступ</option>
@@ -511,7 +604,7 @@ export class Editor {
         `;
       case 'image':
       case 'file':
-        return `<input class="input" data-field="url" placeholder="https://... или {vtc} / {steam} / {haulmp} / {truckersmp}" value="${escapeHtml(block.url || '')}">`;
+        return `<input class="input" data-field="url" placeholder="https://... или {vtc} / {steam}" value="${escapeHtml(block.url || '')}">`;
       case 'images':
         return `
           <div class="sub-label">URL (по одному в строке)</div>
@@ -522,7 +615,7 @@ export class Editor {
       case 'footer':
         return `
           ${this._toolbarHTML(true)}
-          <input class="input" data-field="content" placeholder="Текст футера" value="${escapeHtml(block.content || '')}">
+          <input class="input" data-field="content" placeholder="Текст подписи" value="${escapeHtml(block.content || '')}">
         `;
       default: return '';
     }
@@ -538,7 +631,7 @@ export class Editor {
           <button type="button" data-format="italic" title="Курсив"><i>I</i></button>
           <button type="button" data-format="underline" title="Подчёркнутый"><u>U</u></button>
           <button type="button" data-format="strike" title="Зачёркнутый"><s>S</s></button>
-          <button type="button" data-format="quote" title="Цитата">❝</button>
+          <button type="button" data-format="quote" title="Цитата">❞</button>
           <button type="button" data-format="code" title="Код">&lt;/&gt;</button>
           <button type="button" data-format="spoiler" title="Спойлер">▮</button>
           <div class="toolbar-sep"></div>
@@ -546,9 +639,9 @@ export class Editor {
         <button type="button" data-format="time" class="time-btn" title="Вставить время">{time} ▾</button>
         ${this.context === 'ephemeral' ? `<button type="button" data-format="role" class="role-btn" title="Вставить роль">{role}</button>` : ''}
         ${this.context === 'announcement' ? `<button type="button" data-format="until" class="time-btn" title="Вставить {until}">{until}</button>` : ''}
-        ${this.context === 'birthday' ? `
+        ${this.context === 'birthdays' ? `
           <div class="toolbar-sep"></div>
-          <button type="button" data-format="user" class="role-btn" title="Упоминание пользователя">{user}</button>
+          <button type="button" data-format="user" class="role-btn" title="Упоминание">{user}</button>
           ${this._opts.allowAge !== false ? `<button type="button" data-format="age" class="role-btn" title="Возраст">{age}</button>` : ''}
         ` : ''}
         ${tokens.length ? `
@@ -577,7 +670,7 @@ export class Editor {
           <span style="min-width:24px;text-align:center;font-size:11.5px;color:var(--text-muted);">${isNumeric ? (i + 1) + '.' : '·'}</span>
           <input class="input" data-item-idx="${i}" value="${escapeHtml(item)}">
           <button type="button" class="icon-btn" data-action="remove-item" data-item-idx="${i}" aria-label="Удалить пункт">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
       `).join('')}
@@ -594,11 +687,11 @@ export class Editor {
           <div class="sub-item-row">
             <input class="input" data-btn-field="label" placeholder="Название" maxlength="${LIMITS.MAX_LABEL}" value="${escapeHtml(btn.label || '')}">
             <button type="button" class="icon-btn" data-action="remove-button" data-button-id="${btn.id}" aria-label="Удалить кнопку">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <i class="fa-solid fa-xmark"></i>
             </button>
           </div>
           <div class="sub-item-row">
-            <input class="input" data-btn-field="url" placeholder="https://... или {vtc} / {steam} / {haulmp} / {truckersmp}" value="${escapeHtml(btn.url || '')}">
+            <input class="input" data-btn-field="url" placeholder="https://... или {vtc} / {steam}" value="${escapeHtml(btn.url || '')}">
           </div>
           <div class="sub-item-row">${emojiPickerHTML({ id: btn.id, value: btn.emoji || '' })}</div>
         </div>
@@ -622,26 +715,30 @@ export class Editor {
               <option value="danger" ${btn.style === 'danger' ? 'selected' : ''}>Danger</option>
             </select>
             <button type="button" class="icon-btn" data-action="remove-button" data-button-id="${btn.id}" aria-label="Удалить кнопку">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <i class="fa-solid fa-xmark"></i>
             </button>
           </div>
           ${rolePickerHTML({ id: btn.id, value: btn.roleId })}
           <div class="sub-item-row">${emojiPickerHTML({ id: 'e_' + btn.id, value: btn.emoji || '' })}</div>
-          ${showEphemeral ? `<button type="button" class="btn btn-ghost btn-sm" data-action="edit-ephemeral" data-button-id="${btn.id}">✏️ Настроить ответы</button>` : ''}
+          ${showEphemeral ? `<button type="button" class="btn btn-ghost btn-sm" data-action="edit-ephemeral" data-button-id="${btn.id}">✎ Настроить ответ</button>` : ''}
         </div>
       `).join('')}
       ${buttons.length < LIMITS.MAX_BUTTONS ? `<button type="button" class="btn btn-ghost btn-sm" data-action="add-role-button">+ Добавить кнопку роли</button>` : ''}
     `;
   }
 
+  /* ---------- Обработчики блоков ---------- */
+
   _handleBlockClick(e) {
     const card = e.target.closest('.block-card');
     if (!card) return;
+
     const blockId = card.dataset.blockId;
     const idx = parseInt(card.dataset.idx);
     const block = this.config.blocks[idx];
     if (!block) return;
 
+    /* Сворачивание блока по клику на тег */
     if (e.target.closest('[data-toggle-collapse]')) {
       const collapsed = loadCollapsed(this.context);
       if (collapsed.has(blockId)) collapsed.delete(blockId);
@@ -652,62 +749,65 @@ export class Editor {
     }
 
     const actionBtn = e.target.closest('[data-action]');
-    if (actionBtn) {
-      e.preventDefault();
-      const action = actionBtn.dataset.action;
-      const buttonId = actionBtn.dataset.buttonId;
-      const itemIdx = parseInt(actionBtn.dataset.itemIdx);
-
-      if (action === 'up' && idx > 0) {
-        this.config.blocks.splice(idx - 1, 0, this.config.blocks.splice(idx, 1)[0]);
-        this._snapshot(); this._renderAll(); this._markDirty();
-      } else if (action === 'down' && idx < this.config.blocks.length - 1) {
-        this.config.blocks.splice(idx + 1, 0, this.config.blocks.splice(idx, 1)[0]);
-        this._snapshot(); this._renderAll(); this._markDirty();
-      } else if (action === 'remove') {
-        this.config.blocks.splice(idx, 1);
-        this._snapshot(); this._renderAll(); this._markDirty();
-      } else if (action === 'add-button') {
-        if (block.buttons.length >= LIMITS.MAX_BUTTONS) return;
-        block.buttons.push({ id: uid(), label: 'Кнопка', url: '', emoji: '' });
-        this._snapshot(); this._renderAll(); this._markDirty();
-      } else if (action === 'add-role-button') {
-        if (block.buttons.length >= LIMITS.MAX_BUTTONS) return;
-        block.buttons.push({
-          id: uid(), label: 'Роль', style: 'primary', roleId: '', emoji: '',
-          ephemeral: {
-            positive: this._defaultEphemeral('✅ Роль выдана!'),
-            negative: this._defaultEphemeral('❌ Роль снята!')
-          }
-        });
-        this._snapshot(); this._renderAll(); this._markDirty();
-      } else if (action === 'remove-button') {
-        block.buttons = block.buttons.filter(b => b.id !== buttonId);
-        this._snapshot(); this._renderAll(); this._markDirty();
-      } else if (action === 'edit-ephemeral') {
-        this._opts.onEditEphemeral?.(blockId, buttonId);
-      } else if (action === 'add-item') {
-        if (!block.items) block.items = [];
-        block.items.push('');
-        this._snapshot(); this._renderAll(); this._markDirty();
-      } else if (action === 'remove-item') {
-        block.items.splice(itemIdx, 1);
-        this._snapshot(); this._renderAll(); this._markDirty();
+    if (!actionBtn) {
+      /* Панель форматирования */
+      const fmtBtn = e.target.closest('[data-format]');
+      if (fmtBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        this._handleFormat(fmtBtn, card);
       }
       return;
     }
 
-    const fmtBtn = e.target.closest('[data-format]');
-    if (fmtBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      this._handleFormat(fmtBtn, card);
+    e.preventDefault();
+
+    const action = actionBtn.dataset.action;
+    const buttonId = actionBtn.dataset.buttonId;
+    const itemIdx = parseInt(actionBtn.dataset.itemIdx);
+
+    if (action === 'up' && idx > 0) {
+      this.config.blocks.splice(idx - 1, 0, this.config.blocks.splice(idx, 1)[0]);
+      this._snapshot(); this._renderAll(); this._markDirty();
+    } else if (action === 'down' && idx < this.config.blocks.length - 1) {
+      this.config.blocks.splice(idx + 1, 0, this.config.blocks.splice(idx, 1)[0]);
+      this._snapshot(); this._renderAll(); this._markDirty();
+    } else if (action === 'remove') {
+      this.config.blocks.splice(idx, 1);
+      this._snapshot(); this._renderAll(); this._markDirty();
+    } else if (action === 'add-button') {
+      if (block.buttons.length >= LIMITS.MAX_BUTTONS) return;
+      block.buttons.push({ id: uid(), label: 'Кнопка', url: '', emoji: '' });
+      this._snapshot(); this._renderAll(); this._markDirty();
+    } else if (action === 'add-role-button') {
+      if (block.buttons.length >= LIMITS.MAX_BUTTONS) return;
+      block.buttons.push({
+        id: uid(), label: 'Роль', style: 'primary', roleId: '', emoji: '',
+        ephemeral: {
+          positive: this._defaultEphemeral('✅ Роль выдана!'),
+          negative: this._defaultEphemeral('❌ Роль снята!')
+        }
+      });
+      this._snapshot(); this._renderAll(); this._markDirty();
+    } else if (action === 'remove-button') {
+      block.buttons = block.buttons.filter(b => b.id !== buttonId);
+      this._snapshot(); this._renderAll(); this._markDirty();
+    } else if (action === 'edit-ephemeral') {
+      this._opts.onEditEphemeral?.(blockId, buttonId);
+    } else if (action === 'add-item') {
+      if (!block.items) block.items = [];
+      block.items.push('');
+      this._snapshot(); this._renderAll(); this._markDirty();
+    } else if (action === 'remove-item') {
+      block.items.splice(itemIdx, 1);
+      this._snapshot(); this._renderAll(); this._markDirty();
     }
   }
 
   _handleBlockInput(e) {
     const card = e.target.closest('.block-card');
     if (!card) return;
+
     const idx = parseInt(card.dataset.idx);
     const block = this.config.blocks[idx];
     if (!block) return;
@@ -730,7 +830,9 @@ export class Editor {
           counter.classList.toggle('warn', e.target.value.length > LIMITS.MAX_TEXT * .9);
           counter.classList.toggle('error', e.target.value.length >= LIMITS.MAX_TEXT);
         }
-      } else block[field] = e.target.value;
+      } else {
+        block[field] = e.target.value;
+      }
     } else if (btnField && buttonId) {
       const btn = block.buttons.find(b => b.id === buttonId);
       if (btn) btn[btnField] = e.target.value;
@@ -750,7 +852,6 @@ export class Editor {
 
     if (format === 'time') return this._showTimeMenu(btn, textarea);
 
-    /* Все токены через {token} */
     if (TOKEN_FORMATS.has(format)) {
       return this._insertToken(textarea, `{${format}}`);
     }
@@ -760,24 +861,31 @@ export class Editor {
     const value = textarea.value;
     const selected = value.substring(start, end);
 
-    const wrap = { bold: '**', italic: '*', underline: '__', strike: '~~', code: '`', spoiler: '||' }[format];
+    const wrap = {
+      bold: '**', italic: '*', underline: '__', strike: '~~',
+      code: '`', spoiler: '||'
+    }[format];
+
     if (format === 'quote') {
       const text = selected || 'цитата';
       const quoted = text.split('\n').map(l => '> ' + l).join('\n');
       textarea.value = value.substring(0, start) + quoted + value.substring(end);
-      textarea.selectionStart = start; textarea.selectionEnd = start + quoted.length;
+      textarea.selectionStart = start;
+      textarea.selectionEnd = start + quoted.length;
     } else if (wrap) {
       const insert = selected || format;
       textarea.value = value.substring(0, start) + wrap + insert + wrap + value.substring(end);
       textarea.selectionStart = start + wrap.length;
       textarea.selectionEnd = start + wrap.length + insert.length;
     }
+
     textarea.focus();
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   _showTimeMenu(anchor, textarea) {
     document.querySelectorAll('.time-dropdown').forEach(d => d.remove());
+
     const dd = document.createElement('div');
     dd.className = 'time-dropdown';
     dd.innerHTML = `
@@ -793,7 +901,10 @@ export class Editor {
     positionPopup(dd, anchor, 240);
 
     const closeOnOutside = (ev) => {
-      if (!dd.contains(ev.target)) { dd.remove(); document.removeEventListener('click', closeOnOutside); }
+      if (!dd.contains(ev.target)) {
+        dd.remove();
+        document.removeEventListener('click', closeOnOutside);
+      }
     };
     setTimeout(() => document.addEventListener('click', closeOnOutside), 0);
 
@@ -817,6 +928,8 @@ export class Editor {
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
+  /* ---------- Preview ---------- */
+
   _renderPreview() {
     if (!this._previewEl || !this.config) return;
     const roleName = this._opts.getRoleName?.();
@@ -835,6 +948,7 @@ export class Editor {
   _buildPreviewInner(r, roleName) {
     let html = '';
     const hasHeader = r.title || r.subtitle;
+
     if (hasHeader) {
       const headerHtml = `
         <div class="dp-header-text">
@@ -852,6 +966,7 @@ export class Editor {
         case 'text':
           if (block.content) html += `<div class="dp-text">${this._md(block.content, roleName)}</div>`;
           break;
+
         case 'sections': {
           let s = '';
           if (block.title) s += `<div class="dp-heading">${this._md(block.title, roleName)}</div>`;
@@ -865,38 +980,46 @@ export class Editor {
           if (s) html += s;
           break;
         }
+
         case 'separator':
           html += `<div class="dp-separator ${block.spacing == 2 ? 'large' : ''}" style="${block.divider === false ? 'border:none;' : ''}"></div>`;
           break;
+
         case 'image':
         case 'file':
           if (block.url) html += `<img class="dp-image" src="${escapeHtml(block.url)}" alt="">`;
           break;
+
         case 'images':
-          if (block.urls?.length) html += `<div class="dp-images-grid ${block.urls.length === 1 ? 'single' : ''}">${block.urls.map(u => `<img src="${escapeHtml(u)}" alt="">`).join('')}</div>`;
+          if (block.urls?.length) {
+            html += `<div class="dp-images-grid ${block.urls.length === 1 ? 'single' : ''}">${block.urls.map(u => `<img src="${escapeHtml(u)}" alt="">`).join('')}</div>`;
+          }
           break;
+
         case 'buttons':
           if (block.buttons?.length) {
             html += `<div class="dp-buttons">${block.buttons.map(b => `<button class="dp-btn link">${b.emoji ? escapeHtml(b.emoji) + ' ' : ''}${escapeHtml(b.label || 'Ссылка')}</button>`).join('')}</div>`;
           }
           break;
+
         case 'role-buttons':
           if (block.buttons?.length) {
             html += `<div class="dp-buttons">${block.buttons.map(b => `<button class="dp-btn ${b.style || 'primary'}">${b.emoji ? escapeHtml(b.emoji) + ' ' : ''}${escapeHtml(b.label || 'Role')}</button>`).join('')}</div>`;
           }
           break;
+
         case 'footer':
           if (block.content) html += `<div class="dp-footer">${this._md(block.content, roleName)}</div>`;
           break;
       }
     }
+
     if (!html) html = '<div class="dp-empty">Сообщение пустое</div>';
     return html;
   }
 
-  /* ============================================================
-     Рендер markdown + токенов профиля
-     ============================================================ */
+  /* ---------- Markdown + токены ---------- */
+
   _md(text, roleName) {
     if (!text) return '';
     let html = escapeHtml(text);
@@ -906,7 +1029,7 @@ export class Editor {
       `<span class="dp-time-tag">${escapeHtml(formatDateByCode(new Date(parseInt(unix, 10) * 1000), code))}</span>`
     );
 
-    /* {time} / {time:CODE} */
+    /* {time} и {time:CODE} */
     html = html.replace(/\{time(?::([RrFfDdTt]))?\}/g, (_, code) => {
       const c = code || 'f';
       return `<span class="dp-time-tag">${escapeHtml(formatDateByCode(new Date(), c))}</span>`;
@@ -914,17 +1037,19 @@ export class Editor {
 
     html = html.replace(/\{until\}/g, '<span class="dp-time-tag">через 3 часа</span>');
 
-    /* Роль / пользователь / возраст (birthdays) */
+    /* {role} */
     if (roleName) html = html.replace(/\{role\}/g, escapeHtml(roleName));
     else html = html.replace(/\{role\}/g, '<span style="color:#a5adff;">{role}</span>');
 
+    /* {user} */
     const userVal = this._opts.previewUser || '<span class="dp-mention">@Пользователь</span>';
     html = html.replace(/\{user\}/g, userVal);
 
+    /* {age} */
     const ageVal = this._opts.previewAge || '<span style="color:#a5adff;">30</span>';
     html = html.replace(/\{age\}/g, ageVal);
 
-    /* Профиль — демо-подстановки */
+    /* Токены профиля */
     if (this.context === 'profiles') {
       const p = this._opts.previewProfile || {
         mention: '@Иван',
@@ -959,10 +1084,10 @@ export class Editor {
       html = html.replace(/\{links\}/g, p.links);
     }
 
-    /* Markdown-ссылки [текст](url) */
+    /* Markdown-ссылки */
     html = html.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="dp-link">$1</a>');
 
-    /* Спойлер, жирный, курсив, код, цитата */
+    /* Прочее форматирование */
     html = html.replace(/\|\|(.+?)\|\|/g, '<span class="dp-spoiler" onclick="this.classList.toggle(\'revealed\')">$1</span>');
     html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
     html = html.replace(/__(.+?)__/g, '<u>$1</u>');
@@ -972,6 +1097,7 @@ export class Editor {
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
     html = html.replace(/^&gt; (.+)$/gm, '<div class="dp-quote">$1</div>');
     html = html.replace(/\n/g, '<br>');
+
     return html;
   }
 
@@ -980,6 +1106,8 @@ export class Editor {
     const safe = escapeHtml(url);
     return `<a href="${safe}" target="_blank" rel="noopener noreferrer" class="dp-link">${safe}</a>`;
   }
+
+  /* ---------- История ---------- */
 
   _serialize() { return JSON.stringify(this.config); }
 
@@ -1008,6 +1136,8 @@ export class Editor {
     this._markDirty();
   }
 
+  /* ---------- Dirty-индикатор ---------- */
+
   _markDirty() {
     this.unsaved = this.isDirty();
     this._updateUnsavedIndicator();
@@ -1022,19 +1152,24 @@ export class Editor {
     if (this.unsaved && !exists) {
       const dot = document.createElement('span');
       dot.className = 'unsaved-dot';
-      dot.title = 'Не сохранено';
+      dot.title = 'Есть несохранённые изменения';
       title.appendChild(dot);
     } else if (!this.unsaved && exists) {
       exists.remove();
     }
   }
 
+  /* ---------- Автосохранение черновика ---------- */
+
   _startAutoSave() {
     this._stopAutoSave();
     this._autoSaveTimer = setInterval(() => {
       if (!this.unsaved || !this.config) return;
       try {
-        localStorage.setItem(`nexus_draft_${state.guildId}_${this.context}`, JSON.stringify({ config: this.config, at: Date.now() }));
+        localStorage.setItem(
+          `nexus_draft_${state.guildId}_${this.context}`,
+          JSON.stringify({ config: this.config, at: Date.now() })
+        );
       } catch {}
     }, 3000);
   }
@@ -1044,11 +1179,14 @@ export class Editor {
     this._autoSaveTimer = null;
   }
 
+  /* ---------- Синхронизация channel-picker ---------- */
+
   _syncChannelPicker() {
     const root = this._root;
     if (!root) return;
     const picker = root.querySelector('[data-channel-group] .channel-picker');
     if (!picker) return;
+
     const hidden = picker.querySelector('input[type="hidden"]');
     const input = picker.querySelector('.channel-search');
     const icon = picker.querySelector('.channel-input-icon');
@@ -1070,34 +1208,39 @@ export class Editor {
     if (hint) hint.textContent = 'Канал не выбран';
   }
 
+  /* ---------- Фабрика блоков ---------- */
+
   _createBlock(type) {
     const id = uid();
     switch (type) {
-      case 'text': return { id, type: 'text', content: '' };
-      case 'sections': return { id, type: 'sections', title: '', listStyle: 'numeric', items: [''] };
+      case 'text':      return { id, type: 'text', content: '' };
+      case 'sections':  return { id, type: 'sections', title: '', listStyle: 'numeric', items: [''] };
       case 'separator': return { id, type: 'separator', divider: true, spacing: 1 };
-      case 'image': return { id, type: 'image', url: '' };
-      case 'images': return { id, type: 'images', urls: [] };
-      case 'file': return { id, type: 'file', url: '' };
-      case 'buttons': return { id, type: 'buttons', buttons: [{ id: uid(), label: 'Ссылка', url: '', emoji: '' }] };
-      case 'role-buttons': return {
-        id, type: 'role-buttons',
-        buttons: [{
-          id: uid(), label: 'Роль', style: 'primary', roleId: '', emoji: '',
-          ephemeral: {
-            positive: this._defaultEphemeral('✅ Роль выдана!'),
-            negative: this._defaultEphemeral('❌ Роль снята!')
-          }
-        }]
-      };
+      case 'image':     return { id, type: 'image', url: '' };
+      case 'images':    return { id, type: 'images', urls: [] };
+      case 'file':      return { id, type: 'file', url: '' };
+      case 'buttons':
+        return { id, type: 'buttons', buttons: [{ id: uid(), label: 'Ссылка', url: '', emoji: '' }] };
+      case 'role-buttons':
+        return {
+          id, type: 'role-buttons',
+          buttons: [{
+            id: uid(), label: 'Роль', style: 'primary', roleId: '', emoji: '',
+            ephemeral: {
+              positive: this._defaultEphemeral('✅ Роль выдана!'),
+              negative: this._defaultEphemeral('❌ Роль снята!')
+            }
+          }]
+        };
       case 'footer': return { id, type: 'footer', content: '' };
-      default: return { id, type: 'text', content: '' };
+      default:       return { id, type: 'text', content: '' };
     }
   }
 
   _defaultEphemeral(content) {
     return {
-      displayMode: 'embed-color', accentColor: '#5865F2',
+      displayMode: 'embed-color',
+      accentColor: '#5865F2',
       title: '', subtitle: '', thumbnail: '',
       blocks: [{ id: uid(), type: 'text', content }]
     };

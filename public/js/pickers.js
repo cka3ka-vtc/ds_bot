@@ -1,22 +1,53 @@
+/* ============================================================
+   Пикеры: канал, роль, участник, эмодзи.
+
+   Каждый пикер — это input с выпадающим списком и hidden-полем,
+   в котором лежит выбранный ID. При выборе вызывается onSelect.
+
+   Позиционирование выпадашки — через positionPopup() с учётом
+   границ экрана.
+   ============================================================ */
+
 import { state } from './state.js';
 import { escapeHtml, debounce } from './utils.js';
+import { toast } from './ui.js';
 
 /* ============================================================
-   CHANNEL PICKER
+   Иконки каналов (FA)
    ============================================================ */
+
 const CHANNEL_ICONS = {
-  text: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>`,
-  voice: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`,
-  announcement: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14"><path d="M3 11l18-8v18l-18-8z"/></svg>`,
-  stage: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>`,
-  forum: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`
+  text:         '<i class="fa-solid fa-hashtag"></i>',
+  voice:        '<i class="fa-solid fa-volume-high"></i>',
+  announcement: '<i class="fa-solid fa-bullhorn"></i>',
+  stage:        '<i class="fa-solid fa-circle-dot"></i>',
+  forum:        '<i class="fa-solid fa-comments"></i>'
 };
 
+/**
+ * Возвращает HTML иконки канала по его типу.
+ * @param {number} type
+ * @returns {string}
+ */
 export function channelIcon(type) {
-  const name = { 0:'text', 2:'voice', 5:'announcement', 13:'stage', 15:'forum' }[type] || 'text';
+  const name = { 0: 'text', 2: 'voice', 5: 'announcement', 13: 'stage', 15: 'forum' }[type] || 'text';
   return CHANNEL_ICONS[name];
 }
 
+/* ============================================================
+   Channel Picker
+   ============================================================ */
+
+/**
+ * HTML канала-пикера.
+ * @param {object} opts
+ * @param {string} opts.id - уникальный id
+ * @param {string} [opts.value] - предустановленный ID
+ * @param {string} [opts.placeholder]
+ * @param {string} [opts.iconId]
+ * @param {string} [opts.hintId]
+ * @returns {string}
+ */
 export function channelPickerHTML({ id, value = '', placeholder = 'Поиск канала...', iconId = '', hintId = '' }) {
   return `
     <div class="channel-picker" data-picker="${id}">
@@ -31,9 +62,20 @@ export function channelPickerHTML({ id, value = '', placeholder = 'Поиск к
   `;
 }
 
+/**
+ * Навешивает обработчики на channel-picker.
+ * Показывает права бота на каждый канал: ✅/❌ для отправки,
+ * 🔒 для «нет доступа».
+ *
+ * @param {HTMLElement} container
+ * @param {object} opts
+ * @param {string} opts.id
+ * @param {(channel: object|null) => void} [opts.onSelect]
+ */
 export function bindChannelPicker(container, { id, onSelect }) {
   const root = container.querySelector(`[data-picker="${id}"]`);
   if (!root) return;
+
   const searchInput = root.querySelector(`[data-input="${id}"]`);
   const dropdown = root.querySelector(`[data-dropdown="${id}"]`);
   const hidden = root.querySelector(`[data-hidden="${id}"]`);
@@ -45,11 +87,14 @@ export function bindChannelPicker(container, { id, onSelect }) {
       hidden.value = ch.id;
       iconEl.innerHTML = channelIcon(ch.type);
     } else {
-      searchInput.value = ''; hidden.value = ''; iconEl.innerHTML = '';
+      searchInput.value = '';
+      hidden.value = '';
+      iconEl.innerHTML = '';
     }
     onSelect?.(ch);
   }
 
+  /* Восстановление выбранного значения при перерисовке */
   if (hidden.value) {
     const ch = state.channels.find(c => c.id === hidden.value);
     if (ch) setValue(ch);
@@ -57,25 +102,70 @@ export function bindChannelPicker(container, { id, onSelect }) {
 
   const renderOptions = (q = '') => {
     const query = q.trim().toLowerCase();
-    const filtered = state.channels.filter(c => c.name.toLowerCase().includes(query) || c.id.includes(query));
-    if (!filtered.length) { dropdown.innerHTML = '<div class="channel-empty">Не найдено</div>'; return; }
-    dropdown.innerHTML = filtered.map(c => `
-      <button class="channel-option" data-channel-id="${c.id}">
-        <span class="channel-option-icon">${channelIcon(c.type)}</span>
-        <span class="channel-option-name">${escapeHtml(c.name)}</span>
-        <span class="channel-option-id">${c.id}</span>
-      </button>
-    `).join('');
+    const filtered = state.channels.filter(c =>
+      c.name.toLowerCase().includes(query) || c.id.includes(query)
+    );
+
+    if (!filtered.length) {
+      dropdown.innerHTML = '<div class="channel-empty">Не найдено</div>';
+      return;
+    }
+
+    dropdown.innerHTML = filtered.map(c => {
+      const p = c.botPerms || {};
+      const canView = p.view !== false;
+      const canSend = p.send === true;
+      const canManage = p.manageMessages === true;
+
+      const badges = [];
+      if (!canView) {
+        badges.push('<span class="perm-badge perm-bad"><i class="fa-solid fa-eye-slash"></i> нет доступа</span>');
+      } else {
+        badges.push(canSend
+          ? '<span class="perm-badge perm-ok"><i class="fa-solid fa-check"></i> отправка</span>'
+          : '<span class="perm-badge perm-bad"><i class="fa-solid fa-xmark"></i> отправка</span>');
+        if (canManage) {
+          badges.push('<span class="perm-badge perm-ok"><i class="fa-solid fa-broom"></i> очистка</span>');
+        }
+      }
+
+      return `
+        <button class="channel-option ${!canView ? 'is-disabled' : ''}" data-channel-id="${c.id}" data-can-view="${canView}">
+          <span class="channel-option-icon">${canView ? channelIcon(c.type) : '<i class="fa-solid fa-lock"></i>'}</span>
+          <span class="channel-option-name">
+            <span class="channel-option-title">${escapeHtml(c.name)}</span>
+            <span class="channel-option-badges">${badges.join('')}</span>
+          </span>
+          <span class="channel-option-id">${c.id}</span>
+        </button>
+      `;
+    }).join('');
   };
 
-  searchInput.addEventListener('focus', () => { renderOptions(searchInput.value); positionPopup(dropdown, searchInput); });
-  searchInput.addEventListener('input', () => { renderOptions(searchInput.value); if (!dropdown.classList.contains('show')) positionPopup(dropdown, searchInput); });
+  searchInput.addEventListener('focus', () => {
+    renderOptions(searchInput.value);
+    positionPopup(dropdown, searchInput);
+  });
+
+  searchInput.addEventListener('input', () => {
+    renderOptions(searchInput.value);
+    if (!dropdown.classList.contains('show')) positionPopup(dropdown, searchInput);
+  });
+
   dropdown.addEventListener('click', (e) => {
     const opt = e.target.closest('[data-channel-id]');
     if (!opt) return;
+    if (opt.dataset.canView === 'false') {
+      toast('Бот не имеет доступа к этому каналу', { type: 'error' });
+      return;
+    }
     const ch = state.channels.find(c => c.id === opt.dataset.channelId);
-    if (ch) { setValue(ch); dropdown.classList.remove('show'); }
+    if (ch) {
+      setValue(ch);
+      dropdown.classList.remove('show');
+    }
   });
+
   searchInput.addEventListener('blur', () => {
     setTimeout(() => {
       if (!hidden.value) searchInput.value = '';
@@ -88,9 +178,18 @@ export function bindChannelPicker(container, { id, onSelect }) {
 }
 
 /* ============================================================
-   ROLE PICKER
+   Role Picker
    ============================================================ */
-export function rolePickerHTML({ id, value = '', placeholder = 'Поиск роли...', compact = false }) {
+
+/**
+ * HTML роли-пикера.
+ * @param {object} opts
+ * @param {string} opts.id
+ * @param {string} [opts.value]
+ * @param {string} [opts.placeholder]
+ * @returns {string}
+ */
+export function rolePickerHTML({ id, value = '', placeholder = 'Поиск роли...' }) {
   return `
     <div class="role-picker" data-role-picker="${id}">
       <div class="role-input-wrap">
@@ -103,9 +202,19 @@ export function rolePickerHTML({ id, value = '', placeholder = 'Поиск ро�
   `;
 }
 
+/**
+ * Навешивает обработчики на role-picker.
+ * Роли, которые бот не может выдать (выше его роли), недоступны.
+ *
+ * @param {HTMLElement} container
+ * @param {object} opts
+ * @param {string} opts.id
+ * @param {(role: object|null) => void} [opts.onSelect]
+ */
 export function bindRolePicker(container, { id, onSelect }) {
   const root = container.querySelector(`[data-role-picker="${id}"]`);
   if (!root) return;
+
   const input = root.querySelector(`[data-role-input="${id}"]`);
   const dropdown = root.querySelector(`[data-role-dropdown="${id}"]`);
   const hidden = root.querySelector(`[data-role-hidden="${id}"]`);
@@ -114,7 +223,9 @@ export function bindRolePicker(container, { id, onSelect }) {
   function setValue(role) {
     input.value = role?.name || '';
     hidden.value = role?.id || '';
-    iconEl.innerHTML = role ? `<span class="role-color-dot" style="background:${role.color};"></span>` : '';
+    iconEl.innerHTML = role
+      ? `<span class="role-color-dot" style="background:${role.color};"></span>`
+      : '';
     onSelect?.(role);
   }
 
@@ -125,25 +236,54 @@ export function bindRolePicker(container, { id, onSelect }) {
 
   const renderOptions = (q = '') => {
     const query = q.trim().toLowerCase();
-    const filtered = state.roles.filter(r => r.name.toLowerCase().includes(query) || r.id.includes(query));
-    if (!filtered.length) { dropdown.innerHTML = '<div class="role-empty">Не найдено</div>'; return; }
-    dropdown.innerHTML = filtered.map(r => `
-      <button class="role-option" data-role-id="${r.id}">
-        <span class="role-option-dot" style="background:${r.color};"></span>
-        <span class="role-option-name">${escapeHtml(r.name)}</span>
-        <span class="role-option-id">${r.id}</span>
-      </button>
-    `).join('');
+    const filtered = state.roles.filter(r =>
+      r.name.toLowerCase().includes(query) || r.id.includes(query)
+    );
+
+    if (!filtered.length) {
+      dropdown.innerHTML = '<div class="role-empty">Не найдено</div>';
+      return;
+    }
+
+    dropdown.innerHTML = filtered.map(r => {
+      const manageable = r.manageable !== false;
+      return `
+        <button class="role-option" data-role-id="${r.id}" data-manageable="${manageable}" ${!manageable ? 'style="opacity:.55;"' : ''}>
+          <span class="role-option-dot" style="background:${r.color};"></span>
+          <span class="role-option-name">
+            ${escapeHtml(r.name)}
+            ${!manageable ? ' <span style="color:#f87171;font-size:11px;">(выше бота)</span>' : ''}
+          </span>
+          <span class="role-option-id">${r.id}</span>
+        </button>
+      `;
+    }).join('');
   };
 
-  input.addEventListener('focus', () => { renderOptions(input.value); positionPopup(dropdown, input); });
-  input.addEventListener('input', () => { renderOptions(input.value); if (!dropdown.classList.contains('show')) positionPopup(dropdown, input); });
+  input.addEventListener('focus', () => {
+    renderOptions(input.value);
+    positionPopup(dropdown, input);
+  });
+
+  input.addEventListener('input', () => {
+    renderOptions(input.value);
+    if (!dropdown.classList.contains('show')) positionPopup(dropdown, input);
+  });
+
   dropdown.addEventListener('click', (e) => {
     const opt = e.target.closest('[data-role-id]');
     if (!opt) return;
+    if (opt.dataset.manageable === 'false') {
+      toast('Роль выше роли бота — бот не сможет её выдать', { type: 'error' });
+      return;
+    }
     const role = state.roles.find(r => r.id === opt.dataset.roleId);
-    if (role) { setValue(role); dropdown.classList.remove('show'); }
+    if (role) {
+      setValue(role);
+      dropdown.classList.remove('show');
+    }
   });
+
   input.addEventListener('blur', () => {
     setTimeout(() => {
       if (!hidden.value) input.value = '';
@@ -156,11 +296,22 @@ export function bindRolePicker(container, { id, onSelect }) {
 }
 
 /* ============================================================
-   MEMBER PICKER
+   Member Picker
    ============================================================ */
-const MEMBER_EMPTY_LIMIT = 100;   // при пустом запросе
-const MEMBER_SEARCH_LIMIT = 200;  // максимум результатов при поиске
 
+/* Лимит на список без поиска */
+const MEMBER_EMPTY_LIMIT = 100;
+/* Лимит при поиске */
+const MEMBER_SEARCH_LIMIT = 200;
+
+/**
+ * HTML участника-пикера.
+ * @param {object} opts
+ * @param {string} opts.id
+ * @param {string} [opts.value]
+ * @param {string} [opts.placeholder]
+ * @returns {string}
+ */
 export function memberPickerHTML({ id, value = '', placeholder = 'Поиск пользователя...' }) {
   return `
     <div class="member-picker" data-member-picker="${id}">
@@ -174,9 +325,17 @@ export function memberPickerHTML({ id, value = '', placeholder = 'Поиск п�
   `;
 }
 
+/**
+ * Навешивает обработчики на member-picker.
+ * @param {HTMLElement} container
+ * @param {object} opts
+ * @param {string} opts.id
+ * @param {(member: object|null) => void} [opts.onSelect]
+ */
 export function bindMemberPicker(container, { id, onSelect }) {
   const root = container.querySelector(`[data-member-picker="${id}"]`);
   if (!root) return;
+
   const input = root.querySelector(`[data-member-input="${id}"]`);
   const dropdown = root.querySelector(`[data-member-dropdown="${id}"]`);
   const hidden = root.querySelector(`[data-member-hidden="${id}"]`);
@@ -204,17 +363,18 @@ export function bindMemberPicker(container, { id, onSelect }) {
     let truncated = false;
 
     if (!query) {
-      /* Пустой запрос — первые N участников */
       filtered = state.members.slice(0, MEMBER_EMPTY_LIMIT);
       truncated = total > MEMBER_EMPTY_LIMIT;
     } else {
-      /* Поиск по всем (username + displayName + id) */
       filtered = [];
       for (const m of state.members) {
         const haystack = `${m.username} ${m.displayName}`.toLowerCase();
         if (haystack.includes(query) || m.id.includes(query)) {
           filtered.push(m);
-          if (filtered.length >= MEMBER_SEARCH_LIMIT) { truncated = true; break; }
+          if (filtered.length >= MEMBER_SEARCH_LIMIT) {
+            truncated = true;
+            break;
+          }
         }
       }
     }
@@ -258,7 +418,10 @@ export function bindMemberPicker(container, { id, onSelect }) {
     const opt = e.target.closest('[data-member-id]');
     if (!opt) return;
     const m = state.members.find(x => x.id === opt.dataset.memberId);
-    if (m) { setValue(m); dropdown.classList.remove('show'); }
+    if (m) {
+      setValue(m);
+      dropdown.classList.remove('show');
+    }
   });
 
   input.addEventListener('blur', () => {
@@ -273,27 +436,39 @@ export function bindMemberPicker(container, { id, onSelect }) {
 }
 
 /* ============================================================
-   EMOJI PICKER
+   Emoji Picker
    ============================================================ */
+
+/* Популярные эмодзи для быстрого выбора */
 const EMOJI_LIST = [
-  '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','🤗','😋','🤤','😛','🤔','🤨','😐','😑','😶','🙄','😏','😣','😥','😮','🤐','😯','😪','😫','🥱','😴','😌','😛','😜','🤪','😝','🤫','🤭','🧐','🤓','😎','🤵','🥳','😕','😟','🙁','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖',
-  '👋','🤚','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','💪','🦾',
-  '🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🕷️','🕸️','🦂','🐢','🐍','🦎','🦖','🦕','🐙','🦑','🦐','🦞','🦀','🐡','🐠','🐟','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🦘','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🦮','🐕‍🦺','🐈','🐓','🦃','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦦','🦥','🐁','🐀','🐿️','🦔',
-  '🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🌽','🥕','🫒','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🦴','🌭','🍔','🍟','🍕','🫓','🥪','🥙','🧆','🌮','🌯','🫔','🥗','🥘','🫕','🥫','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🦪','🍤','🍙','🍚','🍘','🍥','🥠','🥮','🍢','🍡','🍧','🍨','🍦','🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🌰','🥜','🍯',
-  '⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🏑','🥍','🏏','🪃','🥅','⛳','🪁','🏹','🎣','🤿','🥊','🥋','🎽','🛹','🛼','🛷','⛸️','🥌','🎿','⛷️','🏂','🪂','🏋️','🤼','🤸','🤺','⛹️','🤾','🏌️','🏇','🧘','🏄','🏊','🤽','🚣','🧗','🚵','🚴','🏆','🥇','🥈','🥉','🏅','🎖️','🏵️','🎗️','🎫','🎟️','🎪','🤹','🎭','🩰','🎨','🎬','🎤','🎧','🎼','🎹','🥁','🎷','🎺','🪗','🎸','🎻','🎲','♟️','🎯','🎳','🎮','🎰','🧩',
-  '❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','☸️','✡️','🔯','🕎','☯️','☦️','🛐','⛎','♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓','🆔','⚛️','🉑','☢️','☣️','📴','📳','🈶','🈚','🈸','🈺','🈷️','✴️','🆚','💮','🉐','㊙️','㊗️','🈴','🈵','🈹','🈲','🅰️','🅱️','🆎','🆑','🅾️','🆘','❌','⭕','🛑','⛔','📛','🚫','💯','💢','♨️','🚷','🚯','🚳','🚱','🔞','📵','🚭','❗','❕','❓','❔','‼️','⁉️','🔅','🔆','〽️','⚠️','🚸','🔱','⚜️','🔰','♻️','✅','🈯','💹','❇️','✳️','❎','🌐','💠','Ⓜ️','🌀','💤','🏧','🚾','♿','🅿️','🛗','🈳','🈂️','🛂','🛃','🛄','🛅',
-  '💌','💎','🔑','🗝️','🔨','🪓','⛏️','🛠️','🔧','🔩','⚙️','🪤','🧱','⛓️','🧲','🔫','💣','🧨','🪓','🔪','🗡️','⚔️','🛡️','🚬','⚰️','🪦','⚱️','🏺','🔮','📿','🧿','💈','⚗️','🔭','🔬','🕳️','🩹','🩺','💊','💉','🩸','🧬','🦠','🧫','🧪','🌡️','🧹','🧺','🧻','🚽','🚰','🚿','🛁','🛀','🧼','🪥','🪒','🧽','🧴','🛎️','🔔','📢','📣','📯','🔕','🎺','🎷','🎸','🎻','🎹','🥁','🪘','🎤','🎧','🎼','🎵','🎶','💿','📀','💾','💽','💻','🖥️','🖨️','⌨️','🖱️','🖲️','🕹️','🗜️','💾','📱','📲','☎️','📞','📟','📠','📺','📻','🎙️','🎚️','🎛️','🧭','⏱️','⏲️','⏰','🕰️','⌛','⏳','📡','🔋','🔌','💡','🔦','🕯️','🪔','🧯','🛢️','💸','💵','💴','💶','💷','🪙','💰','💳','💎','⚖️','🪜','🧰','🪛','🔧','🔨','⚒️','🛠️','⛏️','🪚','🔩','⚙️','🪤','🧱','⛓️','🧲','🔫','💣','🧨','🪓','🔪','🗡️','⚔️','🛡️','🚬','⚰️','🪦','⚱️','🏺','🔮','📿','🧿','💈','⚗️','🔭','🔬','🕳️','🩹','🩺','💊','💉','🩸','🧬','🦠','🧫','🧪','🌡️','🧹','🧺','🧻','🚽','🚰','🚿','🛁','🛀','🧼','🪥','🪒','🧽','🧴'
+  '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃',
+  '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😋', '😎', '🤓',
+  '🥳', '🤔', '🤫', '😐', '😴', '😷', '🤒', '🤢', '😵', '🤯',
+  '😢', '😭', '😱', '😡', '🥺', '🤬', '😈', '💀', '👻', '🤖',
+  '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '💔', '💕', '💯',
+  '👍', '👎', '👌', '✌️', '🤝', '🙏', '💪', '👋', '👏', '🙌',
+  '🎉', '🎊', '🎂', '🎁', '⭐', '🌟', '✨', '🔥', '💎', '🏆'
 ];
 
+/* Какой пикер сейчас открыт (для закрытия по клику вне) */
 let activeEmoji = null;
 
+/**
+ * HTML эмодзи-пикера.
+ * @param {object} opts
+ * @param {string} opts.id
+ * @param {string} [opts.value]
+ * @returns {string}
+ */
 export function emojiPickerHTML({ id, value = '' }) {
   const has = !!(value && value.trim());
   return `
     <div class="emoji-picker" data-emoji-picker="${id}">
       <div class="emoji-input-wrap">
         <input class="input emoji-value-input" data-emoji-input="${id}" value="${escapeHtml(value)}" placeholder="Emoji" readonly>
-        <button type="button" class="emoji-clear-btn ${has ? '' : 'hidden'}" data-emoji-clear="${id}" aria-label="Очистить эмодзи">×</button>
+        <button type="button" class="emoji-clear-btn ${has ? '' : 'hidden'}" data-emoji-clear="${id}" aria-label="Очистить эмодзи">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
       <div class="emoji-dropdown" data-emoji-dropdown="${id}">
         <div class="emoji-grid-list" data-emoji-list="${id}"></div>
@@ -306,9 +481,17 @@ export function emojiPickerHTML({ id, value = '' }) {
   `;
 }
 
+/**
+ * Навешивает обработчики на emoji-picker.
+ * @param {HTMLElement} container
+ * @param {object} opts
+ * @param {string} opts.id
+ * @param {(value: string) => void} [opts.onChange]
+ */
 export function bindEmojiPicker(container, { id, onChange }) {
   const root = container.querySelector(`[data-emoji-picker="${id}"]`);
   if (!root) return;
+
   const input = root.querySelector(`[data-emoji-input="${id}"]`);
   const clearBtn = root.querySelector(`[data-emoji-clear="${id}"]`);
   const dropdown = root.querySelector(`[data-emoji-dropdown="${id}"]`);
@@ -334,38 +517,67 @@ export function bindEmojiPicker(container, { id, onChange }) {
     activeEmoji = null;
   };
 
-  input.addEventListener('click', (e) => { e.stopPropagation(); open(); });
-  clearBtn.addEventListener('click', (e) => { e.stopPropagation(); setValue(''); });
+  input.addEventListener('click', (e) => {
+    e.stopPropagation();
+    open();
+  });
+
+  clearBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setValue('');
+  });
+
   list.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-emoji]');
     if (!btn) return;
     setValue(btn.dataset.emoji);
     close();
   });
+
   applyBtn.addEventListener('click', () => {
     const v = manual.value.trim();
-    if (v) { setValue(v); close(); }
+    if (v) {
+      setValue(v);
+      close();
+    }
   });
+
   manual.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); applyBtn.click(); }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyBtn.click();
+    }
   });
 }
 
 /* ============================================================
-   Утилиты
+   Позиционирование popup
    ============================================================ */
+
+/**
+ * Позиционирует выпадающий элемент относительно якоря,
+ * не выходя за границы окна.
+ *
+ * @param {HTMLElement} popup
+ * @param {HTMLElement} anchor
+ * @param {number} [minWidth=0]
+ */
 export function positionPopup(popup, anchor, minWidth = 0) {
   popup.style.position = 'fixed';
   popup.style.visibility = 'hidden';
   popup.classList.add('show');
+
   const rect = anchor.getBoundingClientRect();
   const width = Math.max(rect.width, minWidth);
   popup.style.width = width + 'px';
+
   let left = rect.left;
   if (left + width > window.innerWidth - 10) left = window.innerWidth - width - 10;
   if (left < 10) left = 10;
+
   popup.style.left = left + 'px';
   popup.style.top = (rect.bottom + 4) + 'px';
+
   requestAnimationFrame(() => {
     const pr = popup.getBoundingClientRect();
     if (pr.bottom > window.innerHeight - 10) {
@@ -376,20 +588,33 @@ export function positionPopup(popup, anchor, minWidth = 0) {
   });
 }
 
+/* ============================================================
+   Глобальные закрытия
+   ============================================================ */
+
 document.addEventListener('click', (e) => {
   if (activeEmoji && !e.target.closest('.emoji-picker')) {
     activeEmoji.querySelector('.emoji-dropdown')?.classList.remove('show');
     activeEmoji = null;
   }
-  if (!e.target.closest('.channel-picker')) document.querySelectorAll('.channel-picker-dropdown.show').forEach(d => d.classList.remove('show'));
-  if (!e.target.closest('.role-picker')) document.querySelectorAll('.role-dropdown.show').forEach(d => d.classList.remove('show'));
-  if (!e.target.closest('.member-picker')) document.querySelectorAll('.member-dropdown.show').forEach(d => d.classList.remove('show'));
-  if (!e.target.closest('.time-dropdown')) document.querySelectorAll('.time-dropdown').forEach(d => d.remove());
+  if (!e.target.closest('.channel-picker')) {
+    document.querySelectorAll('.channel-picker-dropdown.show').forEach(d => d.classList.remove('show'));
+  }
+  if (!e.target.closest('.role-picker')) {
+    document.querySelectorAll('.role-dropdown.show').forEach(d => d.classList.remove('show'));
+  }
+  if (!e.target.closest('.member-picker')) {
+    document.querySelectorAll('.member-dropdown.show').forEach(d => d.classList.remove('show'));
+  }
+  if (!e.target.closest('.time-dropdown')) {
+    document.querySelectorAll('.time-dropdown').forEach(d => d.remove());
+  }
 });
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    document.querySelectorAll('.channel-picker-dropdown.show, .role-dropdown.show, .member-dropdown.show, .emoji-dropdown.show').forEach(d => d.classList.remove('show'));
+    document.querySelectorAll('.channel-picker-dropdown.show, .role-dropdown.show, .member-dropdown.show, .emoji-dropdown.show')
+      .forEach(d => d.classList.remove('show'));
     document.querySelectorAll('.time-dropdown').forEach(d => d.remove());
   }
 });

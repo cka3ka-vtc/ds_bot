@@ -1,18 +1,35 @@
+/* ============================================================
+   Тулбар списка: поиск + фильтры + bulk-панель.
+
+   Используется в messages, announcements, delayed, autodelete,
+   birthdays, profiles. Создаёт панель сверху списка и bulk-панель
+   под ним; перерисовывает содержимое через renderList(filtered).
+
+   Автоматически управляет чекбоксами на карточках (класс .selected).
+   ============================================================ */
+
 import { escapeHtml, debounce } from './utils.js';
 
-/* ============================================================
-   Универсальный тулбар (поиск + фильтры + bulk-панель).
-   Используется во всех секциях со списками карточек:
-   messages / announcements / delayed / autodelete / birthdays.
-
-   onFilterChange — вызывается при смене поиска или фильтра,
-   ДО ре-рендера. Удобно для сброса пагинации на 1-ю страницу.
-   ============================================================ */
+/**
+ * Создаёт тулбар и bulk-панель над списком.
+ *
+ * @param {object} opts
+ * @param {HTMLElement} opts.listEl          - контейнер списка
+ * @param {Function} opts.getAllItems        - () => массив всех элементов
+ * @param {Function} opts.renderList         - (filtered) => void, перерисовка
+ * @param {string} [opts.searchPlaceholder]
+ * @param {Function} [opts.searchKeyFn]      - (item) => строка для поиска
+ * @param {Array<{id,label,fn}>} [opts.filters]
+ * @param {Array<{id,label,handler,danger?}>} [opts.actions] - bulk-действия
+ * @param {string} [opts.selectableSelector='.list-card']
+ * @param {Function} [opts.onFilterChange]
+ * @returns {{ el: HTMLElement, refresh: Function, clearSelection: Function, destroy: Function }}
+ */
 export function createListToolbar({
   listEl,
   getAllItems,
   renderList,
-  searchPlaceholder = 'Поиск по названию…',
+  searchPlaceholder = 'Поиск…',
   searchKeyFn = (it) => it.name || it.title || '',
   filters = [],
   actions = [],
@@ -22,14 +39,12 @@ export function createListToolbar({
   const selected = new Set();
   const parent = listEl.parentNode;
 
-  /* === Тулбар === */
+  /* ===== Toolbar (search + filters) ===== */
   const toolbar = document.createElement('div');
   toolbar.className = 'list-toolbar';
   toolbar.innerHTML = `
     <div class="list-search">
-      <span class="list-search-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      </span>
+      <span class="list-search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
       <input type="search" placeholder="${escapeHtml(searchPlaceholder)}" data-search>
     </div>
     ${filters.map(f => `
@@ -37,13 +52,13 @@ export function createListToolbar({
     `).join('')}
   `;
 
-  /* === Bulk-панель === */
+  /* ===== Bulk-panel ===== */
   const bulk = document.createElement('div');
   bulk.className = 'bulk-panel';
   bulk.innerHTML = `
     <span class="bulk-count" data-bulk-count>0 выбрано</span>
     <div class="bulk-actions">
-      <button type="button" class="btn btn-ghost" data-bulk-clear>Отмена</button>
+      <button type="button" class="btn btn-ghost" data-bulk-clear>Снять</button>
       ${actions.map(a => `
         <button type="button" class="btn ${a.danger ? 'btn-danger' : 'btn-ghost'}" data-bulk-action="${a.id}">${escapeHtml(a.label)}</button>
       `).join('')}
@@ -67,7 +82,7 @@ export function createListToolbar({
     }
   };
 
-  /* === Фильтрация === */
+  /* ===== Фильтрация ===== */
   function applyFilters(items) {
     let r = items;
     const q = searchVal.trim().toLowerCase();
@@ -79,7 +94,7 @@ export function createListToolbar({
     return r;
   }
 
-  /* === Привязка чекбоксов и подсветки === */
+  /* ===== Чекбоксы ===== */
   function bindCheckboxes() {
     const visibleIds = new Set();
 
@@ -87,8 +102,10 @@ export function createListToolbar({
       const id = cb.dataset.selectId;
       visibleIds.add(id);
       const card = cb.closest(selectableSelector);
+
       cb.checked = selected.has(id);
       if (card) card.classList.toggle('selected', cb.checked);
+
       cb.addEventListener('change', () => {
         if (cb.checked) selected.add(id);
         else selected.delete(id);
@@ -97,7 +114,7 @@ export function createListToolbar({
       });
     });
 
-    /* Убираем из selected те, что пропали из фильтра/страницы */
+    /* Снимаем выделение с тех, кого нет в текущей выборке */
     for (const id of [...selected]) {
       if (!visibleIds.has(id)) selected.delete(id);
     }
@@ -110,7 +127,7 @@ export function createListToolbar({
     bulkCountEl.textContent = `${n} ${n === 1 ? 'выбран' : 'выбрано'}`;
   }
 
-  /* === Полный ре-рендер === */
+  /* ===== Ре-рендер ===== */
   function rerender() {
     const all = getAllItems();
     const filtered = applyFilters(all);
@@ -118,7 +135,7 @@ export function createListToolbar({
     bindCheckboxes();
   }
 
-  /* === События === */
+  /* ===== Обработчики ===== */
   searchInput.addEventListener('input', debounce((e) => {
     searchVal = e.target.value;
     fireFilterChange();
@@ -150,6 +167,7 @@ export function createListToolbar({
       if (!selected.size) return;
       const a = actions.find(x => x.id === btn.dataset.bulkAction);
       if (!a) return;
+
       const ids = [...selected];
       btn.disabled = true;
       try {
@@ -172,9 +190,10 @@ export function createListToolbar({
   };
 }
 
-/* ============================================================
-   Хелпер для рендера «Ничего не найдено»
-   ============================================================ */
+/**
+ * HTML «Ничего не найдено».
+ * @returns {string}
+ */
 export function noResultsHTML() {
   return `<div class="list-no-results">Ничего не найдено</div>`;
 }

@@ -3,15 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ckaзka Dev — Панель управления</title>
+<title>Ckaзka Dev — панель управления</title>
+
+<!-- Шрифты -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Font Awesome 6 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css">
+
+<!-- Базовые стили -->
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/components.css">
 <link rel="stylesheet" href="css/layout.css">
 <link rel="stylesheet" href="css/server-select.css">
+
+<!-- Стили секций (появятся в 5b) -->
 <link rel="stylesheet" href="css/sections/rules.css">
 <link rel="stylesheet" href="css/sections/messages.css">
 <link rel="stylesheet" href="css/sections/announcements.css">
@@ -22,44 +30,69 @@
 <link rel="stylesheet" href="css/sections/bulk.css">
 <link rel="stylesheet" href="css/sections/profiles.css">
 <link rel="stylesheet" href="css/sections/logs.css">
+<link rel="stylesheet" href="css/sections/settings.css">
 </head>
 <body>
 
+<!-- ============================================================
+     ЭКРАН ВЫБОРА СЕРВЕРА
+     ============================================================ -->
 <div id="serverSelect" class="server-select" role="main">
+
   <div class="brand-block">
-    <div class="brand-logo" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-    </div>
+    <div class="brand-logo" aria-hidden="true"><i class="fa-solid fa-bolt"></i></div>
     <div class="brand-text">
       <span class="brand-name glitch-text" data-text="Ckaзka Dev">Ckaзka Dev</span>
       <span class="brand-sub">Bot Control</span>
     </div>
   </div>
-  <div class="server-intro"><h1>Выберите сервер</h1></div>
+
+  <div class="server-intro">
+    <h1>Выберите сервер</h1>
+    <p class="server-intro-sub">Панель управления ботом. Все действия — в реальном времени.</p>
+  </div>
+
+  <div class="server-toolbar">
+    <div class="list-search server-search">
+      <span class="list-search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
+      <input type="search" id="serverSearchInput" placeholder="Поиск сервера по названию или ID…" autocomplete="off">
+    </div>
+    <div class="server-stats" id="botStatsBar">
+      <div class="server-stat-pill"><i class="fa-solid fa-server"></i><span id="statGuilds">—</span> серверов</div>
+      <div class="server-stat-pill"><i class="fa-solid fa-users"></i><span id="statUsers">—</span> пользователей</div>
+      <div class="server-stat-pill"><i class="fa-solid fa-signal"></i><span id="statPing">—</span> мс</div>
+      <div class="server-stat-pill"><i class="fa-solid fa-clock"></i><span id="statUptime">—</span></div>
+    </div>
+  </div>
+
   <div class="server-grid" id="serverGrid" aria-live="polite"></div>
+
   <footer class="site-footer">
     <div class="footer-inner">
       <div class="footer-brand"><strong class="footer-brand-name">© 2026, Ckaзka Dev</strong></div>
       <div class="footer-sep"></div>
       <div class="footer-author">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <i class="fa-solid fa-user"></i>
         <span>Разработчик</span>
         <strong>wD159</strong>
       </div>
-      <a href="https://t.me/wdl59" target="_blank" rel="noopener" class="footer-telegram" aria-label="Telegram @wdl59">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+      <a href="https://t.me/wdl59" target="_blank" rel="noopener" class="footer-telegram">
+        <i class="fa-brands fa-telegram"></i>
         <span>@wdl59</span>
       </a>
     </div>
   </footer>
 </div>
 
+<!-- ============================================================
+     ОСНОВНАЯ ПАНЕЛЬ
+     ============================================================ -->
 <div id="app" style="display:none;">
-  <aside class="sidebar" id="sidebar" aria-label="Основная навигация">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar" aria-label="Навигация">
     <div class="sidebar-brand">
-      <div class="brand-logo" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-      </div>
+      <div class="brand-logo" aria-hidden="true"><i class="fa-solid fa-bolt"></i></div>
       <div class="brand-text">
         <span class="brand-name glitch-text" data-text="Ckaзka Dev">Ckaзka Dev</span>
         <span class="brand-sub">Bot Control</span>
@@ -72,55 +105,61 @@
       <div class="current-server-info">
         <strong id="curName">—</strong>
         <span id="curMembers">—</span>
-        <em class="current-server-hover">Выбрать другой сервер</em>
+        <em class="current-server-hover">← Сменить сервер</em>
       </div>
     </button>
 
     <nav class="nav">
-      <a href="#" class="nav-item active" data-view="dashboard" aria-current="page">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
-        Дашборд
-      </a>
+      <div class="nav-section">
+        <span class="nav-label">Обзор</span>
+        <a href="#/dashboard" class="nav-item" data-view="dashboard">
+          <i class="fa-solid fa-chart-pie"></i><span>Дашборд</span>
+        </a>
+      </div>
 
       <div class="nav-section">
-        <span class="nav-label">Публикации</span>
-        <a href="#" class="nav-item" data-view="rules">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-          Правила
+        <span class="nav-label">Контент</span>
+        <a href="#/rules" class="nav-item" data-view="rules">
+          <i class="fa-solid fa-file-lines"></i><span>Правила и роли</span>
         </a>
-        <a href="#" class="nav-item" data-view="messages">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          Сообщения
+        <a href="#/messages" class="nav-item" data-view="messages">
+          <i class="fa-solid fa-comment-dots"></i><span>Сообщения</span>
         </a>
-        <a href="#" class="nav-item" data-view="announcements">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l18-8v18l-18-8z"/><line x1="11.6" y1="11.6" x2="8" y2="18"/></svg>
-          Анонсы
+        <a href="#/announcements" class="nav-item" data-view="announcements">
+          <i class="fa-solid fa-bullhorn"></i><span>Объявления</span>
         </a>
-        <a href="#" class="nav-item" data-view="delayed">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          Отложенные
+        <a href="#/delayed" class="nav-item" data-view="delayed">
+          <i class="fa-solid fa-clock"></i><span>Отложенные</span>
         </a>
       </div>
+
       <div class="nav-section">
-        <span class="nav-label">Автоматизация</span>
-        <a href="#" class="nav-item" data-view="profiles">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          Пользователи
+        <span class="nav-label">Участники</span>
+        <a href="#/profiles" class="nav-item" data-view="profiles">
+          <i class="fa-solid fa-users"></i><span>Профили</span>
         </a>
-        <a href="#" class="nav-item" data-view="birthdays">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/><path d="M2 21h20"/></svg>
-          Дни рождения
-        </a>
-        <a href="#" class="nav-item" data-view="autodelete">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-          Автоудаление
+        <a href="#/birthdays" class="nav-item" data-view="birthdays">
+          <i class="fa-solid fa-cake-candles"></i><span>Дни рождения</span>
         </a>
       </div>
+
       <div class="nav-section">
-        <span class="nav-label">Система</span>
-        <a href="#" class="nav-item" data-view="logs">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-          Логи
+        <span class="nav-label">Модерация</span>
+        <a href="#/autodelete" class="nav-item" data-view="autodelete">
+          <i class="fa-solid fa-shield-halved"></i><span>Автоудаление</span>
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <span class="nav-label">Бот</span>
+        <a href="#/commands" class="nav-item" data-view="commands">
+          <i class="fa-solid fa-terminal"></i><span>Команды</span>
+        </a>
+        <a href="#/settings" class="nav-item" data-view="settings">
+          <i class="fa-solid fa-gear"></i><span>Настройки</span>
+        </a>
+        <a href="#/logs" class="nav-item" data-view="logs">
+          <i class="fa-solid fa-list"></i><span>Логи</span>
           <span class="nav-badge" id="logsBadge" style="display:none;">0</span>
         </a>
       </div>
@@ -130,105 +169,137 @@
       <div class="bot-status" id="botStatus" role="status">
         <span class="dot" aria-hidden="true"></span>
         <span id="botStatusText">Выключен</span>
+        <span class="bot-status-ping" id="botStatusPing"></span>
       </div>
     </div>
   </aside>
 
   <div class="overlay" id="overlay" aria-hidden="true"></div>
 
+  <!-- MAIN -->
   <main class="main">
+
+    <!-- TOPBAR -->
     <header class="topbar">
       <button class="icon-btn menu-btn" id="menuBtn" aria-label="Открыть меню">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <i class="fa-solid fa-bars"></i>
       </button>
+
       <div class="page-title">
         <h1 id="pageTitle">Дашборд</h1>
-        <p id="pageSub">Скоро здесь появится статистика</p>
+        <p id="pageSub">Обзорная статистика и активность</p>
       </div>
+
       <div class="topbar-actions">
-        <button class="btn btn-primary btn-sm" id="createMessageBtn" style="display:none;" aria-label="Создать сообщение">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <span>Создать сообщение</span>
+        <button class="btn btn-ghost btn-sm" id="copyLinkBtn" title="Скопировать ссылку на раздел">
+          <i class="fa-solid fa-link"></i><span>Ссылка</span>
         </button>
-        <button class="btn btn-primary btn-sm" id="createAnnouncementBtn" style="display:none;" aria-label="Создать анонс">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <span>Создать анонс</span>
+
+        <button class="btn btn-ghost btn-sm" id="historyBtn" style="display:none;" title="История версий">
+          <i class="fa-solid fa-clock-rotate-left"></i><span>История</span>
         </button>
-        <button class="btn btn-primary btn-sm" id="createDelayedBtn" style="display:none;" aria-label="Создать отложенный пост">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <span>Создать отложенный пост</span>
+
+        <button class="btn btn-ghost btn-sm" id="exportBtn" style="display:none;" title="Экспорт JSON">
+          <i class="fa-solid fa-download"></i><span>Экспорт</span>
         </button>
-        <button class="btn btn-primary btn-sm" id="createAutodeleteBtn" style="display:none;" aria-label="Создать автоудаление">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <span>Создать автоудаление</span>
+
+        <button class="btn btn-ghost btn-sm" id="importBtn" style="display:none;" title="Импорт JSON">
+          <i class="fa-solid fa-upload"></i><span>Импорт</span>
         </button>
-        <button class="btn btn-primary btn-sm" id="createProfileBtn" style="display:none;" aria-label="Добавить пользователя">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <span>Добавить пользователя</span>
+
+        <button class="btn btn-ghost btn-sm" id="sendRulesBtn" style="display:none;" title="Отправить в Discord">
+          <i class="fa-solid fa-paper-plane"></i><span>Отправить</span>
         </button>
-        <button class="btn btn-ghost btn-sm" id="exportBtn" title="Экспорт JSON" style="display:none;" aria-label="Экспорт JSON">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          <span>Экспорт</span>
+
+        <button class="btn btn-primary btn-sm" id="saveBtn" style="display:none;" title="Сохранить (Ctrl+S)">
+          <i class="fa-solid fa-floppy-disk"></i><span>Сохранить</span>
         </button>
-        <button class="btn btn-ghost btn-sm" id="importBtn" title="Импорт JSON" style="display:none;" aria-label="Импорт JSON">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <span>Импорт</span>
+
+        <button class="btn btn-primary btn-sm" id="createMessageBtn" style="display:none;">
+          <i class="fa-solid fa-plus"></i><span>Создать сообщение</span>
         </button>
-        <button class="btn btn-primary btn-sm" id="saveBtn" style="display:none;" title="Сохранить (Ctrl+S)" aria-label="Сохранить">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          <span>Сохранить</span>
+        <button class="btn btn-primary btn-sm" id="createAnnouncementBtn" style="display:none;">
+          <i class="fa-solid fa-plus"></i><span>Создать объявление</span>
         </button>
-        <button class="btn btn-primary btn-sm" id="sendRulesBtn" style="display:none;" title="Отправить в Discord" aria-label="Отправить в Discord">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-          <span>Отправить</span>
+        <button class="btn btn-primary btn-sm" id="createDelayedBtn" style="display:none;">
+          <i class="fa-solid fa-plus"></i><span>Создать отложенный пост</span>
         </button>
-        <input type="file" id="importFile" accept=".json" style="display:none;" aria-hidden="true">
+        <button class="btn btn-primary btn-sm" id="createAutodeleteBtn" style="display:none;">
+          <i class="fa-solid fa-plus"></i><span>Создать правило</span>
+        </button>
+        <button class="btn btn-primary btn-sm" id="createProfileBtn" style="display:none;">
+          <i class="fa-solid fa-plus"></i><span>Добавить профиль</span>
+        </button>
       </div>
     </header>
 
+    <!-- CONTENT -->
     <div class="content">
-      <section class="view active" id="view-dashboard"></section>
 
-      <section class="view" id="view-rules" aria-labelledby="pageTitle">
+      <section class="view" id="view-dashboard"></section>
+
+      <section class="view" id="view-rules">
         <div class="rules-layout" id="rulesEditor"></div>
       </section>
 
       <section class="view" id="view-messages">
-        <div class="card"><div class="card-body"><div class="messages-list" id="messagesList" aria-live="polite"></div></div></div>
+        <div class="card">
+          <div class="card-body">
+            <div class="messages-list" id="messagesList" aria-live="polite"></div>
+          </div>
+        </div>
       </section>
 
       <section class="view" id="view-announcements">
-        <div class="card"><div class="card-body"><div class="messages-list announcement-list" id="announcementsList" aria-live="polite"></div></div></div>
+        <div class="card">
+          <div class="card-body">
+            <div class="messages-list announcement-list" id="announcementsList" aria-live="polite"></div>
+          </div>
+        </div>
       </section>
 
       <section class="view" id="view-delayed">
-        <div class="card"><div class="card-body"><div class="messages-list" id="delayedList" aria-live="polite"></div></div></div>
+        <div class="card">
+          <div class="card-body">
+            <div class="messages-list" id="delayedList" aria-live="polite"></div>
+          </div>
+        </div>
       </section>
 
       <section class="view" id="view-autodelete">
-        <div class="card"><div class="card-body"><div class="messages-list" id="autodeleteList" aria-live="polite"></div></div></div>
+        <div class="card">
+          <div class="card-body">
+            <div class="messages-list" id="autodeleteList" aria-live="polite"></div>
+          </div>
+        </div>
       </section>
 
       <section class="view" id="view-birthdays"></section>
-
       <section class="view" id="view-profiles"></section>
+      <section class="view" id="view-commands"></section>
+      <section class="view" id="view-settings"></section>
 
       <section class="view" id="view-logs">
         <div class="card">
           <div class="card-header">
-            <div><h2>Логи бота</h2><p>Действия и события — отправка, удаление, роли, ошибки</p></div>
+            <div>
+              <h2><i class="fa-solid fa-list"></i> Логи бота</h2>
+              <p>Все действия и ошибки</p>
+            </div>
             <button type="button" class="btn btn-ghost btn-sm" id="clearLogsBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-              Очистить всё
+              <i class="fa-solid fa-trash"></i><span>Очистить всё</span>
             </button>
           </div>
-          <div class="card-body"><div id="logsList" aria-live="polite"></div></div>
+          <div class="card-body">
+            <div id="logsList" aria-live="polite"></div>
+          </div>
         </div>
       </section>
     </div>
   </main>
 </div>
 
+<!-- Модалки и уведомления -->
 <div id="modalsContainer"></div>
 <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 

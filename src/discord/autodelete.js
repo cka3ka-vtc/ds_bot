@@ -1,34 +1,69 @@
-import { readSection, writeSection } from '../storage/index.js';
-import { logInfo, logError } from './logger.js';
+/* ============================================================
+   Автоудаление сообщений.
 
+   Две задачи:
+   1. В каналах команд (birthdays.channelId, profiles.channelId) —
+      удалять ВСЁ, кроме сообщений бота и legacy `!` команд.
+   2. В обычных каналах — применять правила из autodelete.json:
+      • instant — удалять сразу
+      • delayed — ставить в очередь на удаление через N минут
+
+   Очередь удалений хранится в autodelete-queue.json и
+   обрабатывается отдельным модулем (scheduler/autodelete-queue.js).
+
+   ⚠️ ВАЖНО: этот модуль НЕ обрабатывает очередь.
+   Он только ловит messageCreate и складывает в очередь.
+   ============================================================ */
+
+import { readSection, writeSection } from '../storage/index.js';
+import { logInfo, logError } from '../services/guild-logger.js';
+import { isModuleEnabled } from '../services/discord-cache.js';
+
+/* Кэши правил и «каналов команд» — с TTL, чтобы не читать файлы
+   на каждое сообщение */
 const RULES_TTL = 5000;
 const CHANNELS_TTL = 5000;
 
-const rulesCache = new Map();
-const channelsCache = new Map();   // guildId -> { channelIds: Set, expires }
+const rulesCache = new Map();      // guildId → { rules, expires }
+const channelsCache = new Map();   // guildId → { channelIds: Set, expires }
+
+/* Очередь в памяти: guildId → массив { channelId, messageId, deleteAt } */
 const queues = new Map();
+
+/* Гильдии, у которых очередь изменилась и её нужно сбросить на диск */
 const dirty = new Set();
 
-const COMMAND_NAMES = [
-  '!hb',
-  '!vtc', '!steam', '!hmp', '!tmp', '!company',
-  '!profile'
-];
+/* Legacy-префиксы — их не удаляем сразу, оставляем redirect */
+const LEGACY_PREFIXES = ['!hb', '!profile', '!vtc', '!steam', '!hmp', '!tmp', '!company'];
 
-let initialized = false;
+let initializedOn = null;
 let flushTimer = null;
 
+/* ============================================================
+   Инициализация
+   ============================================================ */
+
+/**
+ * Вешает обработчик messageCreate на клиент. Один раз за жизнь процесса.
+ * @param {import('discord.js').Client} client
+ */
 export function initAutodelete(client) {
-  if (initialized) {
-    console.warn('[autodelete] already initialized — skip');
-    return;
-  }
-  initialized = true;
+  if (initializedOn === client) return;
+  initializedOn = client;
   client.on('messageCreate', handleMessage);
-  console.log('[autodelete] ✓ messageCreate handler REGISTERED');
+  console.log('[autodelete] ✅ messageCreate handler REGISTERED');
 }
 
-/* Возвращает Set всех каналов, в которых команды активны (birthdays + profiles) */
+/* ============================================================
+   Каналы команд и правила
+   ============================================================ */
+
+/**
+ * Возвращает Set id каналов, где живут команды.
+ * В этих каналах запрещены любые «болталки».
+ * @param {string} guildId
+ * @returns {Set<string>}
+ */
 function getCommandChannels(guildId) {
   const entry = channelsCache.get(guildId);
   if (entry && entry.expires > Date.now()) return entry.channelIds;
@@ -45,32 +80,58 @@ function getCommandChannels(guildId) {
   return set;
 }
 
+/**
+ * Инвалидирует кэш каналов команд (вызывается при сохранении настроек).
+ * @param {string} guildId
+ */
 export function invalidateCommandChannels(guildId) {
   channelsCache.delete(guildId);
 }
 
-function isCommandMessage(content) {
-  if (!content || !content.length) return false;
-  const trimmed = content.trimStart().toLowerCase();
-  if (!trimmed) return false;
-  return COMMAND_NAMES.some(c => trimmed === c || trimmed.startsWith(c + ' '));
+function getRules(guildId) {
+  const entry = rulesCache.get(guildId);
+  if (entry && entry.expires > Date.now()) return entry.rules;
+
+  const data = readSection(guildId, 'autodelete');
+  const rules = data?.items || [];
+  rulesCache.set(guildId, { rules, expires: Date.now() + RULES_TTL });
+  return rules;
+}
+
+/**
+ * Инвалидирует кэш правил (при сохранении правил из UI).
+ * @param {string} guildId
+ */
+export function invalidateAutodeleteRules(guildId) {
+  rulesCache.delete(guildId);
+}
+
+/* ============================================================
+   Обработчик сообщений
+   ============================================================ */
+
+function isLegacyCommand(content) {
+  if (!content) return false;
+  const t = content.trimStart().toLowerCase();
+  return LEGACY_PREFIXES.some(p => t === p || t.startsWith(p + ' '));
 }
 
 async function handleMessage(message) {
   try {
-    if (!message.guild) return;
-    if (message.system) return;
+    if (!message.guild || message.system) return;
 
     const guildId = message.guild.id;
-    const ourBotId = message.client.user?.id;
-    const isOurBot = message.author.id === ourBotId;
 
-    if (isOurBot) return;
+    /* Сообщения от нашего бота — не трогаем */
+    if (message.author.id === message.client.user?.id) return;
+    if (message.author.bot) return;
 
+    /* Legacy-команды — их обработает redirect */
+    if (isLegacyCommand(message.content)) return;
+
+    /* Каналы команд — блокируем всё */
     const commandChannels = getCommandChannels(guildId);
     if (commandChannels.has(message.channel.id)) {
-      if (isCommandMessage(message.content)) return;
-
       await deleteMessageWithLog(
         message, guildId,
         'command_channel_lock',
@@ -79,9 +140,8 @@ async function handleMessage(message) {
       return;
     }
 
-    if (message.author.bot) return;
-
-    if (isCommandMessage(message.content)) return;
+    /* Модуль выключен глобально */
+    if (!isModuleEnabled(guildId, 'autodelete')) return;
 
     const rules = getRules(guildId);
     if (!rules.length) return;
@@ -89,21 +149,22 @@ async function handleMessage(message) {
     const rule = rules.find(r => r.enabled && r.channelId === message.channel.id);
     if (!rule) return;
 
+    /* Мгновенное удаление */
     if (rule.mode === 'instant') {
       await deleteMessageWithLog(
         message, guildId,
         'autodelete_instant',
-        `Мгновенно удалено сообщение в #${message.channel.name}`
+        `Мгновенное удаление в #${message.channel.name}`
       );
       return;
     }
 
+    /* Отложенное — в очередь */
     if (rule.mode === 'delayed' && rule.deleteAfterMinutes > 0) {
-      const deleteAt = Date.now() + rule.deleteAfterMinutes * 60000;
       addToQueue(guildId, {
         channelId: message.channel.id,
         messageId: message.id,
-        deleteAt
+        deleteAt: Date.now() + rule.deleteAfterMinutes * 60_000
       });
     }
   } catch (e) {
@@ -128,18 +189,9 @@ async function deleteMessageWithLog(message, guildId, logType, logMessage) {
   }
 }
 
-function getRules(guildId) {
-  const entry = rulesCache.get(guildId);
-  if (entry && entry.expires > Date.now()) return entry.rules;
-  const data = readSection(guildId, 'autodelete');
-  const rules = data?.items || [];
-  rulesCache.set(guildId, { rules, expires: Date.now() + RULES_TTL });
-  return rules;
-}
-
-export function invalidateAutodeleteRules(guildId) {
-  rulesCache.delete(guildId);
-}
+/* ============================================================
+   Очередь (in-memory + flush на диск)
+   ============================================================ */
 
 function addToQueue(guildId, item) {
   if (!queues.has(guildId)) {
@@ -168,58 +220,62 @@ function flushQueues() {
   dirty.clear();
 }
 
+/**
+ * Принудительный сброс очереди на диск.
+ * Вызывается из scheduler и при shutdown.
+ */
 export function shutdownAutodelete() {
-  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
   flushQueues();
 }
 
-export async function processAutodeleteQueue(client) {
-  for (const guild of client.guilds.cache.values()) {
-    if (!queues.has(guild.id)) {
-      const data = readSection(guild.id, 'autodelete-queue');
-      if (!data?.items?.length) continue;
-      queues.set(guild.id, data.items);
-    }
+/* ============================================================
+   Экспорт очереди для внешнего обработчика
+   ============================================================ */
 
-    const queue = queues.get(guild.id);
-    if (!queue?.length) continue;
-
-    const now = Date.now();
-    const remaining = [];
-    let changed = false;
-
-    for (const item of queue) {
-      if (item.deleteAt > now) { remaining.push(item); continue; }
-      changed = true;
-
-      try {
-        const channel = await client.channels.fetch(item.channelId).catch(() => null);
-        if (!channel) continue;
-        const msg = await channel.messages.fetch(item.messageId).catch(() => null);
-        if (!msg) continue;
-
-        if (isCommandMessage(msg.content)) continue;
-        if (msg.author.id === client.user?.id) continue;
-
-        const commandChannels = getCommandChannels(guild.id);
-        if (commandChannels.has(item.channelId)) {
-          await msg.delete().catch(() => {});
-          continue;
-        }
-
-        await msg.delete();
-        logInfo(guild.id, 'autodelete_delayed', 'Сообщение удалено по таймеру', {
-          channelId: item.channelId, messageId: item.messageId
-        });
-      } catch (e) {
-        logError(guild.id, 'autodelete_delayed', e.message, { messageId: item.messageId }, e.stack);
-      }
-    }
-
-    if (changed) {
-      queues.set(guild.id, remaining);
-      dirty.add(guild.id);
-    }
+/**
+ * Отдаёт (и при необходимости загружает) очередь гильдии.
+ * Используется в scheduler/autodelete-queue.js.
+ * @param {string} guildId
+ * @returns {Array<{ channelId, messageId, deleteAt }>}
+ */
+export function getQueue(guildId) {
+  if (!queues.has(guildId)) {
+    const data = readSection(guildId, 'autodelete-queue');
+    queues.set(guildId, data?.items || []);
   }
-  flushQueues();
+  return queues.get(guildId);
+}
+
+/**
+ * Обновляет очередь гильдии после обработки.
+ * @param {string} guildId
+ * @param {Array<object>} items
+ */
+export function setQueue(guildId, items) {
+  queues.set(guildId, items);
+  dirty.add(guildId);
+}
+
+/**
+ * Возвращает Set каналов команд (используется обработчиком очереди,
+ * чтобы не удалять сообщения в каналах команд повторно).
+ * @param {string} guildId
+ * @returns {Set<string>}
+ */
+export function getCommandChannelsFor(guildId) {
+  return getCommandChannels(guildId);
+}
+
+/**
+ * Проверяет, является ли контент legacy-командой.
+ * Используется обработчиком очереди — такие сообщения удалит redirect.
+ * @param {string} content
+ * @returns {boolean}
+ */
+export function isLegacyCommandContent(content) {
+  return isLegacyCommand(content);
 }

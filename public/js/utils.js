@@ -1,16 +1,48 @@
+/* ============================================================
+   Общие утилиты: генерация ID, экранирование, форматирование,
+   работа с файлами, debounce.
+   ============================================================ */
+
+/**
+ * Короткий случайный ID для DOM и элементов данных.
+ * @returns {string}
+ */
 export function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+/**
+ * Экранирует HTML-спецсимволы.
+ * @param {*} s
+ * @returns {string}
+ */
 export function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[c]));
 }
+
 export const escapeAttr = escapeHtml;
 
+/**
+ * Форматирует число с разделителями тысяч (ru-RU).
+ * @param {number} n
+ * @returns {string}
+ */
 export function formatNumber(n) {
-  return typeof n === 'number' ? n.toLocaleString('ru-RU') : n;
+  return typeof n === 'number' ? n.toLocaleString('ru-RU') : String(n ?? '');
 }
 
+/**
+ * Склонение по числу.
+ * @param {number} n
+ * @param {[string, string, string]} forms - [1, 2-4, 5+]
+ * @returns {string}
+ */
 export function pluralize(n, forms) {
   const abs = Math.abs(n) % 100;
   const last = abs % 10;
@@ -20,15 +52,31 @@ export function pluralize(n, forms) {
   return forms[2];
 }
 
+/**
+ * «N участников» — с правильным склонением.
+ * @param {number} n
+ * @returns {string}
+ */
 export function formatMembers(n) {
   return `${formatNumber(n)} ${pluralize(n, ['участник', 'участника', 'участников'])}`;
 }
 
+/**
+ * Дата и время в коротком формате.
+ * @param {string|Date} iso
+ * @returns {string}
+ */
 export function formatDateTime(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+/**
+ * Debounce для инпутов и ресайза.
+ * @param {Function} fn
+ * @param {number} [delay=150]
+ * @returns {Function}
+ */
 export function debounce(fn, delay = 150) {
   let timer;
   return (...args) => {
@@ -37,14 +85,25 @@ export function debounce(fn, delay = 150) {
   };
 }
 
+/**
+ * Скачивает JSON-файл через временный <a>.
+ * @param {*} data
+ * @param {string} filename
+ */
 export function downloadJSON(data, filename) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
+  a.href = url;
+  a.download = filename;
+  a.click();
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Открывает file-picker и парсит JSON.
+ * @returns {Promise<object|null>}
+ */
 export function pickJSONFile() {
   return new Promise((resolve) => {
     const input = document.createElement('input');
@@ -64,12 +123,13 @@ export function pickJSONFile() {
   });
 }
 
-/* ============================================================
-   Дискорд-форматы UNIX-времени (регистр важен):
-     t → 17:45 · T → 17:45:00
-     d → 23.10.2026 · D → 23 октября 2026 г.
-     f → дата+время (дефолт) · F → +день недели · R → relative
-   ============================================================ */
+/**
+ * Форматирует дату по коду Discord (<t:...>).
+ * Коды: t, T, d, D, f, F, R
+ * @param {Date} date
+ * @param {string} code
+ * @returns {string}
+ */
 export function formatDateByCode(date, code) {
   let c = code || 'f';
   if (c === 'r') c = 'R';
@@ -77,22 +137,17 @@ export function formatDateByCode(date, code) {
   try {
     switch (c) {
       case 'R': return formatRelative(date);
-      case 't':
-        return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', hour12: false });
-      case 'T':
-        return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-      case 'd':
-        return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-      case 'D':
-        return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
-      case 'f':
-        return date.toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-      case 'F':
-        return date.toLocaleString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-      default:
-        return date.toLocaleString('ru-RU');
+      case 't': return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', hour12: false });
+      case 'T': return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      case 'd': return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      case 'D': return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+      case 'f': return date.toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+      case 'F': return date.toLocaleString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+      default: return date.toLocaleString('ru-RU');
     }
-  } catch { return date.toLocaleString('ru-RU'); }
+  } catch {
+    return date.toLocaleString('ru-RU');
+  }
 }
 
 function formatRelative(date) {
@@ -101,33 +156,31 @@ function formatRelative(date) {
   if (abs <= 1) return 'несколько секунд назад';
   if (abs < 60) {
     const s = abs;
-    const w = pluralize(s, ['секунду', 'секунды', 'секунд']);
-    return diff > 0 ? `через ${s} ${w}` : `${s} ${w} назад`;
+    return diff > 0 ? `через ${s} ${pluralize(s, ['секунду', 'секунды', 'секунд'])}` : `${s} ${pluralize(s, ['секунду', 'секунды', 'секунд'])} назад`;
   }
   if (abs < 3600) {
     const m = Math.round(abs / 60);
-    const w = pluralize(m, ['минуту', 'минуты', 'минут']);
-    return diff > 0 ? `через ${m} ${w}` : `${m} ${w} назад`;
+    return diff > 0 ? `через ${m} ${pluralize(m, ['минуту', 'минуты', 'минут'])}` : `${m} ${pluralize(m, ['минуту', 'минуты', 'минут'])} назад`;
   }
   if (abs < 86400) {
     const h = Math.round(abs / 3600);
-    const w = pluralize(h, ['час', 'часа', 'часов']);
-    return diff > 0 ? `через ${h} ${w}` : `${h} ${w} назад`;
+    return diff > 0 ? `через ${h} ${pluralize(h, ['час', 'часа', 'часов'])}` : `${h} ${pluralize(h, ['час', 'часа', 'часов'])} назад`;
   }
   const d = Math.round(abs / 86400);
-  const w = pluralize(d, ['день', 'дня', 'дней']);
-  return diff > 0 ? `через ${d} ${w}` : `${d} ${w} назад`;
+  return diff > 0 ? `через ${d} ${pluralize(d, ['день', 'дня', 'дней'])}` : `${d} ${pluralize(d, ['день', 'дня', 'дней'])} назад`;
 }
 
-/* ============================================================
-   Длительность с точностью до месяцев/дней/часов/минут.
-   Пример: «2 года 3 месяца 15 дней 8 часов 42 минуты»
-   ============================================================ */
+/**
+ * «2 года 3 месяца 5 дней» из ISO-даты до сейчас.
+ * @param {string} fromIso
+ * @param {Date} [toDate]
+ * @returns {string|null}
+ */
 export function formatDuration(fromIso, toDate = new Date()) {
   if (!fromIso) return null;
   const from = new Date(fromIso);
   if (isNaN(from.getTime())) return null;
-  if (from > toDate) return 'Ещё не вступил';
+  if (from > toDate) return 'ещё не вступил';
 
   let y = toDate.getFullYear() - from.getFullYear();
   let m = toDate.getMonth() - from.getMonth();
@@ -143,7 +196,7 @@ export function formatDuration(fromIso, toDate = new Date()) {
     m--;
   }
   if (m < 0) { m += 12; y--; }
-  if (y < 0) return 'Ещё не вступил';
+  if (y < 0) return 'ещё не вступил';
 
   const parts = [];
   if (y > 0) parts.push(`${y} ${pluralize(y, ['год', 'года', 'лет'])}`);
@@ -152,9 +205,5 @@ export function formatDuration(fromIso, toDate = new Date()) {
   if (h > 0) parts.push(`${h} ${pluralize(h, ['час', 'часа', 'часов'])}`);
   if (mi > 0) parts.push(`${mi} ${pluralize(mi, ['минуту', 'минуты', 'минут'])}`);
 
-  return parts.length ? parts.join(' ') : 'Меньше минуты';
-}
-
-export function getChannelIconName(type) {
-  return { 0: 'text', 2: 'voice', 5: 'announcement', 13: 'stage', 15: 'forum' }[type] || 'text';
+  return parts.length ? parts.join(' ') : 'меньше минуты';
 }

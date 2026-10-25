@@ -1,23 +1,39 @@
+/* ============================================================
+   UI-компоненты: toast, modal, confirmDialog, emptyState, skeleton.
+   ============================================================ */
+
 import { escapeHtml } from './utils.js';
 
 /* ============================================================
    Toast
    ============================================================ */
+
+/**
+ * Показывает уведомление в правом нижнем углу.
+ * @param {string} message
+ * @param {object} [opts]
+ * @param {'success'|'error'} [opts.type]
+ * @param {number} [opts.duration]
+ * @returns {{ close: () => void }}
+ */
 export function toast(message, opts = {}) {
   const container = document.getElementById('toastContainer');
   if (!container) return { close: () => {} };
+
   const el = document.createElement('div');
   el.className = 'toast' + (opts.type === 'error' ? ' error' : '');
   el.setAttribute('role', 'status');
+
+  const icon = opts.type === 'error'
+    ? '<i class="fa-solid fa-circle-exclamation" style="color:var(--danger);"></i>'
+    : '<i class="fa-solid fa-circle-check" style="color:var(--success);"></i>';
+
   el.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      ${opts.type === 'error'
-        ? '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'
-        : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'}
-    </svg>
+    ${icon}
     <span class="toast-message">${escapeHtml(message)}</span>
     ${opts.action ? `<button type="button" class="toast-action">${escapeHtml(opts.action.label)}</button>` : ''}
   `;
+
   container.appendChild(el);
 
   let closed = false;
@@ -30,7 +46,8 @@ export function toast(message, opts = {}) {
 
   if (opts.action) {
     el.querySelector('.toast-action').addEventListener('click', () => {
-      try { opts.action.onClick?.(); } finally { close(); }
+      try { opts.action.onClick?.(); }
+      finally { close(); }
     });
   }
 
@@ -39,21 +56,31 @@ export function toast(message, opts = {}) {
 }
 
 /* ============================================================
-   Modal (идемпотентное закрытие)
+   Modal
    ============================================================ */
-const openModals = [];
 
+/**
+ * Открывает модальное окно.
+ * @param {object} opts
+ * @param {string} opts.title
+ * @param {string|HTMLElement} opts.body - HTML-строка или DOM-элемент
+ * @param {string|HTMLElement} [opts.footer] - HTML-строка или DOM-элемент
+ * @param {'normal'|'fullscreen'} [opts.size]
+ * @param {() => void} [opts.onClose]
+ * @returns {{ backdrop, bodyEl, footerEl, close }}
+ */
 export function modal({ title, body, footer, size = 'normal', onClose }) {
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.setAttribute('role', 'dialog');
   backdrop.setAttribute('aria-modal', 'true');
+
   backdrop.innerHTML = `
     <div class="modal ${size === 'fullscreen' ? 'modal-fullscreen' : ''}" role="document">
       <div class="modal-header">
         <h3>${escapeHtml(title)}</h3>
         <button type="button" class="modal-close" aria-label="Закрыть">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
       <div class="modal-body"></div>
@@ -78,23 +105,21 @@ export function modal({ title, body, footer, size = 'normal', onClose }) {
     if (closed) return;
     closed = true;
     backdrop.remove();
-    const idx = openModals.indexOf(backdrop);
-    if (idx !== -1) openModals.splice(idx, 1);
     document.removeEventListener('keydown', onKey);
     onClose?.();
   };
 
   const onKey = (e) => {
     if (e.key === 'Escape') close();
-    if (e.key === 'Tab') trapFocus(e, backdrop);
   };
 
   backdrop.querySelector('.modal-close').addEventListener('click', close);
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) close();
+  });
   document.addEventListener('keydown', onKey);
 
   document.getElementById('modalsContainer').appendChild(backdrop);
-  openModals.push(backdrop);
 
   setTimeout(() => {
     const first = backdrop.querySelector('input:not([type="hidden"]), textarea, select, button');
@@ -104,21 +129,28 @@ export function modal({ title, body, footer, size = 'normal', onClose }) {
   return { backdrop, bodyEl, footerEl, close };
 }
 
-function trapFocus(e, container) {
-  const focusable = container.querySelectorAll('button, [href], input:not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])');
-  if (!focusable.length) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-}
-
 /* ============================================================
-   Confirm (исправлено: правильный resolve)
+   ConfirmDialog
    ============================================================ */
-export function confirmDialog({ title = 'Подтверждение', text, actionText = 'Удалить', danger = true }) {
+
+/**
+ * Диалог подтверждения. Возвращает Promise<boolean>.
+ * @param {object} opts
+ * @param {string} [opts.title]
+ * @param {string} [opts.text]
+ * @param {string} [opts.actionText]
+ * @param {boolean} [opts.danger]
+ * @returns {Promise<boolean>}
+ */
+export function confirmDialog({
+  title = 'Подтверждение',
+  text = '',
+  actionText = 'Удалить',
+  danger = true
+}) {
   return new Promise((resolve) => {
     let resolved = false;
+
     const footer = document.createElement('div');
     footer.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;';
     footer.innerHTML = `
@@ -128,9 +160,11 @@ export function confirmDialog({ title = 'Подтверждение', text, acti
 
     const m = modal({
       title,
-      body: `<p style="color:var(--text-dim);line-height:1.55;">${escapeHtml(text || '')}</p>`,
+      body: `<p style="color:var(--text-dim);line-height:1.55;">${escapeHtml(text)}</p>`,
       footer,
-      onClose: () => { if (!resolved) { resolved = true; resolve(false); } }
+      onClose: () => {
+        if (!resolved) { resolved = true; resolve(false); }
+      }
     });
 
     footer.querySelector('[data-action="cancel"]').addEventListener('click', () => {
@@ -149,18 +183,48 @@ export function confirmDialog({ title = 'Подтверждение', text, acti
 }
 
 /* ============================================================
-   Skeleton / Empty
+   EmptyState
    ============================================================ */
-export function skeletonCards(count = 2) {
-  return Array.from({ length: count }, () => '<div class="skeleton-card"></div>').join('');
-}
 
-export function emptyState(icon, title, subtitle) {
+/**
+ * Универсальный пустой экран с CTA.
+ * @param {object} opts
+ * @param {string} [opts.icon='fa-inbox'] - FA-класс без префикса
+ * @param {string} opts.title
+ * @param {string} [opts.text]
+ * @param {string} [opts.ctaLabel]
+ * @param {string} [opts.ctaAction='create']
+ * @param {string} [opts.exampleLabel]
+ * @param {string} [opts.exampleAction='example']
+ * @returns {string} HTML
+ */
+export function emptyState({
+  icon = 'fa-inbox',
+  title,
+  text,
+  ctaLabel,
+  ctaAction = 'create',
+  exampleLabel,
+  exampleAction = 'example'
+}) {
   return `
-    <div class="empty-state">
-      <div class="empty-state-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></div>
-      <p>${escapeHtml(title)}</p>
-      <span>${escapeHtml(subtitle)}</span>
+    <div class="empty-state" role="region" aria-label="${escapeHtml(title || '')}">
+      <div class="empty-state-icon"><i class="fa-solid ${icon}"></i></div>
+      <h3 class="empty-state-title">${escapeHtml(title || '')}</h3>
+      ${text ? `<p class="empty-state-text">${escapeHtml(text)}</p>` : ''}
+      <div class="empty-state-actions">
+        ${ctaLabel ? `<button type="button" class="btn btn-primary btn-sm" data-${ctaAction}><i class="fa-solid fa-plus"></i> ${escapeHtml(ctaLabel)}</button>` : ''}
+        ${exampleLabel ? `<button type="button" class="btn btn-ghost btn-sm" data-${exampleAction}><i class="fa-solid fa-lightbulb"></i> ${escapeHtml(exampleLabel)}</button>` : ''}
+      </div>
     </div>
   `;
+}
+
+/**
+ * Скелетоны для загрузки списка.
+ * @param {number} [count=3]
+ * @returns {string}
+ */
+export function skeletonCards(count = 3) {
+  return Array.from({ length: count }, () => '<div class="skeleton-card"></div>').join('');
 }
