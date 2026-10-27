@@ -1,21 +1,27 @@
 // public/assets/js/components/topbar.js
 import { store } from '../core/store.js';
-import { openModal } from '../core/modal.js';
 import { escapeHtml } from '../core/utils.js';
+import { openContactModal } from './contactModal.js';
+import { openModal } from '../core/modal.js';
 
 export function renderTopbar(container) {
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+  const themeIconClass = currentTheme === 'dark' ? 'fa-sun' : 'fa-moon';
+
   container.innerHTML = `
     <button class="topbar-menu" id="menuToggle" type="button" aria-label="Меню">
       <i class="fa-solid fa-bars"></i>
     </button>
     <div class="topbar-title" id="topbarTitle"></div>
     <div class="topbar-actions">
-      <!-- ⚡ ФИКС #4: удалён title="Наши контакты" -->
-      <button class="icon-btn" data-contacts type="button" aria-label="Наши контакты">
+      <button class="icon-btn" data-tour type="button" aria-label="Тур по панели">
+        <i class="fa-solid fa-route"></i>
+      </button>
+      <button class="icon-btn" data-contacts type="button" aria-label="Связаться с нами">
         <i class="fa-solid fa-headset"></i>
       </button>
       <button class="icon-btn" data-theme-toggle type="button" aria-label="Тема">
-        <i class="fa-solid fa-moon"></i>
+        <i class="fa-solid ${themeIconClass}"></i>
       </button>
     </div>
   `;
@@ -28,20 +34,15 @@ export function renderTopbar(container) {
     }
   });
 
-  setTimeout(() => {
-    const toggle = container.querySelector('#menuToggle');
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('sidebarOverlay');
-    if (toggle && sidebar) {
-      toggle.addEventListener('click', () => {
-        sidebar.classList.toggle('open');
-        overlay?.classList.toggle('show');
-      });
-    }
-  }, 0);
-
-  container.querySelector('[data-contacts]').addEventListener('click', openContactsModal);
+  container.querySelector('[data-tour]').addEventListener('click', openPanelTour);
+  container.querySelector('[data-contacts]').addEventListener('click', () => openContactModal());
 }
+
+const PAGE_LABELS = {
+  overview: 'Дашборд', modules: 'Модули', moderation: 'Модерация',
+  commands: 'Команды', members: 'Участники', settings: 'Настройки',
+  bots: 'Мои боты', servers: 'Список серверов',
+};
 
 function updateTitle(container) {
   const bots = store.get('bots');
@@ -49,43 +50,67 @@ function updateTitle(container) {
   const bot = bots.find((b) => b.id === store.get('activeBotId'));
   const guild = guilds.find((g) => g.id === store.get('activeGuildId'));
   const page = location.hash.slice(1) || 'overview';
-  const labels = {
-    overview: 'Обзор', modules: 'Модули', moderation: 'Модерация',
-    commands: 'Команды', members: 'Участники', settings: 'Настройки',
-    bots: 'Мои боты', servers: 'Выбор сервера',
-  };
   const title = container.querySelector('#topbarTitle');
   if (title) {
     title.innerHTML = `
       <span class="crumb">${escapeHtml(bot?.name || 'Бот')}</span>
       <span class="crumb">${escapeHtml(guild?.name || '—')}</span>
-      <span>${labels[page] || ''}</span>
+      <span>${PAGE_LABELS[page] || ''}</span>
     `;
   }
 }
 
-function openContactsModal() {
+/* Мини-тур: карточки с кратким обзором разделов */
+function openPanelTour() {
   openModal({
-    title: 'Наши контакты',
-    subtitle: 'Отвечаем в течение 24 часов',
+    title: 'Тур по панели',
+    subtitle: 'Ключевые разделы и возможности',
     body: `
       <div class="contact-list">
-        <a href="mailto:hello@botpanel.gg" class="contact-link">
-          <i class="fa-solid fa-envelope"></i>
+        <div class="contact-link" style="cursor:default;">
+          <i class="fa-solid fa-chart-pie"></i>
           <div>
-            <strong>Email</strong>
-            <span>hello@botpanel.gg</span>
+            <strong>Дашборд</strong>
+            <span>Ключевые метрики, графики активности, топ команд и каналов</span>
           </div>
-        </a>
-        <a href="https://discord.gg/botpanel" target="_blank" rel="noopener" class="contact-link">
-          <i class="fa-brands fa-discord"></i>
+        </div>
+        <div class="contact-link" style="cursor:default;">
+          <i class="fa-solid fa-puzzle-piece"></i>
           <div>
-            <strong>Discord</strong>
-            <span>discord.gg/botpanel</span>
+            <strong>Модули</strong>
+            <span>Приветствия, уровни, тикеты, дни рождения и другое — включаются в один клик</span>
           </div>
-        </a>
+        </div>
+        <div class="contact-link" style="cursor:default;">
+          <i class="fa-solid fa-shield-halved"></i>
+          <div>
+            <strong>Модерация</strong>
+            <span>Автомодерация, ручные наказания и журнал действий</span>
+          </div>
+        </div>
+        <div class="contact-link" style="cursor:default;">
+          <i class="fa-solid fa-terminal"></i>
+          <div>
+            <strong>Команды</strong>
+            <span>Встроенные и пользовательские слэш-команды сервера</span>
+          </div>
+        </div>
+        <div class="contact-link" style="cursor:default;">
+          <i class="fa-solid fa-user-group"></i>
+          <div>
+            <strong>Участники</strong>
+            <span>Уровни, предупреждения и роли — управление составом</span>
+          </div>
+        </div>
+        <div class="contact-link" style="cursor:default;">
+          <i class="fa-solid fa-gear"></i>
+          <div>
+            <strong>Настройки</strong>
+            <span>Канал логов и роли-исключения для статистики</span>
+          </div>
+        </div>
       </div>
     `,
-    ctaLabel: 'Закрыть',
+    ctaLabel: 'Понятно',
   });
 }

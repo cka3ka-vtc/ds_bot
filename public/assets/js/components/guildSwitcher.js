@@ -1,21 +1,10 @@
 // public/assets/js/components/guildSwitcher.js
 import { store } from '../core/store.js';
-
-function initials(name = '') {
-  return name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || 'S';
-}
-
-function guildIconUrl(guildId, iconHash) {
-  if (!guildId || !iconHash) return null;
-  const ext = iconHash.startsWith('a_') ? 'gif' : 'png';
-  return `https://cdn.discordapp.com/icons/${guildId}/${iconHash}.${ext}?size=64`;
-}
+import { escapeHtml, initials, guildIconUrl } from '../core/utils.js';
 
 function avatarHtml(g) {
-  const url = guildIconUrl(g?.id, g?.icon);
-  return url
-    ? `<img src="${url}" alt="" loading="lazy">`
-    : initials(g?.name);
+  const url = guildIconUrl(g?.id, g?.icon, 64);
+  return url ? `<img src="${url}" alt="" loading="lazy">` : initials(g?.name);
 }
 
 export function renderGuildSwitcher(container) {
@@ -24,19 +13,15 @@ export function renderGuildSwitcher(container) {
 
   if (!active) {
     container.innerHTML = `
-      <button class="switcher-btn" data-goto-servers type="button">
+      <button class="switcher-btn" data-goto-servers type="button" aria-label="Сменить сервер">
         <span class="switcher-glow" aria-hidden="true"></span>
-        <span class="switcher-avatar">
-          <i class="fa-solid fa-server" style="font-size:12px;"></i>
-        </span>
+        <span class="switcher-avatar"><i class="fa-solid fa-server" style="font-size:12px;"></i></span>
         <span class="switcher-info">
           <span class="switcher-name">Нет серверов</span>
-          <span class="switcher-meta">
-            <i class="fa-solid fa-circle-info"></i> добавьте бота
-          </span>
-          <span class="switcher-hint">Сменить сервер</span>
+          <span class="switcher-meta"><i class="fa-solid fa-circle-info"></i> Добавьте бота</span>
         </span>
         <i class="fa-solid fa-bars"></i>
+        <span class="switcher-hint">Сменить сервер</span>
       </button>
     `;
     container.querySelector('[data-goto-servers]').addEventListener('click', () => {
@@ -46,7 +31,7 @@ export function renderGuildSwitcher(container) {
   }
 
   container.innerHTML = `
-    <button class="switcher-btn" data-goto-servers type="button">
+    <button class="switcher-btn" data-goto-servers type="button" aria-label="Сменить сервер">
       <span class="switcher-glow" aria-hidden="true"></span>
       <span class="switcher-avatar">${avatarHtml(active)}</span>
       <span class="switcher-info">
@@ -55,19 +40,13 @@ export function renderGuildSwitcher(container) {
           <i class="fa-solid fa-users"></i>
           ${(active.memberCount || 0).toLocaleString('ru-RU')} участников
         </span>
-        <span class="switcher-hint">Сменить сервер</span>
       </span>
       <i class="fa-solid fa-bars"></i>
+      <span class="switcher-hint">Сменить сервер</span>
     </button>
   `;
 
   container.querySelector('[data-goto-servers]').addEventListener('click', () => {
     location.hash = 'servers';
   });
-}
-
-function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"]/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;',
-  }[c]));
 }

@@ -8,6 +8,10 @@ export function statsRouter() {
 
   router.get('/', requireBotAccess, async (req, res) => {
     const { botId, guildId } = req.query;
+
+    // TZ клиента в минутах (МСК = 180, UTC−5 = -300).
+    const tz = parseInt(req.query.tz, 10) || 0;
+
     const db = req.app.locals.db;
     const botManager = req.app.locals.botManager;
 
@@ -20,49 +24,50 @@ export function statsRouter() {
     if (!guild) return res.status(404).json({ error: 'guild_not_found' });
 
     const now = Math.floor(Date.now() / 1000);
-    const since24h = now - 24 * 60 * 60;
-    const since7d = now - 7 * 24 * 60 * 60;
+    const since7d  = now - 7 * 24 * 60 * 60;
     const since14d = now - 14 * 24 * 60 * 60;
 
-    // ── KPI ───────────────────────────────────────
+    // KPI
     const totalMembers = guild.memberCount;
     const newMembers = db.countEvents(botId, guildId, 'member_join', since7d);
     const leftMembers = db.countEvents(botId, guildId, 'member_leave', since7d);
     const activeUsers = db.countUniqueUsers(botId, guildId, since7d);
 
-    // ── Chart ─────────────────────────────────────
-    const messagesByDay = db.getEventsByDay(botId, guildId, 'message', since14d);
-    const commandsByDay = db.getEventsByDay(botId, guildId, 'command', since14d);
-    const voiceByDay    = db.getEventsByDay(botId, guildId, 'voice_join', since14d);
+    // Chart
+    const messagesByDay = db.getEventsByDay(botId, guildId, 'message',    since14d, tz);
+    const commandsByDay = db.getEventsByDay(botId, guildId, 'command',    since14d, tz);
+    const voiceByDay    = db.getEventsByDay(botId, guildId, 'voice_join', since14d, tz);
 
-    // ── Топ команд ────────────────────────────────
+    // Top commands
     const topCommands = db.getTopCommands(botId, guildId, since7d, 5);
 
-    // ── События ───────────────────────────────────
-    const recentEvents = db.getRecentActivity(botId, guildId, 5);
+    // Top channels (раздельно по типу)
+    const enrich = (arr) => arr.map((ch) => {
+      const channel = guild.channels.cache.get(ch.channel_id);
+      return {
+        channelId: ch.channel_id,
+        name: channel?.name || 'unknown',
+        count: ch.count,
+      };
+    });
 
-    // ── Health ────────────────────────────────────
-    const mem = process.memoryUsage();
-    const uptimeSec = Math.round(process.uptime());
-    const errors24h = db.countLogsByLevel(botId, guildId, 'error', since24h);
-    const rateLimitHits = inst.rateLimitHits || 0;
-
-    const health = {
-      latency: Math.round(inst.client.ws.ping) || 0,
-      uptimeSeconds: uptimeSec,
-      uptimePct: 99.9,
-      errors24h,
-      memoryUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
-      memoryTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
-      memoryPct: Math.round((mem.heapUsed / mem.heapTotal) * 100),
-      discordApiPct: rateLimitHits === 0 ? 100 : Math.max(0, 100 - rateLimitHits * 2),
-      rateLimitHits,
+    const topChannels = {
+      text:  enrich(db.getTopChannels(botId, guildId, 'message',    since7d, 5)),
+      voice: enrich(db.getTopChannels(botId, guildId, 'voice_join', since7d, 5)),
     };
 
+    // Recent events
+    const recentEvents = db.getRecentActivity(botId, guildId, 5);
+
     res.json({
-      totalMembers, newMembers, leftMembers, activeUsers,
+      totalMembers,
+      newMembers,
+      leftMembers,
+      activeUsers,
       chart: { messagesByDay, commandsByDay, voiceByDay },
-      topCommands, recentEvents, health,
+      topCommands,
+      topChannels,
+      recentEvents,
       updatedAt: now,
     });
   });

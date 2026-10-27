@@ -1,23 +1,28 @@
+// public/assets/js/landing/action.js
 /**
- * Discord-симулятор ("В действии").
- *  - scenarios   — данные 8 сценариев
- *  - renderers   — превращают объекты в DOM
- *  - player      — проигрывает сценарий с таймингами
+ * Discord-симулятор на лендинге («В действии»).
+ *  - TABS         — данные 8 сценариев
+ *  - SCENARIOS    — сценарии сообщений
+ *  - renderers    — превращают объекты в DOM
+ *  - player       — проигрывает сценарий с таймингами
  */
+import { escapeHtml } from '../core/utils.js';
 
-// ── 1. Табы ────────────────────────────────────────────────
+const escHtml = escapeHtml;
+
+/* ---------- 1. Табы ---------- */
 const TABS = [
-  { key: 'welcome',    icon: 'fa-hand',            title: 'Приветствие',    sub: 'Знакомит новых',  channel: 'welcome' },
-  { key: 'moderation', icon: 'fa-shield-halved',   title: 'Модерация',      sub: 'Удаляет спам',    channel: 'general' },
-  { key: 'levels',     icon: 'fa-ranking-star',    title: 'Уровни',         sub: 'Награждает',      channel: 'levels' },
-  { key: 'commands',   icon: 'fa-terminal',        title: 'Команды',        sub: '/serverinfo',     channel: 'general' },
-  { key: 'messages',   icon: 'fa-message',         title: 'Сообщения',      sub: 'Кнопки и картинки',channel: 'announcements' },
-  { key: 'tickets',    icon: 'fa-ticket',          title: 'Тикеты',         sub: 'Поддержка',       channel: 'tickets' },
-  { key: 'autodelete', icon: 'fa-trash',           title: 'Автоудаление',   sub: 'Очистка канала',  channel: 'general' },
-  { key: 'birthdays',  icon: 'fa-cake-candles',    title: 'Дни рождения',   sub: 'Поздравляет',     channel: 'birthdays' },
+  { key: 'welcome',    icon: 'fa-hand',            title: 'Приветствие',    sub: 'Диалог новых',     channel: 'welcome' },
+  { key: 'moderation', icon: 'fa-shield-halved',   title: 'Модерация',      sub: 'Удаляет спам',     channel: 'general' },
+  { key: 'levels',     icon: 'fa-ranking-star',    title: 'Уровни',         sub: 'Награждает',       channel: 'levels' },
+  { key: 'commands',   icon: 'fa-terminal',        title: 'Команды',        sub: '/serverinfo',      channel: 'general' },
+  { key: 'messages',   icon: 'fa-message',         title: 'Сообщения',      sub: 'Опрос и картинки', channel: 'announcements' },
+  { key: 'tickets',    icon: 'fa-ticket',          title: 'Тикеты',         sub: 'Поддержка',        channel: 'tickets' },
+  { key: 'autodelete', icon: 'fa-trash',           title: 'Автоудаление',   sub: 'Чистка канала',    channel: 'general' },
+  { key: 'birthdays',  icon: 'fa-cake-candles',    title: 'Дни рождения',   sub: 'Поздравляет',      channel: 'birthdays' },
 ];
 
-// ── 2. Данные сценариев ────────────────────────────────────
+/* ---------- 2. Сценарии ---------- */
 const IMG_STEAM =
   "data:image/svg+xml;utf8," +
   "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 340 160'>" +
@@ -34,10 +39,10 @@ const SCENARIOS = {
   welcome: [
     { type: 'system', icon: 'fa-arrow-right-to-bracket', text: '<strong>newuser</strong> присоединился к серверу' },
     { type: 'bot', name: 'BotPanel', time: '14:32',
-      text: 'Привет, <span class="mention">@newuser</span>! Добро пожаловать 👋 Ты <strong>1248-й</strong> участник.',
+      text: 'Привет, <span class="mention">@newuser</span>! Добро пожаловать  🎉 Ты <strong>1248-й</strong> участник.',
       embed: { icon: 'fa-shield-halved', title: 'Автомодерация активна', desc: 'Фильтр мата · Антиспам · Антирейд' },
-      reactions: [{ emoji: '👋', count: 4 }, { emoji: '🎉', count: 2 }] },
-    { type: 'user', avatar: 'A', color: '#3ba55d', name: 'alice', time: '14:33', text: 'Добро пожаловать! 🎉' },
+      reactions: [{ emoji: '🎉', count: 4 }, { emoji: '❤️', count: 2 }] },
+    { type: 'user', avatar: 'A', color: '#3ba55d', name: 'alice', time: '14:33', text: 'Добро пожаловать! ❤️' },
   ],
   moderation: [
     { type: 'system', icon: 'fa-triangle-exclamation', warn: true, text: 'Нарушение в канале <strong>#general</strong>' },
@@ -47,27 +52,23 @@ const SCENARIOS = {
     { type: 'bot', name: 'BotPanel', time: '14:34',
       text: 'Сообщение удалено. Пользователь получил предупреждение.',
       embed: { icon: 'fa-triangle-exclamation', title: 'Причина: спам ссылками', desc: 'Правило #3 · Автомодерация' } },
-    { type: 'user', avatar: 'M', color: '#5865F2', name: 'moderator', time: '14:35', text: 'Спасибо, бот справился за секунду 👍' },
+    { type: 'user', avatar: 'M', color: '#5865F2', name: 'moderator', time: '14:35', text: 'Спасибо, бот справился за секунду  🔧' },
   ],
   levels: [
     { type: 'user', avatar: 'A', color: '#3ba55d', name: 'alice', time: '14:36', text: '/rank' },
     { type: 'bot', name: 'BotPanel', time: '14:36',
       text: 'Твой прогресс:',
       embed: { icon: 'fa-ranking-star', title: 'Уровень 12 · 2 340 / 3 000 XP', desc: 'До следующего — 660 XP' },
-      reactions: [{ emoji: '✨', count: 6 }, { emoji: '🏆', count: 3 }] },
+      reactions: [{ emoji: '⭐', count: 6 }, { emoji: '🔥', count: 3 }] },
     { type: 'system', icon: 'fa-star', text: '<strong>alice</strong> достигла <strong>уровня 13</strong>!' },
   ],
+  // Только /serverinfo — /rank показывается в отдельном сценарии «Уровни»
   commands: [
     { type: 'user', avatar: 'A', color: '#3ba55d', name: 'alice', time: '14:50', text: '/serverinfo' },
     { type: 'bot', name: 'BotPanel', time: '14:50',
       text: 'Информация о сервере:',
       embed: { icon: 'fa-server', title: 'My Server',
                desc: 'Участников: 1 248 · Онлайн: 342 · Создан: 16.07.2019 · Регион: EU Central' } },
-    { type: 'user', avatar: 'B', color: '#3ba55d', name: 'bob', time: '14:51', text: '/rank' },
-    { type: 'bot', name: 'BotPanel', time: '14:51',
-      text: '@bob, твой прогресс:',
-      embed: { icon: 'fa-ranking-star', title: 'Уровень 18 · 4 120 / 5 000 XP',
-               desc: 'До следующего уровня — 880 XP · Топ-2 на сервере' } },
   ],
   messages: [
     { type: 'system', icon: 'fa-message', text: 'BotPanel опубликовал анонс в <strong>#announcements</strong>' },
@@ -76,19 +77,19 @@ const SCENARIOS = {
         { type: 'text', content: '**🎮 Игровой вечер в Steam**\n\nСобираемся в субботу в 20:00. Играем в CS2.' },
         { type: 'media', url: IMG_STEAM },
         { type: 'separator' },
-        { type: 'section', content: 'Ссылка на наше сообщество', button: { label: 'Открыть Steam ↗', style: 'primary' } },
+        { type: 'section', content: 'Ссылка на наше сообщество', button: { label: 'Открыть Steam →', style: 'primary' } },
         { type: 'actionrow', buttons: [{ label: 'Иду', style: 'success' }, { label: 'Пас', style: 'secondary' }] },
       ] },
-    { type: 'user', avatar: 'B', color: '#3ba55d', name: 'bob', time: '14:43', text: 'Жму «Иду»! 🔥' },
-    { type: 'user', avatar: 'C', color: '#5865F2', name: 'charlie', time: '14:44', text: 'Ссылка открылась — кнопка работает' },
+    { type: 'user', avatar: 'B', color: '#3ba55d', name: 'bob', time: '14:43', text: 'Я иду! 🔥' },
+    { type: 'user', avatar: 'C', color: '#5865F2', name: 'charlie', time: '14:44', text: 'Ссылка откроется — кнопка работает' },
   ],
   tickets: [
-    { type: 'user', avatar: 'B', color: '#faa61a', name: 'bob', time: '14:38', text: '/ticket Купить подписку' },
+    { type: 'user', avatar: 'B', color: '#faa61a', name: 'bob', time: '14:38', text: '/ticket Хочу подписку' },
     { type: 'bot', name: 'BotPanel', time: '14:38',
       text: 'Тикет создан!',
       embed: { icon: 'fa-ticket', title: 'Тикет #0427', desc: 'Канал: #ticket-0427 · Категория: Продажи' } },
     { type: 'system', icon: 'fa-user-plus', text: 'Модератор <strong>@support</strong> подключился' },
-    { type: 'user', avatar: 'M', color: '#5865F2', name: 'support', time: '14:39', text: 'Здравствуйте! Оформляем?' },
+    { type: 'user', avatar: 'M', color: '#5865F2', name: 'support', time: '14:39', text: 'Здравствуйте! Чем помочь?' },
     { type: 'user', avatar: 'B', color: '#faa61a', name: 'bob', time: '14:41', text: 'Да, спасибо!' },
     { type: 'system', icon: 'fa-lock', close: true, text: 'Тикет <strong>#0427</strong> закрыт' },
   ],
@@ -103,17 +104,13 @@ const SCENARIOS = {
     { type: 'system', icon: 'fa-cake-candles', text: 'День рождения у <strong>alice</strong>' },
     { type: 'bot', name: 'BotPanel', time: '09:00',
       text: '🎂 С днём рождения, <span class="mention">@alice</span>!',
-      embed: { icon: 'fa-cake-candles', title: 'Уровень 24 · 2 341 XP', desc: 'Празднуем сегодня' },
-      reactions: [{ emoji: '🎂', count: 8 }, { emoji: '🎉', count: 5 }] },
-    { type: 'user', avatar: 'B', color: '#3ba55d', name: 'bob', time: '09:01', text: 'С днём рождения! 🎉' },
+      embed: { icon: 'fa-cake-candles', title: 'Уровень 24 · 2 341 XP', desc: 'Приздравляем сегодня' },
+      reactions: [{ emoji: '🎂', count: 8 }, { emoji: '❤️', count: 5 }] },
+    { type: 'user', avatar: 'B', color: '#3ba55d', name: 'bob', time: '09:01', text: 'С днём рождения! ❤️' },
   ],
 };
 
-// ── 3. Утилиты рендера ─────────────────────────────────────
-const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-}[c]));
-
+/* ---------- 3. Рендеры ---------- */
 function parseMdText(t) {
   let h = escHtml(t);
   h = h.replace(/&lt;#([\w-]+)&gt;/g, '<span class="mention">#$1</span>');
@@ -224,7 +221,7 @@ function renderDeleted(m) {
   return el;
 }
 
-// ── 4. Плеер ───────────────────────────────────────────────
+/* ---------- 4. Плеер ---------- */
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
@@ -236,7 +233,6 @@ export function initAction() {
   const tabsEl = document.getElementById('actionTabs');
   if (!messagesEl || !tabsEl) return;
 
-  // Рендерим табы
   tabsEl.innerHTML = TABS.map((t, i) => `
     <button class="action-tab ${i === 0 ? 'active' : ''}" data-scenario="${t.key}" data-channel="${t.channel}" role="tab" aria-selected="${i === 0}">
       <span class="action-tab-icon"><i class="fa-solid ${t.icon}"></i></span>
@@ -274,7 +270,6 @@ export function initAction() {
       else if (msg.type === 'components') node = renderComponents(msg);
       else node = renderMessage(msg);
 
-      // fade-in
       node.classList.add('entering');
       messagesEl.appendChild(node);
       await nextFrame();
@@ -303,7 +298,6 @@ export function initAction() {
     }
   }
 
-  // Обработчик кликов по табам
   tabsEl.querySelectorAll('.action-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
       tabsEl.querySelectorAll('.action-tab').forEach((t) => {
@@ -316,7 +310,6 @@ export function initAction() {
     });
   });
 
-  // Автозапуск при появлении секции
   if ('IntersectionObserver' in window) {
     const obs = new IntersectionObserver((entries) => {
       entries.forEach((e) => {

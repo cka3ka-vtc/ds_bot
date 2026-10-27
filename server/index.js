@@ -2,7 +2,7 @@
 import 'dotenv/config';
 import { config } from './config.js';
 import { logger } from './core/logger.js';
-import { initDb } from './core/db.js';
+import { initDb } from './db/index.js';
 import { eventBus } from './core/eventBus.js';
 import { BotManager } from './bots/manager.js';
 import { ModuleRegistry } from './modules/registry.js';
@@ -11,23 +11,17 @@ import { encrypt } from './core/crypto.js';
 import { syncAllGuildCommands, syncGuildCommands } from './core/commandSync.js';
 
 async function main() {
-  /* ── 1. Инициализация ─────────────────────────────── */
-  const db = initDb(config.DATABASE_PATH);
+  const db = initDb(config.DATABASE_PATH, logger);
   const botManager = new BotManager({ db, logger, eventBus });
   const registry = new ModuleRegistry({ db, logger, eventBus, botManager });
 
-  /* ── 2. Восстановление ботов и серверов ──────────── */
   await botManager.restoreAll();
   await ensureMainBot({ db, botManager });
   await syncGuildsOnStartup({ db, botManager, logger });
 
-  /* ── 3. Загрузка модулей ─────────────────────────── */
   await registry.load();
-
-  /* ── 4. Регистрация slash-команд ─────────────────── */
   await syncAllGuildCommands({ db, botManager, logger });
 
-  /* ── 5. Dispatch событий в модули ────────────────── */
   const forwarded = [
     'guildMemberAdd',
     'guildMemberRemove',
@@ -41,11 +35,17 @@ async function main() {
     });
   }
 
-  /* ── 6. Запись событий для статистики ────────────── */
+  /* События сообщений — сохраняем channelId для статистики каналов */
   eventBus.on('messageCreate', ({ botId, guildId, message }) => {
     if (!guildId || message.author.bot) return;
     try {
-      db.addEvent({ botId, guildId, userId: message.author.id, type: 'message' });
+      db.addEvent({
+        botId,
+        guildId,
+        userId: message.author.id,
+        type: 'message',
+        meta: { channelId: message.channel.id },
+      });
     } catch (err) {
       logger.warn({ err }, 'addEvent message failed');
     }
@@ -65,11 +65,7 @@ async function main() {
     } catch {}
   });
 
-  /* ⚡ НОВОЕ: голосовая активность ─────────────────────
-   * Записываем событие `voice_join` только при переходе
-   * «не в голосе → в голосе». Переключение между
-   * каналами и выход не считаются новым входом.
-   */
+  /* Голос: событие voice_join с channelId (используется в топе каналов, если понадобится) */
   eventBus.on('voiceStateUpdate', ({ botId, guildId, oldState, newState }) => {
     if (!guildId) return;
 
@@ -79,7 +75,6 @@ async function main() {
     const wasInVoice = !!oldState.channelId;
     const isInVoice  = !!newState.channelId;
 
-    // Только реальный вход: не было канала → появился канал
     if (!wasInVoice && isInVoice) {
       try {
         db.addEvent({
@@ -90,12 +85,7 @@ async function main() {
           meta: { channelId: newState.channelId },
         });
         logger.debug(
-          {
-            botId,
-            guildId,
-            userId: member.id,
-            channelId: newState.channelId,
-          },
+          { botId, guildId, userId: member.id, channelId: newState.channelId },
           'voice_join recorded',
         );
       } catch (err) {
@@ -104,12 +94,11 @@ async function main() {
     }
   });
 
-  /* ── 7. Слэш-команды: статистика + ответ ──────────── */
+  /* Slash-команды: логируем использование + отвечаем кастомной командой */
   eventBus.on('interactionCreate', async ({ botId, guildId, interaction }) => {
     if (!guildId) return;
     if (!interaction.isChatInputCommand?.()) return;
 
-    // Записываем использование команды
     try {
       db.addEvent({
         botId,
@@ -122,7 +111,6 @@ async function main() {
       logger.warn({ err }, 'addEvent command failed');
     }
 
-    // Проверяем кастомную команду и отвечаем
     const customs = db.getCustomCommands(botId, guildId);
     const custom = customs.find(
       (c) => c.enabled && c.name.toLowerCase() === interaction.commandName,
@@ -132,28 +120,20 @@ async function main() {
       try {
         if (interaction.deferred || interaction.replied) return;
         await interaction.reply({
-          content: custom.response || '✅ Команда выполнена',
+          content: custom.response || '✏ Команда выполняется',
           allowedMentions: { parse: [] },
         });
         logger.info(
-          {
-            botId,
-            guildId,
-            command: interaction.commandName,
-            userId: interaction.user.id,
-          },
+          { botId, guildId, command: interaction.commandName, userId: interaction.user.id },
           'custom command replied',
         );
       } catch (err) {
-        logger.warn(
-          { err, command: interaction.commandName },
-          'custom command reply failed',
-        );
+        logger.warn({ err, command: interaction.commandName }, 'custom command reply failed');
       }
     }
   });
 
-  /* ── 8. Жизненный цикл серверов ──────────────────── */
+  /* Гильдии */
   eventBus.on('guildCreate', async ({ client, guild }) => {
     db.upsertGuild({
       id: guild.id,
@@ -179,13 +159,13 @@ async function main() {
     logger.info({ botId: client.user.id, guildId: guild.id }, 'guild removed');
   });
 
-  /* ── 9. HTTP-сервер ──────────────────────────────── */
+  /* HTTP-сервер */
   const app = createApp({ db, botManager, registry, logger });
   const server = app.listen(config.PORT, () => {
-    logger.info(`🌐 API на http://localhost:${config.PORT}`);
+    logger.info(`🚀 API на http://localhost:${config.PORT}`);
   });
 
-  /* ── 10. Graceful shutdown ───────────────────────── */
+  /* Graceful shutdown */
   const stop = async () => {
     logger.info('shutting down...');
     server.close();
@@ -195,10 +175,6 @@ async function main() {
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
 }
-
-/* ============================================================
-   ХЕЛПЕРЫ
-   ============================================================ */
 
 async function ensureMainBot({ db, botManager }) {
   const existing = db.getMainBot();

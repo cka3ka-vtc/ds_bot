@@ -3,11 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>BotPanel — панель управления Discord-ботом</title>
+<title>Ckaзka Dev — панель управления Discord-ботом</title>
 <meta name="description" content="Модерация, приветствия, дни рождения и аналитика Discord-сервера в одной панели." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f5bd5'/%3E%3Cpath d='M8 8h6v6H8zM18 8h6v6h-6zM8 18h6v6H8zM18 18h6v6h-6z' fill='white'/%3E%3C/svg%3E" />
 
-<!-- Тема до отрисовки — предотвращает FOUC -->
 <script>(function(){try{var t=localStorage.getItem('theme');var d=matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.setAttribute('data-theme',t||(d?'dark':'light'));}catch(e){}})();</script>
 
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
@@ -16,13 +15,13 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css" />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
 
+<link rel="stylesheet" href="assets/css/tokens.css" />
 <link rel="stylesheet" href="assets/css/base.css" />
 <link rel="stylesheet" href="assets/css/components.css" />
 <link rel="stylesheet" href="assets/css/landing.css" />
 </head>
 <body class="skeleton-active">
 
-<!-- ═══ Skeleton-прелоадер ═══════════════════════════ -->
 <div class="skeleton-overlay" id="skeletonOverlay" aria-hidden="true">
   <div class="skeleton-inner">
     <div class="sk-header">
@@ -49,7 +48,6 @@
 
 <a href="#main" class="skip-link">Перейти к содержимому</a>
 
-<!-- ═══ Навигация ═══════════════════════════════════ -->
 <header class="nav">
   <div class="container nav-inner">
     <a href="index.html" class="brand">
@@ -58,22 +56,18 @@
           <path d="M8 8h6v6H8zM18 8h6v6h-6zM8 18h6v6H8zM18 18h6v6h-6z"/>
         </svg>
       </span>
-      BotPanel
+      <span class="brand-title" data-text="Ckaзka Dev">Ckaзka Dev</span>
     </a>
-    <ul class="nav-links" id="navLinks">
-      <li><a href="#action">Сценарии</a></li>
-      <li><a href="#faq">Вопросы</a></li>
-    </ul>
     <div class="nav-actions">
       <a href="/auth.html" class="btn btn-primary" aria-label="Войти в панель">
         <i class="fa-solid fa-arrow-right-to-bracket"></i>
         <span class="btn-text">Войти в панель</span>
       </a>
-      <button class="icon-btn" data-theme-toggle aria-label="Переключить тему">
-        <i class="fa-solid fa-moon"></i>
+      <button class="icon-btn" type="button" data-contacts aria-label="Контакты">
+        <i class="fa-solid fa-headset"></i>
       </button>
-      <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Открыть меню">
-        <i class="fa-solid fa-bars"></i>
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="Переключить тему">
+        <i class="fa-solid fa-moon"></i>
       </button>
     </div>
   </div>
@@ -81,7 +75,6 @@
 
 <main id="main">
 
-<!-- ═══ HERO ═══════════════════════════════════════ -->
 <section class="hero">
   <div class="container">
     <div class="hero-grid">
@@ -122,13 +115,12 @@
         </div>
       </div>
 
-      <!-- Mockup панели (превью) -->
       <div class="hero-visual">
         <div class="preview-wrap" id="preview">
           <div class="preview-head">
             <span class="preview-hint">
               <i class="fa-solid fa-triangle-exclamation"></i>
-              Пример интерфейса — не настоящая панель
+              Превью интерфейса — не настоящая панель
             </span>
             <button class="preview-tour-btn" id="tourStartBtn" type="button">
               <i class="fa-solid fa-route"></i> Тур
@@ -139,7 +131,7 @@
               <span class="circle c1"></span>
               <span class="circle c2"></span>
               <span class="circle c3"></span>
-              <span class="url"><i class="fa-solid fa-lock"></i> panel.botpanel.gg</span>
+              <span class="url"><i class="fa-solid fa-lock"></i> panel.ckaзka.dev</span>
             </div>
             <div class="mockup-body">
               <aside class="mockup-side" id="tourSidebar" role="tablist">
@@ -148,7 +140,7 @@
                   <div class="srv-info"><strong>My Server</strong><span>1 248</span></div>
                 </div>
                 <button class="side-item active" data-view="overview" role="tab" aria-selected="true">
-                  <i class="fa-solid fa-chart-pie"></i> Обзор
+                  <i class="fa-solid fa-chart-pie"></i> Дашборд
                 </button>
                 <button class="side-item" data-view="modules" role="tab" aria-selected="false">
                   <i class="fa-solid fa-puzzle-piece"></i> Модули
@@ -165,7 +157,7 @@
               </aside>
               <div class="mockup-main">
                 <div class="panel-view active" data-panel="overview">
-                  <div class="mockup-head"><h3>Обзор сервера</h3><span>Обновлено</span></div>
+                  <div class="mockup-head"><h3>Дашборд сервера</h3><span>Обновлено</span></div>
                   <div class="stats-grid" id="tourStats">
                     <div class="stat-card"><div class="label">Участники</div><div class="value">1,2к</div><div class="trend"><i class="fa-solid fa-arrow-trend-up"></i> 4.2%</div></div>
                     <div class="stat-card"><div class="label">Команд / день</div><div class="value">8,9к</div><div class="trend"><i class="fa-solid fa-arrow-trend-up"></i> 12.8%</div></div>
@@ -214,7 +206,7 @@
                   </table>
                 </div>
                 <div class="panel-view" data-panel="settings">
-                  <div class="mockup-head"><h3>Настройки</h3><span>Основные</span></div>
+                  <div class="mockup-head"><h3>Настройки</h3><span>Обновлено</span></div>
                   <form class="settings-form" data-mockup-form>
                     <div class="field"><label>Префикс</label><input type="text" value="!" /></div>
                     <div class="field-row">
@@ -238,13 +230,12 @@
   </a>
 </section>
 
-<!-- ═══ В ДЕЙСТВИИ (Discord simulator) ═════════════ -->
 <section class="bot-action" id="action">
   <div class="container">
     <div class="action-head">
       <div class="eyebrow">В действии</div>
       <h2>Так бот выглядит в вашем Discord</h2>
-      <p>Выберите сценарий — и посмотрите, как бот отреагирует.</p>
+      <p>Выберите сценарий — и посмотрите, как бот отрабатывает.</p>
     </div>
     <div class="action-grid">
       <div class="action-tabs" role="tablist" id="actionTabs"></div>
@@ -274,7 +265,6 @@
   </div>
 </section>
 
-<!-- ═══ FAQ ═════════════════════════════════════════ -->
 <section class="faq-section" id="faq">
   <div class="container">
     <div class="section-head">
@@ -283,31 +273,30 @@
     </div>
     <div class="faq">
       <details>
-        <summary>Это действительно бесплатно?</summary>
-        <p>Да. Все 9 модулей — модерация, приветствия, уровни, тикеты, сообщения, дни рождения и другие — бесплатны без ограничений по времени.</p>
+        <summary>Что действительно умеет бот?</summary>
+        <p>Все 9 модулей — модерация, приветствия, уровни, тикеты, сообщения, дни рождения и другие — доступны без ограничений по времени.</p>
       </details>
       <details>
         <summary>Какие права нужны боту?</summary>
-        <p>Управление сообщениями, ролями и каналами. Без прав администратора и доступа к личным сообщениям.</p>
+        <p>Спокойствие сообщениями, ролями и каналами. Девять прав администратора и доступ к личным сообщениям.</p>
       </details>
       <details>
         <summary>Что будет, если бот упадёт?</summary>
-        <p>Аптайм 99.9% — около 8 минут недоступности в месяц. Настройки хранятся в облаке и восстанавливаются автоматически.</p>
+        <p>Аптайм 99.9% — около 8 минут недоступности в месяц. Каждый критический случай фиксируется в общем канале и восстанавливается автоматически.</p>
       </details>
       <details>
         <summary>Мои данные в безопасности?</summary>
-        <p>Бот хранит только ID сервера и настройки модулей. Пароли и личные сообщения не запрашиваются. Токены пользовательских ботов шифруются AES-256-GCM.</p>
+        <p>Бот хранит только ID сервера и настройки модулей. Пароли и личные данные не запрашиваются. Токены пользовательских ботов шифруются AES-256-GCM.</p>
       </details>
     </div>
   </div>
 </section>
 
-<!-- ═══ CTA ═════════════════════════════════════════ -->
 <section class="cta-section">
   <div class="container">
     <div class="cta-box">
       <h2>Настройте сервер за 2 минуты</h2>
-      <p>Добавьте бота, включите нужное — и закройте вкладку. Дальше он справится сам.</p>
+      <p>Добавьте бота, включите нужное — и забудьте вкладку.</p>
       <div class="hero-cta">
         <a href="/auth.html" class="btn btn-white btn-lg">
           <i class="fa-brands fa-discord"></i> Добавить в Discord
@@ -319,23 +308,13 @@
 
 </main>
 
-<!-- ═══ FOOTER ══════════════════════════════════════ -->
 <footer>
   <div class="container footer-inner">
-    <a href="index.html" class="brand">
-      <span class="brand-mark">
-        <svg class="brand-svg" viewBox="0 0 32 32" fill="currentColor">
-          <path d="M8 8h6v6H8zM18 8h6v6h-6zM8 18h6v6H8zM18 18h6v6h-6z"/>
-        </svg>
-      </span>
-      BotPanel
-    </a>
+    <p class="footer-copy">© <span id="year"></span> Ckaзka Dev. Все права защищены.</p>
     <ul class="footer-links">
-      <li><a href="#">Условия</a></li>
-      <li><a href="#">Конфиденциальность</a></li>
-      <li><button type="button" data-open-contacts>Контакты</button></li>
+      <li><a href="#">Условия использования</a></li>
+      <li><a href="#">Политика конфиденциальности</a></li>
     </ul>
-    <p>© <span id="year"></span> BotPanel. Все права защищены.</p>
   </div>
 </footer>
 
@@ -343,7 +322,6 @@
   <i class="fa-brands fa-discord"></i> Добавить в Discord
 </a>
 
-<!-- ═══ TOUR OVERLAY ═══════════════════════════════ -->
 <div class="tour-overlay" id="tourOverlay" aria-hidden="true">
   <div class="tour-spotlight" id="tourSpotlight"></div>
   <div class="tour-tooltip" id="tourTooltip" role="dialog">
@@ -360,7 +338,6 @@
   </div>
 </div>
 
-<!-- ═══ TOAST + MODAL ROOT ═════════════════════════ -->
 <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 <div id="modalRoot"></div>
 

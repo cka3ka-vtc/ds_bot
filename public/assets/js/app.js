@@ -8,13 +8,13 @@ import { toast } from './core/toast.js';
 import { renderSidebar } from './components/sidebar.js';
 import { renderTopbar } from './components/topbar.js';
 
-import overview from './views/overview.js';
+import overview from './views/overview/index.js';
 import modules from './views/modules.js';
 import bots from './views/bots.js';
-import moderation from './views/moderation.js';
-import commands from './views/commands.js';
+import moderation from './views/moderation/index.js';
+import commands from './views/commands/index.js';
 import members from './views/members.js';
-import settings from './views/settings.js';
+import settings from './views/settings/index.js';
 import servers from './views/servers.js';
 
 async function boot() {
@@ -50,10 +50,12 @@ async function boot() {
   }
 
   initTheme();
-  initGlobalTooltips();   // ⚡ ФИКС #2: глобальный тултип для kpi-hint и др.
+  initGlobalTooltips();
 
   renderSidebar(document.getElementById('sidebar'));
   renderTopbar(document.getElementById('topbar'));
+
+  installGlobalUiHandlers();
 
   const router = new Router({
     container: document.getElementById('viewRoot'),
@@ -75,6 +77,21 @@ async function boot() {
       const botId = store.get('activeBotId');
       if (botId && value) await refreshModulesCount(botId, value);
       router.rerender();
+    }
+  });
+}
+
+/** Глобальные клики: мобильное меню, оверлей сайдбара */
+function installGlobalUiHandlers() {
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#menuToggle')) {
+      document.getElementById('sidebar')?.classList.toggle('open');
+      document.getElementById('sidebarOverlay')?.classList.toggle('show');
+      return;
+    }
+    if (e.target.closest('#sidebarOverlay')) {
+      document.getElementById('sidebar')?.classList.remove('open');
+      document.getElementById('sidebarOverlay')?.classList.remove('show');
     }
   });
 }

@@ -1,6 +1,5 @@
 // public/assets/js/core/utils.js
 
-/** Склонения русских существительных */
 export function pluralize(n, one, few, many) {
   n = Math.abs(Number(n) || 0);
   const m = n % 10;
@@ -10,7 +9,6 @@ export function pluralize(n, one, few, many) {
   return many;
 }
 
-/** Готовые словари */
 export const WORD = {
   server:  (n) => pluralize(n, 'сервер', 'сервера', 'серверов'),
   member:  (n) => pluralize(n, 'участник', 'участника', 'участников'),
@@ -21,18 +19,15 @@ export const WORD = {
   bot:     (n) => pluralize(n, 'бот', 'бота', 'ботов'),
 };
 
-/** С числом: "5 серверов" */
 export function plur(n, one, few, many) {
   return `${n} ${pluralize(n, one, few, many)}`;
 }
 
-/** Разделитель тысяч: 1248 → "1 248" */
 export function fmtNum(n) {
   n = Number(n) || 0;
   return n.toLocaleString('ru-RU');
 }
 
-/** Unix секунды → "25.10.2026" */
 export function fmtDate(unixSec) {
   if (!unixSec) return '—';
   const d = new Date(unixSec * 1000);
@@ -41,14 +36,12 @@ export function fmtDate(unixSec) {
   return `${day}.${month}.${d.getFullYear()}`;
 }
 
-/** HTML escape */
 export function escapeHtml(s) {
-  return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;',
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
 }
 
-/** "5 мин назад" */
 export function timeAgo(unixSec) {
   const diff = Math.floor(Date.now() / 1000) - (unixSec || 0);
   if (diff < 60) return 'только что';
@@ -57,11 +50,27 @@ export function timeAgo(unixSec) {
   return `${Math.floor(diff / 86400)} д назад`;
 }
 
-/** "1 ч 20 мин" / "3 д 4 ч" */
 export function fmtUptime(seconds) {
   seconds = Math.round(seconds || 0);
   if (seconds < 60) return `${seconds} сек`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)} мин`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)} ч ${Math.floor((seconds % 3600) / 60)} мин`;
   return `${Math.floor(seconds / 86400)} д ${Math.floor((seconds % 86400) / 3600)} ч`;
+}
+
+/* ---------- Discord helpers ---------- */
+export function initials(name = '') {
+  return String(name).trim().split(/\s+/).map((w) => w[0]).filter(Boolean).join('').slice(0, 2).toUpperCase() || '?';
+}
+
+export function guildIconUrl(guildId, iconHash, size = 128) {
+  if (!guildId || !iconHash) return null;
+  const ext = iconHash.startsWith('a_') ? 'gif' : 'png';
+  return `https://cdn.discordapp.com/icons/${guildId}/${iconHash}.${ext}?size=${size}`;
+}
+
+export function userAvatarUrl(userId, avatarHash, size = 64) {
+  if (!userId || !avatarHash) return null;
+  const ext = avatarHash.startsWith('a_') ? 'gif' : 'png';
+  return `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.${ext}?size=${size}`;
 }

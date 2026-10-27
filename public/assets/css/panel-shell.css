@@ -1,0 +1,50 @@
+/* ============================================================
+   Panel · shell, topbar, content frame
+   ============================================================ */
+
+.app-shell { display: grid; grid-template-columns: var(--sidebar-w) 1fr; min-height: 100vh; }
+.app-main { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+
+/* Topbar */
+.topbar {
+  position: sticky; top: 0; z-index: 30;
+  height: var(--topbar-h);
+  background: var(--nav-bg);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 20px;
+}
+.topbar-menu {
+  display: none; width: 38px; height: 38px; border-radius: var(--r-md);
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); place-items: center; flex-shrink: 0;
+}
+.topbar-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 15px; font-weight: 700; color: var(--text);
+  margin-right: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.topbar-title .crumb { color: var(--muted); font-weight: 500; font-size: 13px; }
+.topbar-title .crumb::after { content: '/'; margin: 0 6px; opacity: .5; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Content */
+.content { flex: 1; padding: 24px; max-width: 1440px; width: 100%; margin: 0 auto; }
+.view-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; margin-bottom: 20px; flex-wrap: wrap;
+}
+.view-title h1 {
+  font-size: 22px; font-weight: 800; letter-spacing: -.6px;
+  color: var(--text); margin-bottom: 4px;
+}
+.view-title p { font-size: 13.5px; color: var(--muted); }
+.view-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Overlay */
+.sidebar-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(10, 12, 20, .5); z-index: 35;
+}
+.sidebar-overlay.show { display: block; }

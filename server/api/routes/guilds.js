@@ -6,7 +6,7 @@ export function guildsRouter() {
   const router = Router();
   router.use(requireAuth);
 
-  /** GET /api/guilds — серверы бота, где пользователь админ (с presence) */
+  /** GET /api/guilds — доступные гильдии */
   router.get('/', requireBotAccess, async (req, res) => {
     const db = req.app.locals.db;
     const logger = req.app.locals.logger;
@@ -20,7 +20,6 @@ export function guildsRouter() {
     const botGuilds = db.getGuildsForBot(req.bot.id);
     const accessible = botGuilds.filter((g) => userGuilds.has(g.id));
 
-    // ⚡ Параллельно обогащаем данными о presence через Discord API
     const enriched = await Promise.all(
       accessible.map(async (g) => {
         let online = g.online_count ?? null;
@@ -39,7 +38,6 @@ export function guildsRouter() {
             if (!createdAt && fetched.createdTimestamp) {
               createdAt = Math.floor(fetched.createdTimestamp / 1000);
             }
-            // Обновляем кеш в БД (только presence и memberCount)
             if (online !== g.online_count || memberCount !== g.member_count) {
               db.upsertGuild({
                 id: g.id,
@@ -72,11 +70,7 @@ export function guildsRouter() {
     );
 
     logger.info(
-      {
-        userId: req.user.id,
-        botId: req.bot.id,
-        accessibleCount: enriched.length,
-      },
+      { userId: req.user.id, botId: req.bot.id, accessibleCount: enriched.length },
       'GET /api/guilds',
     );
 
@@ -109,6 +103,33 @@ export function guildsRouter() {
     } catch (err) {
       req.app.locals.logger.error({ err }, 'failed to fetch roles');
       res.status(500).json({ error: 'roles_fetch_failed' });
+    }
+  });
+
+  /** GET /api/guilds/channels — текстовые каналы сервера (для пикера логов) */
+  router.get('/channels', requireBotAccess, async (req, res) => {
+    const inst = req.app.locals.botManager.get(req.bot.id);
+    if (!inst?.client) return res.status(503).json({ error: 'bot_offline' });
+
+    try {
+      const guild = inst.client.guilds.cache.get(req.query.guildId)
+        || await inst.client.guilds.fetch(req.query.guildId);
+      if (!guild) return res.status(404).json({ error: 'guild_not_found' });
+
+      const channels = guild.channels.cache
+        .filter((c) => c.isTextBased?.())
+        .sort((a, b) => (a.position || 0) - (b.position || 0))
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          parentId: c.parentId || null,
+          parentName: c.parent?.name || null,
+        }));
+
+      res.json(channels);
+    } catch (err) {
+      req.app.locals.logger.error({ err }, 'failed to fetch channels');
+      res.status(500).json({ error: 'channels_fetch_failed' });
     }
   });
 

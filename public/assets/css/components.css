@@ -1,41 +1,150 @@
 /* ============================================================
-   КОМПОНЕНТЫ
+   Shared UI kit
+   brand · buttons · forms · badges · cards · modal
+   toast · tooltip · chart-filters · contact-list · empty-state · tabs
    ============================================================ */
 
-/* ⚠️ Глобально: атрибут hidden всегда скрывает, любой display переопределяется */
-[hidden] { display: none !important; }
-
-/* ── Brand ──────────────────────────────────────────────── */
+/* Brand */
 .brand {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 12px;
   font-weight: 800; font-size: 20px; letter-spacing: -.4px;
   text-decoration: none; color: var(--text); flex-shrink: 0;
 }
-.brand:hover { text-decoration: none; color: var(--text); }
+a.brand:hover { text-decoration: none; color: var(--text); }
+
 .brand-mark {
+  position: relative;
   width: 36px; height: 36px; border-radius: var(--r-lg);
   background: var(--accent-gradient);
   display: grid; place-items: center; color: #fff;
-  box-shadow: 0 8px 20px rgba(79, 91, 213, .35); flex-shrink: 0;
+  box-shadow: 0 8px 20px rgba(79, 91, 213, .35);
+  flex-shrink: 0; overflow: hidden;
 }
-.brand-svg { width: 20px; height: 20px; display: block; }
+.brand-mark::before {
+  content: ''; position: absolute; inset: -2px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg, transparent 120deg,
+    #7b61ff 180deg, #ec4899 240deg, #f59e0b 300deg,
+    transparent 360deg
+  );
+  opacity: 0; transition: opacity .4s;
+  animation: brandMarkSpin 4s linear infinite;
+  z-index: -1;
+}
+.brand-mark:hover::before { opacity: 1; }
 
-/* ── Icon button ────────────────────────────────────────── */
+/* SVG icon — larger, subtle float only (no mark pulse) */
+.brand-svg {
+  width: 26px; height: 26px;
+  display: block;
+  animation: brandIconPulse 4.5s ease-in-out infinite;
+  transition: transform .55s cubic-bezier(.34, 1.56, .64, 1);
+}
+.brand:hover .brand-svg {
+  transform: rotate(180deg) scale(1.15);
+  animation-play-state: paused;
+}
+
+@keyframes brandMarkPulse {
+  0%, 100% { box-shadow: 0 8px 20px rgba(79, 91, 213, .35); }
+  50%      { box-shadow: 0 8px 30px rgba(123, 97, 255, .55), 0 0 24px rgba(79, 91, 213, .35); }
+}
+@keyframes brandMarkSpin {
+  to { transform: rotate(360deg); }
+}
+@keyframes brandIconPulse {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50%      { transform: scale(1.08) rotate(3deg); }
+}
+
+/* Wordmark with glitch (calm colors) */
+.brand-title {
+  position: relative; display: inline-block;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  font-weight: 800;
+  letter-spacing: -.4px;
+  white-space: nowrap;
+  animation: textGlitch 8s ease-in-out infinite;
+}
+
+@keyframes textGlitch {
+  0%, 90%, 100% { transform: translate(0); text-shadow: none; }
+  91% {
+    transform: translate(-1px, 1px);
+    text-shadow: 1.5px 0 rgba(168, 139, 250, .6), -1.5px 0 rgba(96, 165, 250, .6);
+  }
+  92% {
+    transform: translate(1px, -1px);
+    text-shadow: -1.5px 0 rgba(168, 139, 250, .6), 1.5px 0 rgba(96, 165, 250, .6);
+  }
+  93% { transform: translate(0); text-shadow: none; }
+  95% {
+    transform: translate(1px, 0);
+    text-shadow: 1px 0 rgba(168, 139, 250, .5), -1px 0 rgba(96, 165, 250, .5);
+  }
+  96% { transform: translate(0); text-shadow: none; }
+}
+
+/* Icon button: gradient fill + bouncy scale + ripple (NO rotation, NO size jump) */
 .icon-btn {
-  width: 40px; height: 40px; border-radius: var(--r-lg);
-  background: var(--surface); border: 1px solid var(--border);
-  color: var(--text); cursor: pointer; font-size: 15px;
+  position: relative;
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 15px;
   display: grid; place-items: center;
-  transition: all .2s; flex-shrink: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: color .3s, border-color .3s, box-shadow .35s;
+}
+.icon-btn::before {
+  content: ''; position: absolute; inset: 0;
+  background: var(--accent-gradient);
+  opacity: 0;
+  transform: scale(.4) rotate(-45deg);
+  transition: opacity .35s, transform .5s cubic-bezier(.22, 1, .36, 1);
+  border-radius: inherit;
+  z-index: 0;
+}
+.icon-btn::after {
+  content: ''; position: absolute; inset: -4px;
+  border-radius: inherit;
+  border: 2px solid var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.icon-btn i {
+  position: relative; z-index: 2;
+  transition: transform .55s cubic-bezier(.34, 1.56, .64, 1);
 }
 .icon-btn:hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 8px 22px rgba(79, 91, 213, .38), 0 0 0 3px var(--accent-soft);
 }
+.icon-btn:hover::before {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+}
+.icon-btn:hover i { transform: scale(1.28); }
+.icon-btn:hover::after { animation: iconBtnRipple 1.5s ease-out infinite; }
+.icon-btn:active i { transform: scale(.92); transition-duration: .15s; }
 .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* ── Buttons ────────────────────────────────────────────── */
+@keyframes iconBtnRipple {
+  0% { opacity: .55; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.35); }
+}
+
+/* Buttons */
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
   gap: 6px; padding: 8px 14px;
@@ -59,20 +168,32 @@
 }
 .btn-danger { background: var(--red); color: #fff; }
 .btn-danger:hover { background: #b91c1c; color: #fff; text-decoration: none; }
-.btn-white { background: #fff; color: var(--accent); box-shadow: 0 8px 22px rgba(0,0,0,.15); }
+.btn-white {
+  background: #fff; color: var(--accent);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .15);
+}
 .btn-white:hover { background: #f2f4ff; color: var(--accent); text-decoration: none; }
 .btn-lg { padding: 14px 26px; font-size: 15px; border-radius: var(--r-xl); }
 .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: var(--r-sm); }
 .btn-icon { padding: 6px; min-width: 30px; min-height: 30px; }
 .btn-icon i { font-size: 12px; }
-.btn-link {
-  background: none; border: none; color: var(--accent);
-  font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 0;
-  display: inline-flex; align-items: center; gap: 4px; transition: gap .15s;
-}
-.btn-link:hover { gap: 6px; }
 
-/* ── Form ───────────────────────────────────────────────── */
+/* Small link-button */
+.btn-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 6px; border-radius: var(--r-xs);
+  background: transparent; border: none;
+  color: var(--text-soft);
+  font-size: 12px; font-weight: 500;
+  text-decoration: none; cursor: pointer;
+  white-space: nowrap; font-family: inherit; line-height: 1.3;
+  transition: color .15s, gap .15s;
+}
+.btn-link:hover { color: var(--accent); gap: 6px; text-decoration: none; }
+.btn-link i { font-size: 9px; opacity: .65; transition: opacity .15s; }
+.btn-link:hover i { opacity: 1; }
+
+/* Form */
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
 .form-row.single { grid-template-columns: 1fr; }
 .form-field { display: flex; flex-direction: column; gap: 5px; }
@@ -104,7 +225,7 @@
 .form-toggle-label span { font-size: 12px; color: var(--muted); }
 .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
 
-/* ── Toggle ─────────────────────────────────────────────── */
+/* Toggle */
 .toggle {
   position: relative; width: 36px; height: 20px;
   border-radius: 999px; background: var(--border-strong);
@@ -121,7 +242,7 @@
 .toggle.on::after { transform: translateX(16px); }
 .toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* ── Badges ─────────────────────────────────────────────── */
+/* Badges */
 .badge {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 2px 8px; border-radius: 5px;
@@ -145,7 +266,7 @@
 .role-badge.member { background: var(--surface-3);   color: var(--muted); }
 .role-badge.bot    { background: var(--blue-soft);   color: var(--blue); }
 
-/* ── Search ─────────────────────────────────────────────── */
+/* Search */
 .search-input { position: relative; }
 .search-input input {
   width: 100%; padding: 9px 14px 9px 36px;
@@ -163,7 +284,7 @@
   color: var(--muted); font-size: 12px; pointer-events: none;
 }
 
-/* ── Select ─────────────────────────────────────────────── */
+/* Select */
 .select-wrap { position: relative; display: block; }
 .select-wrap::after {
   content: ''; position: absolute; right: 14px; top: 50%;
@@ -185,7 +306,7 @@
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-/* ── Cards ──────────────────────────────────────────────── */
+/* Cards */
 .card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-xl); display: flex; flex-direction: column;
@@ -200,7 +321,7 @@
 .card-sub { font-size: 12px; color: var(--muted); font-weight: 500; }
 .card-body { padding: 18px; flex: 1; }
 
-/* ── Tabs ───────────────────────────────────────────────── */
+/* Tabs */
 .tabs {
   display: flex; gap: 2px; padding: 4px;
   background: var(--surface-2); border: 1px solid var(--border);
@@ -224,54 +345,42 @@
   color: var(--muted);
 }
 
-/* ── Chart filters (⚠️ ИСПРАВЛЕНО: сильный контраст активного) ── */
+/* Chart filters */
 .chart-filters {
-  display: flex; gap: 2px; padding: 3px;
+  display: flex; gap: 4px; padding: 4px;
   background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-md);
 }
 .chart-filter {
-  padding: 6px 12px; border-radius: var(--r-xs);
-  background: none; border: none;
+  padding: 7px 14px; border-radius: var(--r-sm);
+  background: transparent; border: 1px solid transparent;
   font-size: 12px; font-weight: 600; color: var(--text-soft);
-  cursor: pointer; transition: all .15s; white-space: nowrap;
+  cursor: pointer;
+  transition: background .2s, color .2s, border-color .2s, box-shadow .2s;
+  white-space: nowrap;
 }
-.chart-filter:hover { color: var(--text); }
+.chart-filter:hover { color: var(--text); background: var(--surface); }
 .chart-filter.active {
-  background: var(--accent);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(79, 91, 213, .35);
+  background: var(--accent); color: #fff; border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(79, 91, 213, .4);
   font-weight: 700;
 }
 
-/* ⚠️ ИСПРАВЛЕНО: empty-state всегда по центру */
+/* Empty state */
 .empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 24px;
-  text-align: center;
-  color: var(--muted);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 48px 24px; text-align: center; color: var(--muted);
 }
 .empty-state i {
-  font-size: 36px;
-  color: var(--border-strong);
-  margin: 0 0 14px 0;
-  display: block;
-  line-height: 1;
+  font-size: 36px; color: var(--border-strong);
+  margin: 0 0 14px 0; display: block; line-height: 1;
 }
-.empty-state strong {
-  display: block; font-size: 14px; color: var(--text); margin-bottom: 4px;
-}
-.empty-state span {
-  font-size: 13px; color: var(--muted);
-  max-width: 320px; line-height: 1.5;
-}
-.empty-state .btn,
-.empty-state a.btn { margin-top: 16px; }
+.empty-state strong { display: block; font-size: 14px; color: var(--text); margin-bottom: 4px; }
+.empty-state span { font-size: 13px; color: var(--muted); max-width: 320px; line-height: 1.5; }
+.empty-state .btn, .empty-state a.btn { margin-top: 16px; }
 
-/* ── Modal ──────────────────────────────────────────────── */
+/* Modal */
 .modal {
   position: fixed; inset: 0; z-index: 3000;
   display: flex; align-items: center; justify-content: center;
@@ -285,8 +394,7 @@
 .modal-content {
   position: relative;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-2xl);
-  box-shadow: var(--shadow-xl);
+  border-radius: var(--r-2xl); box-shadow: var(--shadow-xl);
   max-width: 560px; width: 100%; max-height: 90vh;
   overflow-y: auto; padding: 24px;
 }
@@ -308,7 +416,7 @@
 }
 .modal-close:hover { background: var(--surface-3); color: var(--text); }
 
-/* ── Contacts (для модалки «Наши контакты») ─────────────── */
+/* Contact list */
 .contact-list { display: flex; flex-direction: column; gap: 10px; }
 .contact-link {
   display: flex; align-items: center; gap: 14px;
@@ -331,7 +439,7 @@
 }
 .contact-link span { font-size: 13px; color: var(--muted); }
 
-/* ── Toast ──────────────────────────────────────────────── */
+/* Toast */
 .toast-stack {
   position: fixed; bottom: 24px; right: 24px;
   display: flex; flex-direction: column; gap: 8px;
@@ -356,7 +464,7 @@
 @keyframes toastIn  { from { opacity: 0; transform: translateX(40px); } }
 @keyframes toastOut { to   { opacity: 0; transform: translateX(40px); } }
 
-/* ── Tooltip ─────────────────────────────────────────────── */
+/* Tooltip */
 .global-tooltip {
   position: fixed;
   background: var(--text);

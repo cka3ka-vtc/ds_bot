@@ -1,16 +1,6 @@
 // public/assets/js/views/servers.js
 import { store } from '../core/store.js';
-import { escapeHtml, fmtNum, fmtDate, WORD } from '../core/utils.js';
-
-function guildIconUrl(guildId, iconHash) {
-  if (!guildId || !iconHash) return null;
-  const ext = iconHash.startsWith('a_') ? 'gif' : 'png';
-  return `https://cdn.discordapp.com/icons/${guildId}/${iconHash}.${ext}?size=128`;
-}
-
-function initials(name = '') {
-  return name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || 'S';
-}
+import { escapeHtml, fmtNum, fmtDate, WORD, initials, guildIconUrl } from '../core/utils.js';
 
 export default {
   async render(container) {
@@ -20,11 +10,10 @@ export default {
     container.innerHTML = `
       <div class="view-head">
         <div class="view-title">
-          <h1>Выберите сервер</h1>
-          <p>Управляйте ботом на серверах, где вы являетесь администратором</p>
+          <h1>Список серверов</h1>
+          <p>Справа доступны только серверы, где вы администратор</p>
         </div>
       </div>
-
       ${guilds.length ? `
         <div class="servers-toolbar">
           <div class="search-input" style="flex:1;max-width:420px;">
@@ -42,7 +31,7 @@ export default {
         <div class="empty-state">
           <i class="fa-brands fa-discord"></i>
           <strong>Нет доступных серверов</strong>
-          <span>Добавьте бота на сервер, где у вас есть права администратора</span>
+          <span>Добавьте бота на сервер, где у вас есть администраторские права</span>
           <a href="/auth/discord/bot-invite" class="btn btn-primary">
             <i class="fa-brands fa-discord"></i> Добавить бота на сервер
           </a>
@@ -80,19 +69,11 @@ export default {
   },
 
   _card(g, active) {
-    const url = guildIconUrl(g.id, g.icon);
+    const url = guildIconUrl(g.id, g.icon, 128);
     const avatar = url
       ? `<img src="${url}" alt="" loading="lazy">`
       : `<span class="avatar-fallback">${initials(g.name)}</span>`;
 
-    const members = fmtNum(g.memberCount || 0);
-    const online = g.online != null ? fmtNum(g.online) : '—';
-    const created = g.createdAt ? fmtDate(g.createdAt) : '—';
-    const badge = active
-      ? '<span class="badge online">Активен</span>'
-      : '<span class="badge offline">Не выбран</span>';
-
-    // ⚡ is-active убран — не мешает hover-анимации
     return `
       <button type="button"
               class="server-card"
@@ -109,20 +90,22 @@ export default {
         </div>
         <div class="server-card-stats">
           <div class="server-stat">
-            <span class="server-stat-value">${members}</span>
+            <span class="server-stat-value">${fmtNum(g.memberCount || 0)}</span>
             <span class="server-stat-label">Участников</span>
           </div>
           <div class="server-stat">
-            <span class="server-stat-value">${online}</span>
+            <span class="server-stat-value">${g.online != null ? fmtNum(g.online) : '—'}</span>
             <span class="server-stat-label">Онлайн</span>
           </div>
           <div class="server-stat">
-            <span class="server-stat-value">${created}</span>
+            <span class="server-stat-value">${g.createdAt ? fmtDate(g.createdAt) : '—'}</span>
             <span class="server-stat-label">Создан</span>
           </div>
         </div>
         <div class="server-card-footer">
-          ${badge}
+          ${active
+            ? '<span class="badge online">Выбран</span>'
+            : '<span class="badge offline">Не выбран</span>'}
           <span class="server-card-cta">
             ${active ? 'Управлять' : 'Выбрать'}
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">

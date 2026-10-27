@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>BotPanel</title>
+<title>Ckaзka Dev — панель управления</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f5bd5'/%3E%3Cpath d='M8 8h6v6H8zM18 8h6v6h-6zM8 18h6v6H8zM18 18h6v6h-6z' fill='white'/%3E%3C/svg%3E" />
 <script>(function(){try{var t=localStorage.getItem('theme');var d=matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.setAttribute('data-theme',t||(d?'dark':'light'));}catch(e){}})();</script>
 
@@ -13,9 +13,16 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css" referrerpolicy="no-referrer" />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
 
+<link rel="stylesheet" href="assets/css/tokens.css" />
 <link rel="stylesheet" href="assets/css/base.css" />
 <link rel="stylesheet" href="assets/css/components.css" />
-<link rel="stylesheet" href="assets/css/panel.css" />
+<link rel="stylesheet" href="assets/css/panel-shell.css" />
+<link rel="stylesheet" href="assets/css/panel-sidebar.css" />
+<link rel="stylesheet" href="assets/css/panel-dashboard.css" />
+<link rel="stylesheet" href="assets/css/panel-views.css" />
+<link rel="stylesheet" href="assets/css/panel-tables.css" />
+<link rel="stylesheet" href="assets/css/panel-settings.css" />
+<link rel="stylesheet" href="assets/css/panel-responsive.css" />
 </head>
 <body>
 
@@ -33,7 +40,7 @@
   </div>
 </div>
 
-<div class="toast-stack" id="toastStack"></div>
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
 <div id="modalRoot"></div>
 
 <script type="module" src="assets/js/app.js"></script>
