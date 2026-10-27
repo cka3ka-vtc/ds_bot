@@ -1,308 +1,369 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ckaзka Dev — панель управления</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BotPanel — панель управления Discord-ботом</title>
+<meta name="description" content="Модерация, приветствия, дни рождения и аналитика Discord-сервера в одной панели." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f5bd5'/%3E%3Cpath d='M8 8h6v6H8zM18 8h6v6h-6zM8 18h6v6H8zM18 18h6v6h-6z' fill='white'/%3E%3C/svg%3E" />
 
-<!-- Шрифты -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Тема до отрисовки — предотвращает FOUC -->
+<script>(function(){try{var t=localStorage.getItem('theme');var d=matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.setAttribute('data-theme',t||(d?'dark':'light'));}catch(e){}})();</script>
 
-<!-- Font Awesome 6 -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css">
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
 
-<!-- Базовые стили -->
-<link rel="stylesheet" href="css/base.css">
-<link rel="stylesheet" href="css/components.css">
-<link rel="stylesheet" href="css/layout.css">
-<link rel="stylesheet" href="css/server-select.css">
-
-<!-- Стили секций (появятся в 5b) -->
-<link rel="stylesheet" href="css/sections/rules.css">
-<link rel="stylesheet" href="css/sections/messages.css">
-<link rel="stylesheet" href="css/sections/announcements.css">
-<link rel="stylesheet" href="css/sections/delayed.css">
-<link rel="stylesheet" href="css/sections/autodelete.css">
-<link rel="stylesheet" href="css/sections/birthdays.css">
-<link rel="stylesheet" href="css/sections/dashboard.css">
-<link rel="stylesheet" href="css/sections/bulk.css">
-<link rel="stylesheet" href="css/sections/profiles.css">
-<link rel="stylesheet" href="css/sections/logs.css">
-<link rel="stylesheet" href="css/sections/settings.css">
+<link rel="stylesheet" href="assets/css/base.css" />
+<link rel="stylesheet" href="assets/css/components.css" />
+<link rel="stylesheet" href="assets/css/landing.css" />
 </head>
-<body>
+<body class="skeleton-active">
 
-<!-- ============================================================
-     ЭКРАН ВЫБОРА СЕРВЕРА
-     ============================================================ -->
-<div id="serverSelect" class="server-select" role="main">
-
-  <div class="brand-block">
-    <div class="brand-logo" aria-hidden="true"><i class="fa-solid fa-bolt"></i></div>
-    <div class="brand-text">
-      <span class="brand-name glitch-text" data-text="Ckaзka Dev">Ckaзka Dev</span>
-      <span class="brand-sub">Bot Control</span>
-    </div>
-  </div>
-
-  <div class="server-intro">
-    <h1>Выберите сервер</h1>
-    <p class="server-intro-sub">Панель управления ботом. Все действия — в реальном времени.</p>
-  </div>
-
-  <div class="server-toolbar">
-    <div class="list-search server-search">
-      <span class="list-search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
-      <input type="search" id="serverSearchInput" placeholder="Поиск сервера по названию или ID…" autocomplete="off">
-    </div>
-    <div class="server-stats" id="botStatsBar">
-      <div class="server-stat-pill"><i class="fa-solid fa-server"></i><span id="statGuilds">—</span> серверов</div>
-      <div class="server-stat-pill"><i class="fa-solid fa-users"></i><span id="statUsers">—</span> пользователей</div>
-      <div class="server-stat-pill"><i class="fa-solid fa-signal"></i><span id="statPing">—</span> мс</div>
-      <div class="server-stat-pill"><i class="fa-solid fa-clock"></i><span id="statUptime">—</span></div>
-    </div>
-  </div>
-
-  <div class="server-grid" id="serverGrid" aria-live="polite"></div>
-
-  <footer class="site-footer">
-    <div class="footer-inner">
-      <div class="footer-brand"><strong class="footer-brand-name">© 2026, Ckaзka Dev</strong></div>
-      <div class="footer-sep"></div>
-      <div class="footer-author">
-        <i class="fa-solid fa-user"></i>
-        <span>Разработчик</span>
-        <strong>wD159</strong>
+<!-- ═══ Skeleton-прелоадер ═══════════════════════════ -->
+<div class="skeleton-overlay" id="skeletonOverlay" aria-hidden="true">
+  <div class="skeleton-inner">
+    <div class="sk-header">
+      <div class="sk-logo"></div>
+      <div class="sk-nav-links">
+        <div class="sk-line sk-sm" style="margin:0"></div>
+        <div class="sk-line sk-sm" style="margin:0"></div>
+        <div class="sk-line sk-sm" style="margin:0"></div>
       </div>
-      <a href="https://t.me/wdl59" target="_blank" rel="noopener" class="footer-telegram">
-        <i class="fa-brands fa-telegram"></i>
-        <span>@wdl59</span>
-      </a>
+      <div class="sk-btn"></div>
     </div>
-  </footer>
+    <div class="sk-hero">
+      <div class="sk-text">
+        <div class="sk-line sk-xl"></div>
+        <div class="sk-line sk-xl sk-short"></div>
+        <div class="sk-line sk-md"></div>
+        <div class="sk-line sk-md sk-short"></div>
+        <div class="sk-btn sk-btn-lg"></div>
+      </div>
+      <div class="sk-panel"></div>
+    </div>
+  </div>
 </div>
 
-<!-- ============================================================
-     ОСНОВНАЯ ПАНЕЛЬ
-     ============================================================ -->
-<div id="app" style="display:none;">
+<a href="#main" class="skip-link">Перейти к содержимому</a>
 
-  <!-- SIDEBAR -->
-  <aside class="sidebar" id="sidebar" aria-label="Навигация">
-    <div class="sidebar-brand">
-      <div class="brand-logo" aria-hidden="true"><i class="fa-solid fa-bolt"></i></div>
-      <div class="brand-text">
-        <span class="brand-name glitch-text" data-text="Ckaзka Dev">Ckaзka Dev</span>
-        <span class="brand-sub">Bot Control</span>
-      </div>
-    </div>
-
-    <button type="button" class="current-server" id="currentServerBtn" aria-label="Сменить сервер">
-      <span class="server-glow" aria-hidden="true"></span>
-      <div class="current-server-avatar" id="curAv">G</div>
-      <div class="current-server-info">
-        <strong id="curName">—</strong>
-        <span id="curMembers">—</span>
-        <em class="current-server-hover">← Сменить сервер</em>
-      </div>
-    </button>
-
-    <nav class="nav">
-      <div class="nav-section">
-        <span class="nav-label">Обзор</span>
-        <a href="#/dashboard" class="nav-item" data-view="dashboard">
-          <i class="fa-solid fa-chart-pie"></i><span>Дашборд</span>
-        </a>
-      </div>
-
-      <div class="nav-section">
-        <span class="nav-label">Контент</span>
-        <a href="#/rules" class="nav-item" data-view="rules">
-          <i class="fa-solid fa-file-lines"></i><span>Правила и роли</span>
-        </a>
-        <a href="#/messages" class="nav-item" data-view="messages">
-          <i class="fa-solid fa-comment-dots"></i><span>Сообщения</span>
-        </a>
-        <a href="#/announcements" class="nav-item" data-view="announcements">
-          <i class="fa-solid fa-bullhorn"></i><span>Объявления</span>
-        </a>
-        <a href="#/delayed" class="nav-item" data-view="delayed">
-          <i class="fa-solid fa-clock"></i><span>Отложенные</span>
-        </a>
-      </div>
-
-      <div class="nav-section">
-        <span class="nav-label">Участники</span>
-        <a href="#/profiles" class="nav-item" data-view="profiles">
-          <i class="fa-solid fa-users"></i><span>Профили</span>
-        </a>
-        <a href="#/birthdays" class="nav-item" data-view="birthdays">
-          <i class="fa-solid fa-cake-candles"></i><span>Дни рождения</span>
-        </a>
-      </div>
-
-      <div class="nav-section">
-        <span class="nav-label">Модерация</span>
-        <a href="#/autodelete" class="nav-item" data-view="autodelete">
-          <i class="fa-solid fa-shield-halved"></i><span>Автоудаление</span>
-        </a>
-      </div>
-
-      <div class="nav-section">
-        <span class="nav-label">Бот</span>
-        <a href="#/commands" class="nav-item" data-view="commands">
-          <i class="fa-solid fa-terminal"></i><span>Команды</span>
-        </a>
-        <a href="#/settings" class="nav-item" data-view="settings">
-          <i class="fa-solid fa-gear"></i><span>Настройки</span>
-        </a>
-        <a href="#/logs" class="nav-item" data-view="logs">
-          <i class="fa-solid fa-list"></i><span>Логи</span>
-          <span class="nav-badge" id="logsBadge" style="display:none;">0</span>
-        </a>
-      </div>
-    </nav>
-
-    <div class="sidebar-footer">
-      <div class="bot-status" id="botStatus" role="status">
-        <span class="dot" aria-hidden="true"></span>
-        <span id="botStatusText">Выключен</span>
-        <span class="bot-status-ping" id="botStatusPing"></span>
-      </div>
-    </div>
-  </aside>
-
-  <div class="overlay" id="overlay" aria-hidden="true"></div>
-
-  <!-- MAIN -->
-  <main class="main">
-
-    <!-- TOPBAR -->
-    <header class="topbar">
-      <button class="icon-btn menu-btn" id="menuBtn" aria-label="Открыть меню">
+<!-- ═══ Навигация ═══════════════════════════════════ -->
+<header class="nav">
+  <div class="container nav-inner">
+    <a href="index.html" class="brand">
+      <span class="brand-mark">
+        <svg class="brand-svg" viewBox="0 0 32 32" fill="currentColor">
+          <path d="M8 8h6v6H8zM18 8h6v6h-6zM8 18h6v6H8zM18 18h6v6h-6z"/>
+        </svg>
+      </span>
+      BotPanel
+    </a>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="#action">Сценарии</a></li>
+      <li><a href="#faq">Вопросы</a></li>
+    </ul>
+    <div class="nav-actions">
+      <a href="/auth.html" class="btn btn-primary" aria-label="Войти в панель">
+        <i class="fa-solid fa-arrow-right-to-bracket"></i>
+        <span class="btn-text">Войти в панель</span>
+      </a>
+      <button class="icon-btn" data-theme-toggle aria-label="Переключить тему">
+        <i class="fa-solid fa-moon"></i>
+      </button>
+      <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Открыть меню">
         <i class="fa-solid fa-bars"></i>
       </button>
+    </div>
+  </div>
+</header>
 
-      <div class="page-title">
-        <h1 id="pageTitle">Дашборд</h1>
-        <p id="pageSub">Обзорная статистика и активность</p>
+<main id="main">
+
+<!-- ═══ HERO ═══════════════════════════════════════ -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-grid">
+      <div class="hero-text">
+        <h1>Discord-сервер <span class="grad">под контролем</span><br />без команд в чате</h1>
+        <p>Модерация, приветствия, дни рождения и аналитика — в одной панели. Настройка за 2 минуты, без кода.</p>
+        <div class="hero-cta">
+          <a href="/auth.html" class="btn btn-primary btn-lg">
+            <i class="fa-brands fa-discord"></i> Добавить в Discord
+          </a>
+          <a href="/auth.html" class="btn btn-ghost btn-lg">
+            <i class="fa-solid fa-arrow-right-to-bracket"></i> Войти в панель
+          </a>
+        </div>
+        <div class="live-status" id="liveStatus" aria-live="polite">
+          <div class="live-status-skeleton">
+            <div class="sk-line" style="width:60px;height:12px;margin:0"></div>
+            <div class="sk-line" style="width:100px;height:12px;margin:0"></div>
+          </div>
+          <div class="live-status-content">
+            <span class="live-status-primary">
+              <span class="live-status-dot"></span>
+              <span class="live-status-label">Бот онлайн</span>
+            </span>
+            <span class="live-status-metric">
+              <i class="fa-solid fa-server"></i>
+              <strong data-live="servers">12,5к</strong> серверов
+            </span>
+            <span class="live-status-metric">
+              <i class="fa-solid fa-gauge-high"></i>
+              <strong data-live="uptime">99.9%</strong> аптайм
+            </span>
+            <span class="live-status-metric">
+              <i class="fa-solid fa-bolt"></i>
+              <strong data-live="latency">48 ms</strong>
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div class="topbar-actions">
-        <button class="btn btn-ghost btn-sm" id="copyLinkBtn" title="Скопировать ссылку на раздел">
-          <i class="fa-solid fa-link"></i><span>Ссылка</span>
-        </button>
-
-        <button class="btn btn-ghost btn-sm" id="historyBtn" style="display:none;" title="История версий">
-          <i class="fa-solid fa-clock-rotate-left"></i><span>История</span>
-        </button>
-
-        <button class="btn btn-ghost btn-sm" id="exportBtn" style="display:none;" title="Экспорт JSON">
-          <i class="fa-solid fa-download"></i><span>Экспорт</span>
-        </button>
-
-        <button class="btn btn-ghost btn-sm" id="importBtn" style="display:none;" title="Импорт JSON">
-          <i class="fa-solid fa-upload"></i><span>Импорт</span>
-        </button>
-
-        <button class="btn btn-ghost btn-sm" id="sendRulesBtn" style="display:none;" title="Отправить в Discord">
-          <i class="fa-solid fa-paper-plane"></i><span>Отправить</span>
-        </button>
-
-        <button class="btn btn-primary btn-sm" id="saveBtn" style="display:none;" title="Сохранить (Ctrl+S)">
-          <i class="fa-solid fa-floppy-disk"></i><span>Сохранить</span>
-        </button>
-
-        <button class="btn btn-primary btn-sm" id="createMessageBtn" style="display:none;">
-          <i class="fa-solid fa-plus"></i><span>Создать сообщение</span>
-        </button>
-        <button class="btn btn-primary btn-sm" id="createAnnouncementBtn" style="display:none;">
-          <i class="fa-solid fa-plus"></i><span>Создать объявление</span>
-        </button>
-        <button class="btn btn-primary btn-sm" id="createDelayedBtn" style="display:none;">
-          <i class="fa-solid fa-plus"></i><span>Создать отложенный пост</span>
-        </button>
-        <button class="btn btn-primary btn-sm" id="createAutodeleteBtn" style="display:none;">
-          <i class="fa-solid fa-plus"></i><span>Создать правило</span>
-        </button>
-        <button class="btn btn-primary btn-sm" id="createProfileBtn" style="display:none;">
-          <i class="fa-solid fa-plus"></i><span>Добавить профиль</span>
-        </button>
-      </div>
-    </header>
-
-    <!-- CONTENT -->
-    <div class="content">
-
-      <section class="view" id="view-dashboard"></section>
-
-      <section class="view" id="view-rules">
-        <div class="rules-layout" id="rulesEditor"></div>
-      </section>
-
-      <section class="view" id="view-messages">
-        <div class="card">
-          <div class="card-body">
-            <div class="messages-list" id="messagesList" aria-live="polite"></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="view" id="view-announcements">
-        <div class="card">
-          <div class="card-body">
-            <div class="messages-list announcement-list" id="announcementsList" aria-live="polite"></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="view" id="view-delayed">
-        <div class="card">
-          <div class="card-body">
-            <div class="messages-list" id="delayedList" aria-live="polite"></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="view" id="view-autodelete">
-        <div class="card">
-          <div class="card-body">
-            <div class="messages-list" id="autodeleteList" aria-live="polite"></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="view" id="view-birthdays"></section>
-      <section class="view" id="view-profiles"></section>
-      <section class="view" id="view-commands"></section>
-      <section class="view" id="view-settings"></section>
-
-      <section class="view" id="view-logs">
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <h2><i class="fa-solid fa-list"></i> Логи бота</h2>
-              <p>Все действия и ошибки</p>
-            </div>
-            <button type="button" class="btn btn-ghost btn-sm" id="clearLogsBtn">
-              <i class="fa-solid fa-trash"></i><span>Очистить всё</span>
+      <!-- Mockup панели (превью) -->
+      <div class="hero-visual">
+        <div class="preview-wrap" id="preview">
+          <div class="preview-head">
+            <span class="preview-hint">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              Пример интерфейса — не настоящая панель
+            </span>
+            <button class="preview-tour-btn" id="tourStartBtn" type="button">
+              <i class="fa-solid fa-route"></i> Тур
             </button>
           </div>
-          <div class="card-body">
-            <div id="logsList" aria-live="polite"></div>
+          <div class="mockup" id="tourMockup">
+            <div class="mockup-bar">
+              <span class="circle c1"></span>
+              <span class="circle c2"></span>
+              <span class="circle c3"></span>
+              <span class="url"><i class="fa-solid fa-lock"></i> panel.botpanel.gg</span>
+            </div>
+            <div class="mockup-body">
+              <aside class="mockup-side" id="tourSidebar" role="tablist">
+                <div class="srv">
+                  <div class="srv-avatar"><i class="fa-solid fa-server"></i></div>
+                  <div class="srv-info"><strong>My Server</strong><span>1 248</span></div>
+                </div>
+                <button class="side-item active" data-view="overview" role="tab" aria-selected="true">
+                  <i class="fa-solid fa-chart-pie"></i> Обзор
+                </button>
+                <button class="side-item" data-view="modules" role="tab" aria-selected="false">
+                  <i class="fa-solid fa-puzzle-piece"></i> Модули
+                </button>
+                <button class="side-item" data-view="moderation" role="tab" aria-selected="false">
+                  <i class="fa-solid fa-shield-halved"></i> Модерация
+                </button>
+                <button class="side-item" data-view="commands" role="tab" aria-selected="false">
+                  <i class="fa-solid fa-terminal"></i> Команды
+                </button>
+                <button class="side-item" data-view="settings" role="tab" aria-selected="false">
+                  <i class="fa-solid fa-gear"></i> Настройки
+                </button>
+              </aside>
+              <div class="mockup-main">
+                <div class="panel-view active" data-panel="overview">
+                  <div class="mockup-head"><h3>Обзор сервера</h3><span>Обновлено</span></div>
+                  <div class="stats-grid" id="tourStats">
+                    <div class="stat-card"><div class="label">Участники</div><div class="value">1,2к</div><div class="trend"><i class="fa-solid fa-arrow-trend-up"></i> 4.2%</div></div>
+                    <div class="stat-card"><div class="label">Команд / день</div><div class="value">8,9к</div><div class="trend"><i class="fa-solid fa-arrow-trend-up"></i> 12.8%</div></div>
+                    <div class="stat-card"><div class="label">Аптайм</div><div class="value">99.9%</div><div class="trend">Стабильно</div></div>
+                  </div>
+                  <div class="chart-box">
+                    <h4>Активность за 14 дней</h4>
+                    <div class="chart-bars">
+                      <span data-height="30%"></span><span data-height="45%"></span><span data-height="38%"></span>
+                      <span data-height="60%"></span><span data-height="52%"></span><span data-height="70%"></span>
+                      <span data-height="65%"></span><span data-height="82%"></span><span data-height="74%"></span>
+                      <span data-height="90%"></span><span data-height="85%"></span><span data-height="96%"></span>
+                      <span data-height="88%"></span><span data-height="100%"></span>
+                    </div>
+                  </div>
+                  <div class="log-row"><span class="log-dot pink"></span> Модуль «Дни рождения» включён</div>
+                  <div class="log-row"><span class="log-dot green"></span> Приветствие отправлено @newuser</div>
+                </div>
+                <div class="panel-view" data-panel="modules">
+                  <div class="mockup-head"><h3>Модули</h3><span>7 из 9 активно</span></div>
+                  <div class="module-grid">
+                    <div class="module-item"><span class="m-name"><i class="fa-solid fa-hand"></i> Приветствия</span><button class="switch on" role="switch"></button></div>
+                    <div class="module-item"><span class="m-name"><i class="fa-solid fa-ranking-star"></i> Уровни</span><button class="switch on" role="switch"></button></div>
+                    <div class="module-item"><span class="m-name"><i class="fa-solid fa-ticket"></i> Тикеты</span><button class="switch on" role="switch"></button></div>
+                    <div class="module-item"><span class="m-name"><i class="fa-solid fa-message"></i> Сообщения</span><button class="switch on" role="switch"></button></div>
+                    <div class="module-item"><span class="m-name"><i class="fa-solid fa-cake-candles"></i> Дни рождения</span><button class="switch on" role="switch"></button></div>
+                    <div class="module-item"><span class="m-name"><i class="fa-solid fa-trash"></i> Автоудаление</span><button class="switch" role="switch"></button></div>
+                  </div>
+                </div>
+                <div class="panel-view" data-panel="moderation">
+                  <div class="mockup-head"><h3>Автомодерация</h3><span>3 правила</span></div>
+                  <div class="mod-row"><div class="mod-info"><i class="fa-solid fa-comment-slash"></i> Фильтр мата</div><button class="switch on" role="switch"></button></div>
+                  <div class="mod-row"><div class="mod-info"><i class="fa-solid fa-gauge-high"></i> Антиспам</div><button class="switch on" role="switch"></button></div>
+                  <div class="mod-row"><div class="mod-info"><i class="fa-solid fa-user-shield"></i> Антирейд</div><button class="switch on" role="switch"></button></div>
+                </div>
+                <div class="panel-view" data-panel="commands">
+                  <div class="mockup-head"><h3>Команды</h3><span>Топ-4 из 24</span></div>
+                  <table class="cmd-table">
+                    <thead><tr><th>Команда</th><th>Описание</th><th>Исп.</th></tr></thead>
+                    <tbody>
+                      <tr><td><span class="cmd-name">/rank</span></td><td>Уровень</td><td>2 341</td></tr>
+                      <tr><td><span class="cmd-name">/daily</span></td><td>Награда</td><td>1 892</td></tr>
+                      <tr><td><span class="cmd-name">/ticket</span></td><td>Тикет</td><td>1 204</td></tr>
+                      <tr><td><span class="cmd-name">/help</span></td><td>Помощь</td><td>876</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="panel-view" data-panel="settings">
+                  <div class="mockup-head"><h3>Настройки</h3><span>Основные</span></div>
+                  <form class="settings-form" data-mockup-form>
+                    <div class="field"><label>Префикс</label><input type="text" value="!" /></div>
+                    <div class="field-row">
+                      <div class="field"><label>Приветствия</label><input type="text" value="#welcome" /></div>
+                      <div class="field"><label>Логи</label><input type="text" value="#bot-logs" /></div>
+                    </div>
+                    <button type="submit" class="btn btn-primary settings-save">
+                      <i class="fa-solid fa-check"></i> Сохранить
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </section>
+      </div>
     </div>
-  </main>
+  </div>
+  <a href="#action" class="scroll-hint" id="scrollHint" aria-label="Прокрутить">
+    <i class="fa-solid fa-chevron-down"></i>
+  </a>
+</section>
+
+<!-- ═══ В ДЕЙСТВИИ (Discord simulator) ═════════════ -->
+<section class="bot-action" id="action">
+  <div class="container">
+    <div class="action-head">
+      <div class="eyebrow">В действии</div>
+      <h2>Так бот выглядит в вашем Discord</h2>
+      <p>Выберите сценарий — и посмотрите, как бот отреагирует.</p>
+    </div>
+    <div class="action-grid">
+      <div class="action-tabs" role="tablist" id="actionTabs"></div>
+      <div class="action-visual">
+        <div class="discord-window">
+          <div class="discord-header">
+            <span class="discord-channel">
+              <i class="fa-solid fa-hashtag"></i>
+              <span id="discordChannel">welcome</span>
+            </span>
+            <span class="discord-members"><i class="fa-solid fa-users"></i> 1 248</span>
+          </div>
+          <div class="discord-messages" id="discordMessages" aria-live="polite"></div>
+          <div class="discord-typing-bar hidden" id="discordTypingBar">
+            <strong>BotPanel</strong> печатает<span class="dots-anim"><span>.</span><span>.</span><span>.</span></span>
+          </div>
+          <div class="discord-input-area">
+            <div class="discord-input">
+              <button class="discord-input-btn" type="button" aria-label="Прикрепить"><i class="fa-solid fa-circle-plus"></i></button>
+              <div class="discord-input-field">Написать в <span id="discordInputChannel">#welcome</span></div>
+              <div class="discord-input-icons"><i class="fa-solid fa-gift"></i><i class="fa-solid fa-face-smile"></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FAQ ═════════════════════════════════════════ -->
+<section class="faq-section" id="faq">
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow">Вопросы</div>
+      <h2>Отвечаем на главное</h2>
+    </div>
+    <div class="faq">
+      <details>
+        <summary>Это действительно бесплатно?</summary>
+        <p>Да. Все 9 модулей — модерация, приветствия, уровни, тикеты, сообщения, дни рождения и другие — бесплатны без ограничений по времени.</p>
+      </details>
+      <details>
+        <summary>Какие права нужны боту?</summary>
+        <p>Управление сообщениями, ролями и каналами. Без прав администратора и доступа к личным сообщениям.</p>
+      </details>
+      <details>
+        <summary>Что будет, если бот упадёт?</summary>
+        <p>Аптайм 99.9% — около 8 минут недоступности в месяц. Настройки хранятся в облаке и восстанавливаются автоматически.</p>
+      </details>
+      <details>
+        <summary>Мои данные в безопасности?</summary>
+        <p>Бот хранит только ID сервера и настройки модулей. Пароли и личные сообщения не запрашиваются. Токены пользовательских ботов шифруются AES-256-GCM.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ CTA ═════════════════════════════════════════ -->
+<section class="cta-section">
+  <div class="container">
+    <div class="cta-box">
+      <h2>Настройте сервер за 2 минуты</h2>
+      <p>Добавьте бота, включите нужное — и закройте вкладку. Дальше он справится сам.</p>
+      <div class="hero-cta">
+        <a href="/auth.html" class="btn btn-white btn-lg">
+          <i class="fa-brands fa-discord"></i> Добавить в Discord
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ═══ FOOTER ══════════════════════════════════════ -->
+<footer>
+  <div class="container footer-inner">
+    <a href="index.html" class="brand">
+      <span class="brand-mark">
+        <svg class="brand-svg" viewBox="0 0 32 32" fill="currentColor">
+          <path d="M8 8h6v6H8zM18 8h6v6h-6zM8 18h6v6H8zM18 18h6v6h-6z"/>
+        </svg>
+      </span>
+      BotPanel
+    </a>
+    <ul class="footer-links">
+      <li><a href="#">Условия</a></li>
+      <li><a href="#">Конфиденциальность</a></li>
+      <li><button type="button" data-open-contacts>Контакты</button></li>
+    </ul>
+    <p>© <span id="year"></span> BotPanel. Все права защищены.</p>
+  </div>
+</footer>
+
+<a href="/auth.html" class="sticky-cta hidden" id="stickyCta">
+  <i class="fa-brands fa-discord"></i> Добавить в Discord
+</a>
+
+<!-- ═══ TOUR OVERLAY ═══════════════════════════════ -->
+<div class="tour-overlay" id="tourOverlay" aria-hidden="true">
+  <div class="tour-spotlight" id="tourSpotlight"></div>
+  <div class="tour-tooltip" id="tourTooltip" role="dialog">
+    <span class="tour-step" id="tourStepLabel">1 / 4</span>
+    <h4 id="tourTitle"></h4>
+    <p id="tourText"></p>
+    <div class="tour-actions">
+      <button type="button" class="tour-skip" id="tourSkip">Пропустить</button>
+      <div class="tour-nav">
+        <button type="button" class="tour-prev" id="tourPrev"><i class="fa-solid fa-arrow-left"></i></button>
+        <button type="button" class="btn btn-primary tour-next" id="tourNext">Далее</button>
+      </div>
+    </div>
+  </div>
 </div>
 
-<!-- Модалки и уведомления -->
-<div id="modalsContainer"></div>
-<div class="toast-container" id="toastContainer" aria-live="polite"></div>
+<!-- ═══ TOAST + MODAL ROOT ═════════════════════════ -->
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
+<div id="modalRoot"></div>
 
-<script type="module" src="js/main.js"></script>
+<script type="module" src="assets/js/landing/main.js"></script>
 </body>
 </html>

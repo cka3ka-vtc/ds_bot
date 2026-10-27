@@ -1,19 +1,22 @@
 {
-  "name": "ckazka-dev-panel",
-  "version": "3.0.0",
-  "description": "Discord bot control panel with web UI",
+  "name": "botpanel",
+  "version": "2.0.0",
   "type": "module",
-  "main": "server.js",
-  "engines": {
-    "node": ">=20"
-  },
+  "private": true,
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "gen-secrets": "node -e \"const c=require('crypto');console.log('JWT_SECRET='+c.randomBytes(32).toString('hex'));console.log('ENCRYPTION_KEY='+c.randomBytes(32).toString('hex'))\""
   },
   "dependencies": {
+    "better-sqlite3": "^12.0.0",
+    "cookie-parser": "^1.4.7",
     "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
     "express": "^4.21.1",
+    "jsonwebtoken": "^9.0.2",
+    "pino": "^9.5.0",
+    "pino-pretty": "^13.0.0",
     "zod": "^3.23.8"
   }
 }
