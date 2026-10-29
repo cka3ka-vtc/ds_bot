@@ -12,6 +12,7 @@ import { membersRouter } from './routes/members.js';
 import { settingsRouter } from './routes/settings.js';
 import { statsRouter } from './routes/stats.js';
 import { publicRouter } from './routes/public.js';
+import { levelsRouter } from './routes/levels.js';
 
 export function createApp({ db, botManager, registry, logger }) {
   const app = express();
@@ -20,14 +21,14 @@ export function createApp({ db, botManager, registry, logger }) {
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
 
-  // Public (без авторизации)
+  // shared/ отдаётся публично — клиент импортирует /shared/titles.js
+  app.use('/shared', express.static(path.resolve('shared')));
+
   app.use('/api/public', publicRouter());
   app.get('/api/health', (_, res) => res.json({ ok: true, uptime: process.uptime() }));
 
-  // Auth
   app.use('/auth', authRouter());
 
-  // Authorized API
   app.use('/api/bots', botsRouter());
   app.use('/api/guilds', guildsRouter());
   app.use('/api/modules', modulesRouter());
@@ -36,6 +37,7 @@ export function createApp({ db, botManager, registry, logger }) {
   app.use('/api/members', membersRouter());
   app.use('/api/guild-settings', settingsRouter());
   app.use('/api/stats', statsRouter());
+  app.use('/api/levels', levelsRouter());
 
   app.use(express.static(path.resolve('public')));
   app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));

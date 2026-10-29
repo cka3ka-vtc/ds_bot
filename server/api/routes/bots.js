@@ -9,8 +9,26 @@ export function botsRouter() {
   router.use(requireAuth);
 
   router.get('/', (req, res) => {
-    const rows = req.app.locals.db.getBotsForUser(req.user.id);
-    res.json(rows.map(botToDto));
+    const db = req.app.locals.db;
+    const botManager = req.app.locals.botManager;
+    const rows = db.getBotsForUser(req.user.id);
+
+    // Быстрая синхронизация имени/аватара с работающими инстансами
+    const synced = rows.map((row) => {
+      const inst = botManager.get(row.id);
+      if (!inst) return row;
+      const nextName = inst.name || row.name;
+      const nextAvatar = inst.avatarUrl || row.avatar_url;
+      if (row.name !== nextName || row.avatar_url !== nextAvatar) {
+        try {
+          db.updateBotProfile(row.id, { name: nextName, avatar_url: nextAvatar });
+        } catch {}
+        return { ...row, name: nextName, avatar_url: nextAvatar };
+      }
+      return row;
+    });
+
+    res.json(synced.map(botToDto));
   });
 
   router.post('/', validateBody(addBotBody), async (req, res, next) => {

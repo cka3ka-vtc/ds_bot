@@ -1,12 +1,24 @@
+// public/assets/js/core/modal.js
 let activeModal = null;
 
 /**
- * Открывает модал. Возвращает Promise, который резолвится
- * результатом onClickCTA (если передан) или null при закрытии.
+ * Открывает модаль.
+ *  - wide: расширенная версия (820px) — для таблиц/списков
+ *  - fullscreen: 1300px, 94vh — для тяжёлых редакторов
+ *  - если onSubmit не передан — «Отмена» скрывается (информационные модалки)
  */
-export function openModal({ title, subtitle, body, ctaLabel = 'Сохранить', onOpen, onSubmit }) {
+export function openModal({
+  title,
+  subtitle,
+  body,
+  ctaLabel = 'Сохранить',
+  onOpen,
+  onSubmit,
+  wide = false,
+  fullscreen = false,
+}) {
   return new Promise((resolve) => {
-    closeModal();  // закрыть предыдущий
+    closeModal();
 
     const root = document.getElementById('modalRoot');
     const modal = document.createElement('div');
@@ -31,9 +43,22 @@ export function openModal({ title, subtitle, body, ctaLabel = 'Сохранит�
       </div>
     `;
 
+    const contentEl = modal.querySelector('.modal-content');
+    if (fullscreen) {
+      contentEl.style.maxWidth = '1300px';
+      contentEl.style.maxHeight = '94vh';
+    } else if (wide) {
+      contentEl.style.maxWidth = '820px';
+    }
+
     modal.querySelector('h3').textContent = title || '';
     modal.querySelector('p').textContent = subtitle || '';
     modal.querySelector('.modal-body').innerHTML = body || '';
+
+    if (!onSubmit) {
+      const cancelBtn = modal.querySelector('[data-close]');
+      if (cancelBtn) cancelBtn.style.display = 'none';
+    }
 
     root.appendChild(modal);
     activeModal = modal;

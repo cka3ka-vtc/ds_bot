@@ -1,0 +1,580 @@
+/* ============================================================
+   Module settings · levels
+   num-stepper, XP-события, неактивность, награды, звания,
+   исключения. Адаптация под темы — через переменные.
+   ============================================================ */
+
+/* ══════════════════════════════════════════════════════════
+   Number stepper — компактный, без обводок
+   ══════════════════════════════════════════════════════════ */
+.num-stepper {
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  height: 40px;
+  width: 100%;
+  min-width: 0;
+  transition: border-color .15s;
+}
+.num-stepper:focus-within {
+  border-color: var(--border) !important;
+  box-shadow: none !important;
+}
+.num-stepper-btn {
+  width: 30px;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 10px;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s, color .15s;
+}
+.num-stepper-btn:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.num-stepper-btn:active {
+  background: var(--accent);
+  color: #fff;
+}
+.num-stepper-btn:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+.num-stepper-input {
+  flex: 1;
+  min-width: 42px;
+  width: 100%;
+  height: 100%;
+  padding: 0 4px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 700;
+  font-family: inherit;
+  text-align: center;
+  outline: none;
+  -moz-appearance: textfield;
+  box-sizing: border-box;
+}
+.num-stepper-input::-webkit-outer-spin-button,
+.num-stepper-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Никаких обводок ни в каком состоянии */
+.num-stepper-input,
+.num-stepper-input:hover,
+.num-stepper-input:focus,
+.num-stepper-input:focus-visible,
+.num-stepper-input:active {
+  box-shadow: none !important;
+  outline: none !important;
+  background: transparent !important;
+  border-top: none !important;
+  border-bottom: none !important;
+}
+.num-stepper-input:hover,
+.num-stepper-input:focus,
+.num-stepper-input:focus-visible {
+  border-left: 1px solid var(--border) !important;
+  border-right: 1px solid var(--border) !important;
+}
+.form-field .num-stepper .num-stepper-input:focus,
+.form-field .num-stepper .num-stepper-input:focus-visible {
+  box-shadow: none !important;
+  border-color: transparent !important;
+  background: transparent !important;
+}
+
+.num-stepper-suffix {
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: .3px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  min-width: 26px;
+  justify-content: center;
+}
+
+/* ══════════════════════════════════════════════════════════
+   XP events — 4 карточки (message / command / voice / daily)
+   Container query: карточка сама решает, как раскладывать
+   XP/кулдаун внутри.
+   ══════════════════════════════════════════════════════════ */
+.xp-events {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+@media (max-width: 1024px) {
+  .xp-events { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .xp-events { grid-template-columns: 1fr; }
+}
+
+.xp-event {
+  container-type: inline-size;
+  container-name: xpcard;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  transition: border-color .15s, box-shadow .15s, opacity .15s;
+}
+.xp-event:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
+}
+.xp-event.disabled { opacity: .55; }
+.xp-event.disabled .xp-event-body { pointer-events: none; }
+
+.xp-event-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.xp-event-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.xp-event-icon.blue   { background: var(--blue-soft);   color: var(--blue); }
+.xp-event-icon.purple { background: var(--purple-soft); color: var(--purple); }
+.xp-event-icon.pink   { background: var(--pink-soft);   color: var(--pink); }
+.xp-event-icon.green  { background: var(--green-soft);  color: var(--green); }
+
+.xp-event-title {
+  flex: 1;
+  min-width: 0;
+}
+.xp-event-title strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.xp-event-title span {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.35;
+  display: block;
+}
+.xp-event-title span code {
+  font-family: 'SF Mono', monospace;
+  font-size: 11px;
+  padding: 1px 5px;
+  background: var(--surface-3);
+  border-radius: 3px;
+  color: var(--text-soft);
+}
+
+/* ── По умолчанию — одна колонка (XP сверху, кулдаун снизу) ── */
+.xp-event-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* На широких карточках — две колонки */
+@container xpcard (min-width: 340px) {
+  .xp-event-body {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.xp-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.xp-input label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Статичное значение вместо num-stepper (для фиксированного кулдауна) */
+.xp-static-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 10px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-soft);
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.xp-static-value i {
+  color: var(--muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Снятие за неактивность
+   ══════════════════════════════════════════════════════════ */
+.inactivity {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  transition: border-color .2s, background .2s;
+}
+.inactivity.is-on {
+  border-color: rgba(245, 158, 11, .35);
+  background: linear-gradient(180deg, var(--surface-2), var(--orange-soft));
+}
+.inactivity-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+}
+.inactivity-head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.inactivity-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--orange-soft);
+  color: var(--orange);
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  flex-shrink: 0;
+  transition: background .2s, color .2s;
+}
+.inactivity.is-on .inactivity-icon {
+  background: var(--orange);
+  color: #fff;
+}
+.inactivity-title strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.inactivity-title span {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.inactivity-body {
+  padding: 0 16px 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .inactivity-body { grid-template-columns: 1fr; }
+}
+.inactivity-body > .form-field { margin-top: 0 !important; }
+.inactivity-body > .form-field + .form-field { margin-top: 0 !important; }
+.inactivity-body .form-field { gap: 6px; }
+.inactivity-body .form-field label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.inactivity-roles-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  transition: border-color .15s, background .15s, opacity .15s;
+}
+.inactivity-roles-row:hover:not(.is-disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+}
+.inactivity-roles-row.is-disabled {
+  opacity: .55;
+  pointer-events: none;
+}
+.inactivity-roles-row .toggle[disabled] {
+  cursor: not-allowed;
+  opacity: .7;
+}
+.inactivity-roles-info { flex: 1; min-width: 0; }
+.inactivity-roles-info strong {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.inactivity-roles-info span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.inactivity-warning {
+  display: none;
+  margin: 0 16px 16px;
+  padding: 10px 12px;
+  background: var(--red-soft);
+  border: 1px solid rgba(220, 38, 38, .3);
+  border-radius: var(--r-sm);
+  font-size: 11.5px;
+  color: var(--red);
+  line-height: 1.5;
+  align-items: flex-start;
+  gap: 8px;
+}
+.inactivity-warning.show { display: flex; }
+.inactivity-warning i {
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Звания (titles)
+   ══════════════════════════════════════════════════════════ */
+.title-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.title-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 36px;
+  gap: 8px;
+  align-items: center;
+}
+.title-row-level { min-width: 0; }
+.title-row .input { height: 40px; }
+
+.titles-hint {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.titles-hint i {
+  color: var(--blue);
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.titles-hint code,
+.gr-section-head code {
+  font-family: 'SF Mono', monospace;
+  font-size: 11.5px;
+  padding: 1px 5px;
+  background: var(--surface-3);
+  border-radius: 3px;
+  color: var(--text-soft);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Награды
+   ══════════════════════════════════════════════════════════ */
+.rewards-panel { transition: opacity .15s; }
+.rewards-panel.disabled {
+  opacity: .5;
+  pointer-events: none;
+}
+
+.reward-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.reward-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 36px;
+  gap: 8px;
+  align-items: center;
+}
+.reward-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12.5px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+}
+.reward-remove {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s, color .15s, border-color .15s, transform .1s;
+}
+.reward-remove:hover {
+  background: var(--red-soft);
+  color: var(--red);
+  border-color: rgba(220, 38, 38, .35);
+}
+.reward-remove:active {
+  transform: scale(.92);
+}
+.reward-remove i {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.rewards-disabled-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.rewards-disabled-note[hidden] { display: none !important; }
+.rewards-disabled-note i {
+  color: var(--blue);
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Исключения (channel / role picker + chips)
+   ══════════════════════════════════════════════════════════ */
+.exclusion-picker {
+  margin-bottom: 12px;
+}
+.exclusion-picker .channel-picker,
+.exclusion-picker .role-picker {
+  width: 100%;
+}
+.exclusion-picker .channel-input-wrap .input,
+.exclusion-picker .role-input-wrap .input {
+  background: var(--surface-2);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 4px 4px 10px;
+  border-radius: 5px;
+  background: var(--surface-3);
+  color: var(--text-soft);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.chip i {
+  font-size: 10px;
+  opacity: .7;
+}
+.chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.chip button {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+}
+.chip button:hover {
+  background: var(--red-soft);
+  color: var(--red);
+}
+.chip-empty {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: italic;
+  padding: 4px;
+}

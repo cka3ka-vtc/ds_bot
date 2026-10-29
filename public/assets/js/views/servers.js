@@ -11,7 +11,7 @@ export default {
       <div class="view-head">
         <div class="view-title">
           <h1>Список серверов</h1>
-          <p>Справа доступны только серверы, где вы администратор</p>
+          <p>Показаны только серверы, где у вас есть права администратора</p>
         </div>
       </div>
       ${guilds.length ? `
@@ -74,6 +74,9 @@ export default {
       ? `<img src="${url}" alt="" loading="lazy">`
       : `<span class="avatar-fallback">${initials(g.name)}</span>`;
 
+    const memberCount = g.nonBotMemberCount ?? g.memberCount ?? 0;
+    const online = g.nonBotOnline != null ? g.nonBotOnline : null;
+
     return `
       <button type="button"
               class="server-card"
@@ -90,11 +93,11 @@ export default {
         </div>
         <div class="server-card-stats">
           <div class="server-stat">
-            <span class="server-stat-value">${fmtNum(g.memberCount || 0)}</span>
+            <span class="server-stat-value">${fmtNum(memberCount)}</span>
             <span class="server-stat-label">Участников</span>
           </div>
           <div class="server-stat">
-            <span class="server-stat-value">${g.online != null ? fmtNum(g.online) : '—'}</span>
+            <span class="server-stat-value">${online != null ? fmtNum(online) : '—'}</span>
             <span class="server-stat-label">Онлайн</span>
           </div>
           <div class="server-stat">

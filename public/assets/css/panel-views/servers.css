@@ -1,0 +1,132 @@
+/* ============================================================
+   Panel · view: servers
+   ============================================================ */
+.servers-toolbar {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 16px; flex-wrap: wrap;
+}
+.servers-count { font-size: 13px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+.servers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+.server-card {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  cursor: pointer;
+  transition: transform .25s, border-color .25s, box-shadow .25s;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  width: 100%;
+}
+.server-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+.server-card[hidden] { display: none !important; }
+.server-glow-card {
+  position: absolute;
+  inset: -2px;
+  border-radius: calc(var(--r-xl) + 2px);
+  padding: 2px;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .3s;
+  overflow: hidden;
+  z-index: 2;
+}
+.server-glow-card::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 200%; height: 200%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 180deg,
+    var(--accent) 240deg,
+    var(--accent-2) 300deg,
+    transparent 360deg
+  );
+  animation: glowSpin 4s linear infinite;
+}
+.server-card:hover .server-glow-card { opacity: 1; }
+@keyframes glowSpin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg); }
+}
+.server-card > *:not(.server-glow-card) { position: relative; z-index: 1; }
+.server-card-head { display: flex; align-items: center; gap: 10px; }
+.server-card-avatar {
+  width: 44px; height: 44px;
+  border-radius: var(--r-md);
+  flex-shrink: 0; overflow: hidden; position: relative;
+  display: grid; place-items: center;
+  color: #fff; font-weight: 700; font-size: 15px;
+  background: var(--accent-gradient);
+}
+.server-card-avatar img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.server-card-avatar .avatar-fallback {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-weight: 800; letter-spacing: -.5px;
+}
+.server-card-name {
+  font-size: 14px; font-weight: 700;
+  color: var(--text); margin-bottom: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.server-card-id {
+  font-size: 11px; color: var(--muted);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+.server-card-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.server-stat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.server-stat-value {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.server-stat-label {
+  font-size: 10px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .3px;
+  font-weight: 500;
+}
+.server-card-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+}
+.server-card-cta {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600; color: var(--accent);
+  transition: gap .2s;
+}
+.server-card:hover .server-card-cta { gap: 8px; }
+.server-card-cta svg {
+  width: 13px; height: 13px;
+  stroke: currentColor; transition: transform .2s;
+}
+.server-card:hover .server-card-cta svg { transform: translateX(2px); }

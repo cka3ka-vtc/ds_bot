@@ -2,6 +2,8 @@
    Design tokens & themes
    ============================================================ */
 :root, [data-theme="light"] {
+  color-scheme: light;
+
   --bg: #f5f7fb;
   --bg-sidebar: #fff;
   --surface: #fff;
@@ -41,6 +43,8 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
+
   --bg: #0b0d12;
   --bg-sidebar: #11141b;
   --surface: #151922;

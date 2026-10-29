@@ -8,6 +8,7 @@ const KPI_CONFIG = [
     icon: 'fa-users',
     color: 'blue',
     hint: 'Общее число участников на сервере прямо сейчас.',
+    nav: 'members',
   },
   {
     key: 'newMembers',
@@ -15,6 +16,7 @@ const KPI_CONFIG = [
     icon: 'fa-user-plus',
     color: 'green',
     hint: 'Сколько присоединилось за последние 7 дней.',
+    action: 'joined',
   },
   {
     key: 'leftMembers',
@@ -22,13 +24,15 @@ const KPI_CONFIG = [
     icon: 'fa-user-minus',
     color: 'red',
     hint: 'Сколько покинуло сервер за последние 7 дней.',
+    action: 'left',
   },
   {
     key: 'activeUsers',
     label: 'Активные',
     icon: 'fa-bolt',
     color: 'orange',
-    hint: 'Уникальные авторы сообщений или команд за 7 дней.',
+    hint: 'Уникальные авторы сообщений, команд и голосовой активности за 7 дней.',
+    action: 'active',
   },
 ];
 
@@ -40,8 +44,18 @@ export function renderKpiGrid(d) {
 
 function kpi(c, value) {
   const v = Number(value) || 0;
+  const clickable = !!(c.action || c.nav);
+  const ariaLabel = c.action ? `Открыть: ${c.label}` : `Перейти: ${c.label}`;
+
+  let attrs = '';
+  if (clickable) {
+    if (c.action) attrs += ` data-kpi-action="${c.action}"`;
+    if (c.nav)    attrs += ` data-kpi-nav="${c.nav}"`;
+    attrs += ` role="button" tabindex="0" aria-label="${escapeHtml(ariaLabel)}"`;
+  }
+
   return `
-    <div class="kpi-card ${c.color}">
+    <div class="kpi-card ${c.color}${clickable ? ' is-clickable' : ''}"${attrs}>
       <div class="kpi-head">
         <div class="kpi-label-group">
           <span class="kpi-label">${c.label}</span>
@@ -53,9 +67,6 @@ function kpi(c, value) {
     </div>`;
 }
 
-/**
- * Анимация счётчиков при появлении. Учитывает prefers-reduced-motion.
- */
 export function animateKpiCounters(container) {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   container.querySelectorAll('.kpi-value[data-count]').forEach((el) => {

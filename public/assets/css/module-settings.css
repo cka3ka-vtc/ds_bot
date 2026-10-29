@@ -1,0 +1,9 @@
+/* ============================================================
+   Module settings — агрегатор.
+   ============================================================ */
+
+@import url('./module-settings/common.css');
+@import url('./module-settings/pickers.css');
+@import url('./module-settings/message-editor.css');
+@import url('./module-settings/greetings.css');
+@import url('./module-settings/levels.css');

@@ -20,5 +20,15 @@ export function createBotsRepo(db) {
     deleteBot(id) {
       db.prepare('DELETE FROM bots WHERE id = ? AND is_main = 0').run(id);
     },
+
+    /** Обновляет имя и аватар бота (для синхронизации с Discord). */
+    updateBotProfile(id, data) {
+      db.prepare(`
+        UPDATE bots
+        SET name = COALESCE(?, name),
+            avatar_url = COALESCE(?, avatar_url)
+        WHERE id = ?
+      `).run(data.name ?? null, data.avatar_url ?? null, id);
+    },
   };
 }

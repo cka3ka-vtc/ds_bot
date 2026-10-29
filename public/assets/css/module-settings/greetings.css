@@ -1,0 +1,171 @@
+/* ============================================================
+   Module settings · greetings
+   Двухколоночные тогглы «При вступлении / При выходе»,
+   табы «Вступление / Выход», empty-state.
+   ============================================================ */
+
+/* ─────── Toggles ─────── */
+.gr-toggles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  flex: 1;
+  align-content: start;
+}
+@media (max-width: 640px) {
+  .gr-toggles { grid-template-columns: 1fr; }
+}
+
+.gr-toggle {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  user-select: none;
+  transition: background .2s, border-color .2s;
+}
+.gr-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.gr-toggle-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 52px;
+  min-width: 0;
+}
+.gr-toggle strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+  transition: color .2s;
+}
+.gr-toggle-content span {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.gr-toggle-state {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: var(--muted);
+  pointer-events: none;
+  transition: background .2s, color .2s;
+}
+.gr-toggle-state::before { content: 'Выкл'; }
+.gr-toggle:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+.gr-toggle:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.gr-toggle.is-on,
+.gr-toggle:has(input:checked) {
+  background: var(--green-soft);
+  border-color: rgba(22, 163, 74, .4);
+}
+.gr-toggle.is-on:hover,
+.gr-toggle:has(input:checked):hover {
+  border-color: var(--green);
+}
+.gr-toggle.is-on .gr-toggle-state,
+.gr-toggle:has(input:checked) .gr-toggle-state {
+  background: var(--green);
+  color: #fff;
+}
+.gr-toggle.is-on .gr-toggle-state::before,
+.gr-toggle:has(input:checked) .gr-toggle-state::before {
+  content: 'Вкл';
+}
+.gr-toggle.is-on strong,
+.gr-toggle:has(input:checked) strong {
+  color: var(--green);
+}
+
+/* ─────── Tabs ─────── */
+.gr-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  width: fit-content;
+  margin-bottom: 14px;
+}
+.gr-tab {
+  padding: 7px 16px;
+  border-radius: 6px;
+  background: none;
+  border: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.gr-tab:hover { color: var(--text); background: var(--surface); }
+.gr-tab.active { background: var(--accent); color: #fff; }
+
+/* Управление видимостью */
+.gr-tabs[hidden],
+.gr-tab[hidden],
+.gr-editor-container[hidden],
+.gr-messages-empty[hidden] { display: none !important; }
+
+/* ─────── Empty state для блока «Сообщения» ─────── */
+.gr-messages-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 48px 24px;
+  text-align: center;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+}
+.gr-messages-empty i {
+  font-size: 30px;
+  color: var(--border-strong);
+  margin-bottom: 10px;
+  display: block;
+  line-height: 1;
+}
+.gr-messages-empty strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.gr-messages-empty span {
+  font-size: 12.5px;
+  color: var(--muted);
+  max-width: 380px;
+  line-height: 1.55;
+}
+.gr-messages-empty span b {
+  color: var(--text-soft);
+  font-weight: 600;
+}

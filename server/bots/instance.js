@@ -23,7 +23,7 @@ export class BotInstance {
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMessageReactions,
-        GatewayIntentBits.GuildVoiceStates,   // ⚡ обязательно для voiceStateUpdate
+        GatewayIntentBits.GuildVoiceStates,
       ],
     });
     this._wireEvents();
@@ -34,11 +34,8 @@ export class BotInstance {
     this.avatarUrl = this.client.user.displayAvatarURL({ size: 128 });
     this.startedAt = Date.now();
 
-    // Счётчик rate-limit hits (для health)
     try {
-      this.client.rest.on('rateLimited', () => {
-        this.rateLimitHits++;
-      });
+      this.client.rest.on('rateLimited', () => { this.rateLimitHits++; });
     } catch {}
 
     this.logger.info(
@@ -56,17 +53,32 @@ export class BotInstance {
   }
 
   _wireEvents() {
-    const emit = (name) => (data) => {
-      const guildId = data.guild?.id || data.guildId || null;
+    // ВАЖНО: передаём сущность под явным именем (guild / member),
+    // иначе хендлеры в index.js и модулях получают undefined.
+    // Discord.js-поля (id, user, guild) — геттеры на прототипе,
+    // spread ({ ...member }) их не переносит.
+    const emitGuild = (name) => (guild) => {
       this.eventBus.emit(name, {
-        botId: this.id, guildId, client: this.client, ...data,
+        botId: this.id,
+        guildId: guild.id,
+        client: this.client,
+        guild,
       });
     };
 
-    this.client.on(Events.GuildCreate,  emit('guildCreate'));
-    this.client.on(Events.GuildDelete,  emit('guildDelete'));
-    this.client.on(Events.GuildMemberAdd,    emit('guildMemberAdd'));
-    this.client.on(Events.GuildMemberRemove, emit('guildMemberRemove'));
+    const emitMember = (name) => (member) => {
+      this.eventBus.emit(name, {
+        botId: this.id,
+        guildId: member.guild?.id ?? null,
+        client: this.client,
+        member,
+      });
+    };
+
+    this.client.on(Events.GuildCreate,       emitGuild('guildCreate'));
+    this.client.on(Events.GuildDelete,       emitGuild('guildDelete'));
+    this.client.on(Events.GuildMemberAdd,    emitMember('guildMemberAdd'));
+    this.client.on(Events.GuildMemberRemove, emitMember('guildMemberRemove'));
 
     this.client.on(Events.MessageCreate, (message) => {
       if (message.author.bot) return;
@@ -87,7 +99,6 @@ export class BotInstance {
       });
     });
 
-    // ⚡ НОВОЕ: голосовые события
     this.client.on(Events.VoiceStateUpdate, (oldState, newState) => {
       const guildId = newState.guild?.id || oldState.guild?.id || null;
       this.eventBus.emit('voiceStateUpdate', {

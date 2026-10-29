@@ -2,15 +2,7 @@
 import { Router } from 'express';
 import { requireAuth, requireBotAccess } from '../auth-middleware.js';
 import { syncGuildCommands, sanitizeCommandName } from '../../core/commandSync.js';
-
-/** Встроенные команды, которые предоставляют модули */
-const BUILTIN_COMMANDS = [
-  { name: 'rank',   description: 'Уровень и прогресс',  category: 'Утилиты',    moduleKey: 'levels' },
-  { name: 'daily',  description: 'Ежедневная награда',  category: 'Утилиты',    moduleKey: 'levels' },
-  { name: 'ticket', description: 'Создать тикет',        category: 'Утилиты',    moduleKey: 'tickets' },
-  { name: 'ban',    description: 'Забанить участника',   category: 'Модерация',  moduleKey: 'moderation' },
-  { name: 'mute',   description: 'Замьютить участника',  category: 'Модерация',  moduleKey: 'moderation' },
-];
+import { BUILTIN_COMMANDS } from '../../../shared/builtin-commands.js';
 
 function ctx(req) {
   return {
@@ -24,7 +16,6 @@ export function commandsRouter() {
   const router = Router();
   router.use(requireAuth);
 
-  /** GET /api/commands — список */
   router.get('/', requireBotAccess, (req, res) => {
     const { botId, guildId } = req.query;
     const db = req.app.locals.db;
@@ -53,7 +44,6 @@ export function commandsRouter() {
     res.json({ builtin, custom });
   });
 
-  /** GET /api/commands/check — проверка уникальности имени */
   router.get('/check', requireBotAccess, (req, res) => {
     const { botId, guildId, name, excludeId } = req.query;
     const sanitized = sanitizeCommandName(name);
@@ -63,13 +53,10 @@ export function commandsRouter() {
       .getCustomCommands(botId, guildId)
       .find((c) => c.name === sanitized && c.id !== excludeId);
 
-    if (existing) {
-      return res.json({ valid: false, error: 'duplicate_name' });
-    }
+    if (existing) return res.json({ valid: false, error: 'duplicate_name' });
     res.json({ valid: true, sanitized });
   });
 
-  /** POST /api/commands — создать */
   router.post('/', requireBotAccess, (req, res) => {
     const { botId, guildId, name, description, response } = req.body;
     const sanitized = sanitizeCommandName(name);
@@ -93,7 +80,6 @@ export function commandsRouter() {
     res.json({ id, name: sanitized });
   });
 
-  /** PUT /api/commands/:id — обновить (включая переименование) */
   router.put('/:id', requireBotAccess, async (req, res) => {
     const { id } = req.params;
     const { botId, guildId, name, description, response, enabled } = req.body;
@@ -118,15 +104,11 @@ export function commandsRouter() {
       newName = sanitized;
     }
 
-    req.app.locals.db.updateCustomCommand(id, {
-      name: newName, description, response, enabled,
-    });
-
+    req.app.locals.db.updateCustomCommand(id, { name: newName, description, response, enabled });
     await syncGuildCommands(ctx(req), botId, guildId).catch(() => {});
     res.json({ ok: true, name: newName });
   });
 
-  /** DELETE /api/commands/:id */
   router.delete('/:id', requireBotAccess, async (req, res) => {
     const { botId, guildId } = req.query;
     const cmd = req.app.locals.db.getCustomCommand(req.params.id);
@@ -138,7 +120,6 @@ export function commandsRouter() {
     res.json({ ok: true });
   });
 
-  /** POST /api/commands/:id/toggle */
   router.post('/:id/toggle', requireBotAccess, async (req, res) => {
     const { botId, guildId, enabled } = req.body;
     const cmd = req.app.locals.db.getCustomCommand(req.params.id);

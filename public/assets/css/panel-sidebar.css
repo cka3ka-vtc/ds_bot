@@ -18,9 +18,9 @@
 }
 .sidebar-brand .brand-mark {
   width: 32px; height: 32px; border-radius: var(--r-md);
-  box-shadow: 0 4px 12px rgba(79, 91, 213, .3);
+  box-shadow: 0 4px 14px rgba(88, 101, 242, .35);
 }
-.sidebar-brand .brand-mark svg { width: 22px; height: 22px; }
+.sidebar-brand .brand-mark i { font-size: 17px; }
 .sidebar-brand .brand-title { font-size: 15px; letter-spacing: -.3px; }
 
 /* Guild switcher */
@@ -32,20 +32,22 @@
   width: 100%; min-height: 48px; padding: 8px 11px;
   background: var(--surface-2); border: 1px solid var(--border);
   border-radius: var(--r-md); color: var(--text);
-  cursor: pointer; transition: background .2s, border-color .2s;
+  cursor: pointer;
   text-align: left;
+  overflow: visible;
+  transition: background .25s, border-color .25s, transform .25s;
 }
 .switcher-btn:hover {
-  background: var(--surface-3);
+  background: linear-gradient(135deg, var(--surface-2), rgba(79, 91, 213, .08));
+  transform: translateY(-2px);
   border-color: transparent;
 }
 
-/* Original rotating conic border with bright accent arc (220°–340°) */
 .switcher-glow {
   position: absolute;
-  inset: -2px;
-  border-radius: calc(var(--r-md) + 2px);
-  padding: 2px;
+  inset: -1px;
+  border-radius: calc(var(--r-md) + 1px);
+  padding: 1px;
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
@@ -63,29 +65,40 @@
 .switcher-glow::before {
   content: '';
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 200%;
-  height: 200%;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    transparent 180deg,
-    #4f5bd5 220deg,
-    #7b61ff 250deg,
-    #ec4899 280deg,
-    #f59e0b 310deg,
-    transparent 340deg
-  );
-  animation: switcherRotate 2.5s linear infinite;
+  inset: 0;
+  background: conic-gradient(from 0deg,
+    #5865f2, #8b5cf6, #ec4899, #fbbf24, #22c55e, #06b6d4, #5865f2);
 }
-.switcher-btn:hover .switcher-glow { opacity: 1; }
-@keyframes switcherRotate {
-  from { transform: translate(-50%, -50%) rotate(0deg); }
-  to   { transform: translate(-50%, -50%) rotate(360deg); }
+.switcher-btn:hover .switcher-glow {
+  opacity: 1;
+  animation: switcherHueSpin 4s linear infinite;
+}
+@keyframes switcherHueSpin {
+  to { filter: hue-rotate(360deg); }
 }
 
-.switcher-btn > *:not(.switcher-glow):not(.switcher-hint) {
+.switcher-inner-glow {
+  position: absolute;
+  top: 50%; left: 0;
+  width: 100%; height: 100%;
+  transform: translateY(-50%);
+  background: radial-gradient(ellipse at left center,
+    rgba(79, 91, 213, .35), transparent 60%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s;
+  z-index: 0;
+}
+.switcher-btn:hover .switcher-inner-glow {
+  opacity: 1;
+  animation: switcherGlowPulse 2.4s ease-in-out infinite;
+}
+@keyframes switcherGlowPulse {
+  0%, 100% { opacity: .35; transform: translateY(-50%) scale(1); }
+  50%      { opacity: .65; transform: translateY(-50%) scale(1.05); }
+}
+
+.switcher-btn > *:not(.switcher-glow):not(.switcher-inner-glow):not(.switcher-hint) {
   position: relative; z-index: 1;
 }
 
@@ -101,6 +114,7 @@
   position: absolute; inset: 0;
   width: 100%; height: 100%; object-fit: cover; display: block;
 }
+
 .switcher-info {
   flex: 1; min-width: 0;
   transition: opacity .2s;
@@ -120,7 +134,11 @@
   transition: opacity .2s;
 }
 
-/* "Сменить сервер" — absolute overlay, always centered, light gradient */
+/* ============================================================
+   Hint «Сменить сервер» — градиентный текст.
+   ВАЖНО: используется background-image (не shorthand background),
+   чтобы не сбрасывать background-clip: text на border-box.
+   ============================================================ */
 .switcher-hint {
   position: absolute;
   inset: 0;
@@ -135,20 +153,33 @@
   pointer-events: none;
   opacity: 0;
   z-index: 3;
-  background: linear-gradient(135deg, #ffffff 0%, #dbe4ff 55%, #a9b9ff 100%);
+
+  /* Light theme: тёмный акцентный градиент — читаем на светлом фоне */
+  background-image: linear-gradient(135deg, #3f4ac4 0%, #6b4fe8 55%, #8b5cf6 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  filter: drop-shadow(0 1px 3px rgba(79, 91, 213, .35));
+
+  filter: drop-shadow(0 1px 2px rgba(79, 91, 213, .35));
   transition: opacity .2s, letter-spacing .4s cubic-bezier(.22, 1, .36, 1);
 }
+
 .switcher-btn:hover .switcher-hint {
   opacity: 1;
   letter-spacing: 2px;
 }
 
-/* Hide normal content while hint is visible */
+/* Dark theme: светлый градиент — читаем на тёмном фоне */
+[data-theme="dark"] .switcher-hint {
+  background-image: linear-gradient(135deg, #eef1ff 0%, #c9cdfb 45%, #a5b3ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 1px 2px rgba(107, 120, 255, .55));
+}
+
 .switcher-btn:hover .switcher-avatar,
 .switcher-btn:hover .switcher-info,
 .switcher-btn:hover > .fa-bars { opacity: 0; }
@@ -229,7 +260,6 @@
 }
 .user-role { font-size: 11px; color: var(--muted); }
 
-/* Logout — same animation as topbar-actions but red */
 .logout-btn {
   position: relative;
   width: 38px; height: 38px;

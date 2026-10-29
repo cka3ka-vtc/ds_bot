@@ -3,52 +3,73 @@
     {
       "key": "greetings",
       "name": "Приветствия",
-      "description": "Автоматически приветствует новых участников при входе",
+      "description": "Автоматически приветствует новых участников и прощается с ушедшими",
       "icon": "fa-hand",
       "color": "green",
       "category": "engagement",
-      "version": "1.0.0",
+      "version": "2.1.0",
       "defaultEnabled": true,
-      "events": ["guildMemberAdd"],
+      "events": ["guildMemberAdd", "guildMemberRemove"],
       "configSchema": {
-        "channelId":  { "type": "text",     "label": "ID канала" },
-        "message":    { "type": "textarea", "label": "Текст приветствия", "default": "Привет, {user}! 👋" },
-        "autoRoleId": { "type": "text",     "label": "ID роли при входе" },
-        "sendEmbed":  { "type": "boolean",  "label": "Отправлять Embed", "default": true }
+        "channelId": { "type": "text", "label": "ID канала" },
+        "events":    { "type": "json", "label": "События" },
+        "messages":  { "type": "json", "label": "Сообщения" }
       }
     },
     {
       "key": "levels",
       "name": "Уровни",
-      "description": "XP за активность, уровни и награды",
+      "description": "XP за активность, уровни и автовыдача ролей",
       "icon": "fa-ranking-star",
       "color": "orange",
       "category": "engagement",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "defaultEnabled": true,
-      "events": ["messageCreate"],
+      "events": ["messageCreate", "interactionCreate", "voiceStateUpdate"],
       "configSchema": {
-        "announceChannel": { "type": "text",   "label": "ID канала оповещений" },
-        "xpPerMessage":    { "type": "number", "label": "XP за сообщение", "default": 15 },
-        "maxLevel":        { "type": "number", "label": "Максимум уровней", "default": 100 },
-        "rewardRoles":     { "type": "boolean","label": "Выдавать роли за уровни", "default": true }
+        "announceChannelId": { "type": "text", "label": "ID канала объявлений" },
+        "formula": { "type": "text", "label": "Формула" },
+        "maxLevel": { "type": "number", "label": "Максимальный уровень" },
+        "boostMultiplier": { "type": "number", "label": "Множитель за буст" },
+        "events": { "type": "json", "label": "XP и кулдауны" },
+        "rewards": { "type": "json", "label": "Награды" },
+        "excludedChannels": { "type": "json", "label": "Исключённые каналы" },
+        "excludedRoles": { "type": "json", "label": "Исключённые роли" },
+        "inactivity": { "type": "json", "label": "Снятие за неактивность" },
+        "messages": { "type": "json", "label": "Сообщения" }
       }
     },
     {
-      "key": "tickets",
-      "name": "Тикеты",
-      "description": "Система поддержки с приватными каналами",
-      "icon": "fa-ticket",
+      "key": "events",
+      "name": "События",
+      "description": "Планирование ивентов и автоматические напоминания",
+      "icon": "fa-calendar-check",
       "color": "blue",
-      "category": "support",
+      "category": "engagement",
       "version": "1.0.0",
       "defaultEnabled": true,
-      "events": ["interactionCreate"],
+      "events": [],
       "configSchema": {
-        "categoryId":         { "type": "text",   "label": "ID категории Discord" },
-        "supportRoleId":      { "type": "text",   "label": "ID роли поддержки" },
-        "welcomeMessage":     { "type": "textarea","label": "Приветствие в тикете" },
-        "autoCloseHours":     { "type": "number", "label": "Автозакрытие (ч)", "default": 24 }
+        "announceChannelId": { "type": "text",   "label": "ID канала анонсов" },
+        "reminderMinutes":   { "type": "number", "label": "Напоминание за (мин)", "default": 60 },
+        "template":          { "type": "textarea","label": "Шаблон анонса" }
+      }
+    },
+    {
+      "key": "birthdays",
+      "name": "Дни рождения",
+      "description": "Поздравления и роль именинника",
+      "icon": "fa-cake-candles",
+      "color": "pink",
+      "category": "engagement",
+      "version": "1.0.0",
+      "defaultEnabled": true,
+      "events": [],
+      "configSchema": {
+        "channelId":      { "type": "text",     "label": "ID канала поздравлений" },
+        "sendTime":       { "type": "text",     "label": "Время (HH:MM)", "default": "09:00" },
+        "birthdayRoleId": { "type": "text",     "label": "ID роли именинника" },
+        "message":        { "type": "textarea", "label": "Текст поздравления" }
       }
     },
     {
@@ -71,22 +92,6 @@
       }
     },
     {
-      "key": "events",
-      "name": "События",
-      "description": "Планирование ивентов и автоматические напоминания",
-      "icon": "fa-calendar-check",
-      "color": "blue",
-      "category": "engagement",
-      "version": "1.0.0",
-      "defaultEnabled": true,
-      "events": [],
-      "configSchema": {
-        "announceChannelId": { "type": "text",   "label": "ID канала анонсов" },
-        "reminderMinutes":   { "type": "number", "label": "Напоминание за (мин)", "default": 60 },
-        "template":          { "type": "textarea","label": "Шаблон анонса" }
-      }
-    },
-    {
       "key": "autoroles",
       "name": "Автороли",
       "description": "Выдача ролей при входе или по реакциям",
@@ -97,9 +102,25 @@
       "defaultEnabled": false,
       "events": ["guildMemberAdd", "messageReactionAdd"],
       "configSchema": {
-        "joinRoleId":      { "type": "text",    "label": "ID роли при входе" },
-        "reactionChannelId": { "type": "text",  "label": "ID канала с реакциями" },
-        "removeOnLeave":   { "type": "boolean", "label": "Снимать роль при выходе", "default": false }
+        "joinRoleId":        { "type": "text",    "label": "ID роли при входе" },
+        "reactionChannelId": { "type": "text",    "label": "ID канала с реакциями" },
+        "removeOnLeave":     { "type": "boolean", "label": "Снимать роль при выходе", "default": false }
+      }
+    },
+    {
+      "key": "autodelete",
+      "name": "Автоудаление",
+      "description": "Очистка каналов по таймеру",
+      "icon": "fa-trash",
+      "color": "red",
+      "category": "moderation",
+      "version": "1.0.0",
+      "defaultEnabled": false,
+      "events": ["messageCreate"],
+      "configSchema": {
+        "channelId":      { "type": "text",    "label": "ID канала" },
+        "deleteAfterMin": { "type": "number",  "label": "Удалять через (мин)", "default": 30 },
+        "skipModerators": { "type": "boolean", "label": "Исключать модераторов", "default": true }
       }
     },
     {
@@ -132,36 +153,20 @@
       }
     },
     {
-      "key": "autodelete",
-      "name": "Автоудаление",
-      "description": "Очистка каналов по таймеру",
-      "icon": "fa-trash",
-      "color": "red",
-      "category": "moderation",
-      "version": "1.0.0",
-      "defaultEnabled": false,
-      "events": ["messageCreate"],
-      "configSchema": {
-        "channelId":      { "type": "text",    "label": "ID канала" },
-        "deleteAfterMin": { "type": "number",  "label": "Удалять через (мин)", "default": 30 },
-        "skipModerators": { "type": "boolean", "label": "Исключать модераторов", "default": true }
-      }
-    },
-    {
-      "key": "birthdays",
-      "name": "Дни рождения",
-      "description": "Поздравления и роль именинника",
-      "icon": "fa-cake-candles",
-      "color": "pink",
-      "category": "engagement",
+      "key": "tickets",
+      "name": "Тикеты",
+      "description": "Система поддержки с приватными каналами",
+      "icon": "fa-ticket",
+      "color": "blue",
+      "category": "support",
       "version": "1.0.0",
       "defaultEnabled": true,
-      "events": [],
+      "events": ["interactionCreate"],
       "configSchema": {
-        "channelId":      { "type": "text",     "label": "ID канала поздравлений" },
-        "sendTime":       { "type": "text",     "label": "Время (HH:MM)", "default": "09:00" },
-        "birthdayRoleId": { "type": "text",     "label": "ID роли именинника" },
-        "message":        { "type": "textarea", "label": "Текст поздравления" }
+        "categoryId":         { "type": "text",   "label": "ID категории Discord" },
+        "supportRoleId":      { "type": "text",   "label": "ID роли поддержки" },
+        "welcomeMessage":     { "type": "textarea","label": "Приветствие в тикете" },
+        "autoCloseHours":     { "type": "number", "label": "Автозакрытие (ч)", "default": 24 }
       }
     }
   ]

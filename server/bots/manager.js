@@ -1,15 +1,7 @@
+// server/bots/manager.js
 import { BotInstance } from './instance.js';
 import { decrypt, encrypt } from '../core/crypto.js';
 
-/**
- * BotManager — единая точка управления всеми Discord-клиентами.
- * Хранит Map<botId, BotInstance>.
- *
- * Ключевые возможности:
- *  - восстановление всех ботов из БД при старте
- *  - добавление пользовательских ботов "на лету"
- *  - graceful shutdown
- */
 export class BotManager {
   constructor({ db, logger, eventBus }) {
     this.db = db;
@@ -18,7 +10,6 @@ export class BotManager {
     this.bots = new Map();
   }
 
-  /** Восстановить все сохранённые боты при старте приложения */
   async restoreAll() {
     const bots = this.db.getAllBots();
     for (const row of bots) {
@@ -31,15 +22,12 @@ export class BotManager {
     }
   }
 
-  /** Добавить нового бота — валидирует токен и запускает клиент */
   async addUserBot({ token, ownerId }) {
-    // Пробуем запустить без сохранения в БД
     const instance = new BotInstance({
       token, isMain: false, logger: this.logger, eventBus: this.eventBus,
     });
-    await instance.start();  // бросит исключение, если токен невалиден
+    await instance.start();
 
-    // Сохраняем в БД — теперь знаем настоящий ID
     this.db.createBot({
       id: instance.id,
       owner_id: ownerId,
@@ -54,7 +42,6 @@ export class BotManager {
     return this._public(instance);
   }
 
-  /** Удалить пользовательского бота (главного удалить нельзя) */
   async removeUserBot(botId, userId) {
     const row = this.db.getBot(botId);
     if (!row) throw new Error('bot_not_found');
@@ -75,7 +62,7 @@ export class BotManager {
     this.bots.clear();
   }
 
-  // ── helpers ───────────────────────────────────────────
+  // ── helpers ────────────────────────────────────────────────
   async _start({ id, token, isMain, name, avatarUrl }) {
     if (id && this.bots.has(id)) return this.bots.get(id);
     const instance = new BotInstance({
@@ -83,7 +70,27 @@ export class BotManager {
     });
     await instance.start();
     this.bots.set(instance.id, instance);
+    this._syncProfile(instance);
     return instance;
+  }
+
+  /** Синхронизирует имя/аватар в БД, если Discord их изменил. */
+  _syncProfile(instance) {
+    try {
+      const row = this.db.getBot(instance.id);
+      if (!row) return;
+      const nextName = instance.name || row.name;
+      const nextAvatar = instance.avatarUrl || row.avatar_url;
+      if (row.name !== nextName || row.avatar_url !== nextAvatar) {
+        this.db.updateBotProfile(instance.id, { name: nextName, avatar_url: nextAvatar });
+        this.logger.info(
+          { botId: instance.id, fromName: row.name, toName: nextName },
+          'bot profile synced',
+        );
+      }
+    } catch (err) {
+      this.logger.debug({ err, botId: instance.id }, 'profile sync failed');
+    }
   }
 
   _public(inst) {

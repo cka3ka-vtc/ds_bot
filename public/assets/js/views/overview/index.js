@@ -6,6 +6,7 @@ import { escapeHtml } from '../../core/utils.js';
 import { renderKpiGrid, animateKpiCounters } from './kpi.js';
 import { renderChartSection, renderChart, hasAnyActivity } from './chart.js';
 import { renderTopCommands, renderTopChannels, renderRecentEvents } from './lists.js';
+import { openJoinedModal, openLeftModal, openActiveModal } from './userModals.js';
 
 export default {
   container: null,
@@ -61,6 +62,7 @@ export default {
     const d = this.data;
     const hasActivity = hasAnyActivity(d);
     const cf = this.channelFilter;
+    const hasChannelStats = (d.topChannels?.text?.length || 0) + (d.topChannels?.voice?.length || 0) > 0;
 
     this.container.innerHTML = `
       <div class="view-head">
@@ -82,10 +84,13 @@ export default {
         <div class="card">
           <div class="card-head">
             <div>
-              <span class="card-title">Топ команд</span>
+              <div class="kpi-label-group">
+                <span class="card-title">Топ команд</span>
+                <button class="kpi-hint" type="button"
+                        data-tooltip="Суммарное количество использований каждой команды.">?</button>
+              </div>
               <span class="card-sub">за 7 дней</span>
             </div>
-            <a href="#commands" class="btn-link" data-nav="commands">Все <i class="fa-solid fa-arrow-right"></i></a>
           </div>
           <div class="card-body" style="padding:12px;">
             ${renderTopCommands(d.topCommands)}
@@ -107,13 +112,19 @@ export default {
         <div class="card">
           <div class="card-head">
             <div>
-              <span class="card-title">Популярные каналы</span>
-              <span class="card-sub">уникальные пользователи · 7 дней</span>
+              <div class="kpi-label-group">
+                <span class="card-title">Популярные каналы</span>
+                <button class="kpi-hint" type="button"
+                        data-tooltip="Количество уникальных пользователей, активных в канале.">?</button>
+              </div>
+              <span class="card-sub">за 7 дней</span>
             </div>
-            <div class="chart-filters" role="tablist">
-              <button class="chart-filter ${cf === 'text' ? 'active' : ''}" data-channel-filter="text">Текстовые</button>
-              <button class="chart-filter ${cf === 'voice' ? 'active' : ''}" data-channel-filter="voice">Голосовые</button>
-            </div>
+            ${hasChannelStats ? `
+              <div class="chart-filters" role="tablist">
+                <button class="chart-filter ${cf === 'text' ? 'active' : ''}" data-channel-filter="text">Текстовые</button>
+                <button class="chart-filter ${cf === 'voice' ? 'active' : ''}" data-channel-filter="voice">Голосовые</button>
+              </div>
+            ` : ''}
           </div>
           <div class="card-body" style="padding:12px;" id="topChannelsBody">
             <div data-channel-list="text" ${cf !== 'text' ? 'hidden' : ''}>
@@ -148,7 +159,6 @@ export default {
       });
     });
 
-    // Переключение списков каналов — без перерендера (без мигания)
     this.container.querySelectorAll('[data-channel-filter]').forEach((btn) => {
       btn.addEventListener('click', () => {
         this.container.querySelectorAll('[data-channel-filter]').forEach((b) => b.classList.remove('active'));
@@ -157,6 +167,31 @@ export default {
         this.container.querySelectorAll('[data-channel-list]').forEach((el) => {
           el.hidden = el.dataset.channelList !== this.channelFilter;
         });
+      });
+    });
+
+    // ── Клики по кликабельным KPI-карточкам ──
+    // data-kpi-action → модалка; data-kpi-nav → переход в раздел.
+    this.container.querySelectorAll('[data-kpi-action], [data-kpi-nav]').forEach((card) => {
+      const action = card.dataset.kpiAction;
+      const nav = card.dataset.kpiNav;
+      const run = () => {
+        if (action === 'joined') openJoinedModal();
+        else if (action === 'left') openLeftModal();
+        else if (action === 'active') openActiveModal();
+        else if (nav) location.hash = nav;
+      };
+      card.addEventListener('click', (e) => {
+        // Клик по подсказке — только тултип, карточку не открываем
+        if (e.target.closest('.kpi-hint')) return;
+        run();
+      });
+      card.addEventListener('keydown', (e) => {
+        if (e.target !== card) return;   // Enter/Space на вложенной кнопке-подсказке не перехватываем
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          run();
+        }
       });
     });
 

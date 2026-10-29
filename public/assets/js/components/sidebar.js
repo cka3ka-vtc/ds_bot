@@ -8,11 +8,9 @@ export function renderSidebar(container) {
   container.innerHTML = `
     <div class="sidebar-brand" aria-label="Ckaзka Dev">
       <span class="brand-mark">
-        <svg class="brand-svg" viewBox="0 0 32 32" fill="currentColor">
-          <path d="M8 8h6v6H8zM18 8h6v6h-6zM8 18h6v6H8zM18 18h6v6h-6z"/>
-        </svg>
+        <i class="fa-solid fa-bolt"></i>
       </span>
-      <span class="brand-title" data-text="Ckaзka Dev">Ckaзka Dev</span>
+      <span class="brand-title">Ckaзka Dev</span>
     </div>
     <div class="switcher" id="guildSwitcher"></div>
     <nav class="sidebar-nav" id="navMenu"></nav>
@@ -75,7 +73,6 @@ function renderUser(container) {
     <span class="user-avatar">${avatar}</span>
     <div class="user-info">
       <span class="user-name">${escapeHtml(user.username)}</span>
-      <span class="user-role">Пользователь</span>
     </div>
     <a href="#" class="logout-btn" data-logout title="Выйти" aria-label="Выйти">
       <i class="fa-solid fa-right-from-bracket"></i>

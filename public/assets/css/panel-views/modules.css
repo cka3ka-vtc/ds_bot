@@ -1,0 +1,58 @@
+/* ============================================================
+   Panel · view: modules
+   ============================================================ */
+.modules-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.module-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-xl); padding: 16px;
+  display: flex; flex-direction: column; gap: 12px;
+  transition: all .2s;
+}
+.module-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
+.module-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.module-icon {
+  width: 40px; height: 40px; border-radius: var(--r-md);
+  display: grid; place-items: center; font-size: 16px; flex-shrink: 0;
+  transition: background-color .2s, color .2s;
+}
+.module-icon.green  { background: var(--green-soft);  color: var(--green); }
+.module-icon.orange { background: var(--orange-soft); color: var(--orange); }
+.module-icon.blue   { background: var(--blue-soft);   color: var(--blue); }
+.module-icon.purple { background: var(--purple-soft); color: var(--purple); }
+.module-icon.red    { background: var(--red-soft);    color: var(--red); }
+.module-icon.pink   { background: var(--pink-soft);   color: var(--pink); }
+
+.module-card.is-disabled .module-icon,
+.module-card.is-disabled .module-icon.green,
+.module-card.is-disabled .module-icon.orange,
+.module-card.is-disabled .module-icon.blue,
+.module-card.is-disabled .module-icon.purple,
+.module-card.is-disabled .module-icon.red,
+.module-card.is-disabled .module-icon.pink {
+  background: var(--surface-3) !important;
+  color: var(--muted) !important;
+}
+
+.module-card .toggle.on { background: var(--green); }
+.module-card .toggle.on::after { background: #fff; }
+
+.module-name { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.module-cat {
+  font-size: 11px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .5px; font-weight: 600;
+}
+.module-desc { font-size: 12.5px; color: var(--muted); line-height: 1.5; flex: 1; }
+.module-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding-top: 10px; border-top: 1px solid var(--border);
+}
+.module-status {
+  font-size: 11.5px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.module-status.on  { color: var(--green); }
+.module-status.off { color: var(--muted); }
+.module-status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }

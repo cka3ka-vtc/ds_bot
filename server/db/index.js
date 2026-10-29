@@ -8,6 +8,7 @@ import { createCommandsRepo } from './repositories/commands.js';
 import { createMembersRepo } from './repositories/members.js';
 import { createModerationRepo } from './repositories/moderation.js';
 import { createEventsRepo } from './repositories/events.js';
+import { createUserProfilesRepo } from './repositories/userProfiles.js';
 
 export function initDb(dbPath, logger) {
   const db = initConnection(dbPath, logger);
@@ -22,5 +23,6 @@ export function initDb(dbPath, logger) {
     ...createMembersRepo(db),
     ...createModerationRepo(db),
     ...createEventsRepo(db),
+    ...createUserProfilesRepo(db),
   };
 }

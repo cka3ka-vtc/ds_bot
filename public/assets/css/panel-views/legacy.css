@@ -1,0 +1,49 @@
+/* ============================================================
+   Panel · legacy
+   Перенесено из module-settings/legacy.css — используется
+   в members/detail.js и модалках модерации.
+   ============================================================ */
+.gr-perm-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  font-size: 12.5px;
+  line-height: 1.5;
+  border: 1px solid;
+}
+.gr-perm-status[hidden] { display: none !important; }
+.gr-perm-status i {
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.gr-perm-status div strong {
+  display: block;
+  color: var(--text);
+  margin-bottom: 2px;
+  font-weight: 700;
+}
+.gr-perm-status div span { color: var(--muted); }
+.gr-perm-status.check {
+  background: var(--blue-soft);
+  border-color: rgba(59, 130, 246, .35);
+}
+.gr-perm-status.check i { color: var(--blue); }
+.gr-perm-status.ok {
+  background: var(--green-soft);
+  border-color: rgba(22, 163, 74, .35);
+}
+.gr-perm-status.ok i { color: var(--green); }
+.gr-perm-status.warn {
+  background: var(--orange-soft);
+  border-color: rgba(245, 158, 11, .35);
+}
+.gr-perm-status.warn i { color: var(--orange); }
+.gr-perm-status.error {
+  background: var(--red-soft);
+  border-color: rgba(220, 38, 38, .35);
+}
+.gr-perm-status.error i { color: var(--red); }

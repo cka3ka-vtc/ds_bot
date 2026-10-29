@@ -4,6 +4,26 @@ import { escapeHtml } from '../core/utils.js';
 import { openContactModal } from './contactModal.js';
 import { openModal } from '../core/modal.js';
 
+/** Названия модулей для хлебных крошек. Дополнять по мере реализации. */
+const MODULE_LABELS = {
+  greetings: 'Приветствия',
+  levels: 'Уровни',
+  tickets: 'Тикеты',
+  moderation: 'Автомодерация',
+  events: 'События',
+  autoroles: 'Автороли',
+  scheduled: 'Отложенные сообщения',
+  messages: 'Сообщения',
+  autodelete: 'Автоудаление',
+  birthdays: 'Дни рождения',
+};
+
+const PAGE_LABELS = {
+  overview: 'Дашборд', modules: 'Модули', moderation: 'Модерация',
+  commands: 'Команды', members: 'Участники', settings: 'Настройки',
+  bots: 'Мои боты', servers: 'Список серверов',
+};
+
 export function renderTopbar(container) {
   const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
   const themeIconClass = currentTheme === 'dark' ? 'fa-sun' : 'fa-moon';
@@ -38,26 +58,35 @@ export function renderTopbar(container) {
   container.querySelector('[data-contacts]').addEventListener('click', () => openContactModal());
 }
 
-const PAGE_LABELS = {
-  overview: 'Дашборд', modules: 'Модули', moderation: 'Модерация',
-  commands: 'Команды', members: 'Участники', settings: 'Настройки',
-  bots: 'Мои боты', servers: 'Список серверов',
-};
-
 function updateTitle(container) {
   const bots = store.get('bots');
   const guilds = store.get('guilds');
   const bot = bots.find((b) => b.id === store.get('activeBotId'));
   const guild = guilds.find((g) => g.id === store.get('activeGuildId'));
-  const page = location.hash.slice(1) || 'overview';
+
+  const rawHash = location.hash.slice(1) || 'overview';
+  const [page, queryString] = rawHash.split('?');
+  const params = new URLSearchParams(queryString || '');
+  const sub = params.get('sub');
+
   const title = container.querySelector('#topbarTitle');
-  if (title) {
-    title.innerHTML = `
-      <span class="crumb">${escapeHtml(bot?.name || 'Бот')}</span>
-      <span class="crumb">${escapeHtml(guild?.name || '—')}</span>
-      <span>${PAGE_LABELS[page] || ''}</span>
+  if (!title) return;
+
+  let html = `
+    <span class="crumb">${escapeHtml(bot?.name || 'Бот')}</span>
+    <span class="crumb">${escapeHtml(guild?.name || '—')}</span>
+  `;
+
+  if (sub) {
+    html += `
+      <span class="crumb">Модуль</span>
+      <span>${escapeHtml(MODULE_LABELS[sub] || sub)}</span>
     `;
+  } else {
+    html += `<span>${escapeHtml(PAGE_LABELS[page] || '')}</span>`;
   }
+
+  title.innerHTML = html;
 }
 
 /* Мини-тур: карточки с кратким обзором разделов */

@@ -1,61 +1,66 @@
 // server/modules/greetings.js
-import { EmbedBuilder } from 'discord.js';
 import { Module } from './_base.js';
+import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../core/componentsBuilder.js';
+import { getNonBotMemberCount } from '../core/guildCounts.js';
 
-/**
- * Приветствия — полноценно работает:
- *  - отправляет приветствие в канал
- *  - выдаёт роль при входе
- *  - поддерживает embed и обычный текст
- *  - понимает переменные {user}, {count}, {guild}
- */
 export default class GreetingsModule extends Module {
   get key() {
     return 'greetings';
   }
 
   async onEvent({ event, client, guildId, member }) {
-    if (event !== 'guildMemberAdd') return;
+    if (event !== 'guildMemberAdd' && event !== 'guildMemberRemove') return;
+    if (!member || !member.user || member.user.bot) return;
+    if (!guildId) return;
 
     const { enabled, config } = await this.getConfig(client.user.id, guildId);
-    if (!enabled || !config.channelId) return;
+    if (!enabled) return;
+
+    const isJoin = event === 'guildMemberAdd';
+    if (isJoin && !config?.events?.join) return;
+    if (!isJoin && !config?.events?.leave) return;
+
+    const msgConfig = config?.messages?.[isJoin ? 'join' : 'leave'];
+    if (!config?.channelId || !msgConfig) return;
 
     const channel = await client.channels.fetch(config.channelId).catch(() => null);
-    if (!channel?.isTextBased()) {
+    if (!channel?.isTextBased?.()) {
       this.logger.warn({ guildId, channelId: config.channelId }, 'greetings: invalid channel');
       return;
     }
 
-    const text = String(config.message || 'Привет, {user}! 👋')
-      .replaceAll('{user}', `<@${member.id}>`)
-      .replaceAll('{count}', String(member.guild.memberCount))
-      .replaceAll('{guild}', member.guild.name);
+    const nonBotCount = await getNonBotMemberCount(member.guild);
+
+    const tokens = {
+      user: `<@${member.id}>`,
+      mention: `<@${member.id}>`,
+      username: member.user.username,
+      displayName: member.user.globalName || member.user.username,
+      avatarUrl: member.user.displayAvatarURL?.({ size: 128 }) || '',
+      guild: member.guild.name,
+      count: nonBotCount,
+      guildIconUrl: member.guild.iconURL?.({ size: 128 }) || '',
+      section: 'greetings',
+    };
+
+    let components;
+    try {
+      components = buildComponentsFromConfig(msgConfig, tokens);
+    } catch (err) {
+      this.logger.warn({ err, guildId }, 'greetings: build failed');
+      return;
+    }
+    if (!components?.length) return;
 
     try {
-      if (config.sendEmbed) {
-        const embed = new EmbedBuilder()
-          .setColor(0x5865f2)
-          .setTitle('👋 Добро пожаловать!')
-          .setDescription(text)
-          .setThumbnail(member.user.displayAvatarURL({ size: 128 }))
-          .setTimestamp();
-        await channel.send({ embeds: [embed] });
-      } else {
-        await channel.send({ content: text });
-      }
+      await channel.send({
+        flags: FLAG_COMPONENTS_V2,
+        components,
+        allowedMentions: { parse: ['users'] },
+      });
     } catch (err) {
-      this.logger.warn({ err, guildId }, 'greetings: failed to send message');
-    }
-
-    if (config.autoRoleId) {
-      try {
-        await member.roles.add(config.autoRoleId);
-      } catch (err) {
-        this.logger.warn(
-          { err, guildId, roleId: config.autoRoleId },
-          'greetings: failed to add auto-role',
-        );
-      }
+      this.logger.warn({ err, guildId }, 'greetings: failed to send');
+      return;
     }
 
     this.db.addLog({
@@ -63,7 +68,7 @@ export default class GreetingsModule extends Module {
       guildId,
       level: 'info',
       module: 'greetings',
-      message: `Приветствие для ${member.user.username}`,
+      message: `${isJoin ? 'Приветствие' : 'Прощание'} для ${member.user.username}`,
     });
   }
 }

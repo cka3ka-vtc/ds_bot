@@ -9,11 +9,11 @@ import { renderSidebar } from './components/sidebar.js';
 import { renderTopbar } from './components/topbar.js';
 
 import overview from './views/overview/index.js';
-import modules from './views/modules.js';
+import modules from './views/modules/index.js';
 import bots from './views/bots.js';
 import moderation from './views/moderation/index.js';
 import commands from './views/commands/index.js';
-import members from './views/members.js';
+import members from './views/members/index.js';
 import settings from './views/settings/index.js';
 import servers from './views/servers.js';
 
@@ -81,7 +81,6 @@ async function boot() {
   });
 }
 
-/** Глобальные клики: мобильное меню, оверлей сайдбара */
 function installGlobalUiHandlers() {
   document.addEventListener('click', (e) => {
     if (e.target.closest('#menuToggle')) {
