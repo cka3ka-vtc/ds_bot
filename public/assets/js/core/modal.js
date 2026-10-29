@@ -1,12 +1,15 @@
 // public/assets/js/core/modal.js
 let activeModal = null;
+let previousFocus = null;
 
-/**
- * Открывает модаль.
- *  - wide: расширенная версия (820px) — для таблиц/списков
- *  - fullscreen: 1300px, 94vh — для тяжёлых редакторов
- *  - если onSubmit не передан — «Отмена» скрывается (информационные модалки)
- */
+function getFocusable(container) {
+  return Array.from(
+    container.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+}
+
 export function openModal({
   title,
   subtitle,
@@ -20,15 +23,17 @@ export function openModal({
   return new Promise((resolve) => {
     closeModal();
 
+    previousFocus = document.activeElement;
+
     const root = document.getElementById('modalRoot');
     const modal = document.createElement('div');
     modal.className = 'modal';
     modal.innerHTML = `
       <div class="modal-backdrop"></div>
-      <div class="modal-content" role="dialog">
+      <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <div class="modal-header">
           <div>
-            <h3></h3>
+            <h3 id="modalTitle"></h3>
             <p></p>
           </div>
           <button class="modal-close" type="button" aria-label="Закрыть">
@@ -66,6 +71,10 @@ export function openModal({
     const close = (result = null) => {
       modal.remove();
       activeModal = null;
+      if (previousFocus && previousFocus.focus) {
+        try { previousFocus.focus(); } catch {}
+      }
+      previousFocus = null;
       resolve(result);
     };
 
@@ -83,11 +92,33 @@ export function openModal({
       }
     });
 
-    document.addEventListener('keydown', function esc(e) {
-      if (e.key === 'Escape' && activeModal === modal) {
-        document.removeEventListener('keydown', esc);
+    const onKey = (e) => {
+      if (activeModal !== modal) return;
+      if (e.key === 'Escape') {
+        e.stopPropagation();
         close();
+        return;
       }
+      if (e.key === 'Tab') {
+        const focusables = getFocusable(contentEl);
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener('keydown', onKey);
+
+    // Сначала фокус на первый интерактивный элемент
+    requestAnimationFrame(() => {
+      const focusable = getFocusable(contentEl);
+      if (focusable.length) focusable[0].focus();
     });
 
     if (onOpen) onOpen(modal);

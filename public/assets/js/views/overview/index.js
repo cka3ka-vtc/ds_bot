@@ -2,7 +2,7 @@
 import { store } from '../../core/store.js';
 import { api } from '../../core/api.js';
 import { toast } from '../../core/toast.js';
-import { escapeHtml } from '../../core/utils.js';
+import { UI } from '/shared/ui-strings.js';
 import { renderKpiGrid, animateKpiCounters } from './kpi.js';
 import { renderChartSection, renderChart, hasAnyActivity } from './chart.js';
 import { renderTopCommands, renderTopChannels, renderRecentEvents } from './lists.js';
@@ -22,18 +22,18 @@ export default {
     const guildId = store.get('activeGuildId');
 
     if (!botId || !guildId) {
-      return this._empty(container, 'Выберите сервер', 'Сначала выберите сервер в сайдбаре');
+      return this._empty(container, UI.common.selectServer, UI.common.selectServerHint);
     }
 
-    container.innerHTML = '<div class="boot-screen"><i class="fa-solid fa-circle-notch fa-spin"></i><span>Загрузка...</span></div>';
+    container.innerHTML = `<div class="boot-screen"><i class="fa-solid fa-circle-notch fa-spin"></i><span>${UI.common.loading}</span></div>`;
 
     try {
       this.data = await this._fetch(botId, guildId);
     } catch (err) {
       if (err.data?.error === 'bot_offline') {
-        return this._empty(container, 'Бот офлайн', 'Дождитесь запуска бота или выберите другого');
+        return this._empty(container, UI.common.botOffline, UI.common.botOfflineHint);
       }
-      return this._empty(container, 'Не удалось загрузить статистику', err.message);
+      return this._empty(container, UI.common.errorLoad, err.message);
     }
 
     this._renderUI();
@@ -67,12 +67,12 @@ export default {
     this.container.innerHTML = `
       <div class="view-head">
         <div class="view-title">
-          <h1>Дашборд</h1>
-          <p>Ключевые метрики сервера, топ команд и последние события</p>
+          <h1>${UI.pages.overview.title}</h1>
+          <p>${UI.pages.overview.subtitle}</p>
         </div>
         <div class="view-actions">
           <button class="btn btn-ghost" data-refresh>
-            <i class="fa-solid fa-rotate"></i> Обновить
+            <i class="fa-solid fa-rotate"></i> ${UI.overview.refresh}
           </button>
         </div>
       </div>
@@ -85,11 +85,11 @@ export default {
           <div class="card-head">
             <div>
               <div class="kpi-label-group">
-                <span class="card-title">Топ команд</span>
+                <span class="card-title">${UI.overview.topCommands.title}</span>
                 <button class="kpi-hint" type="button"
-                        data-tooltip="Суммарное количество использований каждой команды.">?</button>
+                        data-tooltip="${UI.overview.topCommands.hint}">?</button>
               </div>
-              <span class="card-sub">за 7 дней</span>
+              <span class="card-sub">${UI.overview.topCommands.subtitle}</span>
             </div>
           </div>
           <div class="card-body" style="padding:12px;">
@@ -101,8 +101,8 @@ export default {
       <div class="overview-grid channels-events">
         <div class="card">
           <div class="card-head">
-            <div><span class="card-title">Последние события</span></div>
-            <a href="#moderation" class="btn-link" data-nav="moderation">Все <i class="fa-solid fa-arrow-right"></i></a>
+            <div><span class="card-title">${UI.overview.recentEvents.title}</span></div>
+            <a href="#moderation" class="btn-link" data-nav="moderation">${UI.overview.recentEvents.all} <i class="fa-solid fa-arrow-right"></i></a>
           </div>
           <div class="card-body" style="padding:8px;">
             ${renderRecentEvents(d.recentEvents)}
@@ -113,16 +113,16 @@ export default {
           <div class="card-head">
             <div>
               <div class="kpi-label-group">
-                <span class="card-title">Популярные каналы</span>
+                <span class="card-title">${UI.overview.topChannels.title}</span>
                 <button class="kpi-hint" type="button"
-                        data-tooltip="Количество уникальных пользователей, активных в канале.">?</button>
+                        data-tooltip="${UI.overview.topChannels.hint}">?</button>
               </div>
-              <span class="card-sub">за 7 дней</span>
+              <span class="card-sub">${UI.overview.topChannels.subtitle}</span>
             </div>
             ${hasChannelStats ? `
               <div class="chart-filters" role="tablist">
-                <button class="chart-filter ${cf === 'text' ? 'active' : ''}" data-channel-filter="text">Текстовые</button>
-                <button class="chart-filter ${cf === 'voice' ? 'active' : ''}" data-channel-filter="voice">Голосовые</button>
+                <button class="chart-filter ${cf === 'text' ? 'active' : ''}" data-channel-filter="text">${UI.overview.topChannels.filterText}</button>
+                <button class="chart-filter ${cf === 'voice' ? 'active' : ''}" data-channel-filter="voice">${UI.overview.topChannels.filterVoice}</button>
               </div>
             ` : ''}
           </div>
@@ -142,7 +142,7 @@ export default {
       try {
         this.data = await this._fetch(store.get('activeBotId'), store.get('activeGuildId'));
         this._renderUI();
-        toast('Обновлено', 'success');
+        toast(UI.common.updated, 'success');
       } catch {}
     });
 
@@ -170,8 +170,6 @@ export default {
       });
     });
 
-    // ── Клики по кликабельным KPI-карточкам ──
-    // data-kpi-action → модалка; data-kpi-nav → переход в раздел.
     this.container.querySelectorAll('[data-kpi-action], [data-kpi-nav]').forEach((card) => {
       const action = card.dataset.kpiAction;
       const nav = card.dataset.kpiNav;
@@ -182,12 +180,11 @@ export default {
         else if (nav) location.hash = nav;
       };
       card.addEventListener('click', (e) => {
-        // Клик по подсказке — только тултип, карточку не открываем
         if (e.target.closest('.kpi-hint')) return;
         run();
       });
       card.addEventListener('keydown', (e) => {
-        if (e.target !== card) return;   // Enter/Space на вложенной кнопке-подсказке не перехватываем
+        if (e.target !== card) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           run();

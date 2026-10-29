@@ -1,22 +1,78 @@
 // server/modules/messages.js
+// Реализует обработку кнопок role-buttons из редактора сообщений.
+// custom_id имеет формат: role_<section>_<roleId>_<buttonId>
+
 import { Module } from './_base.js';
 
-/**
- * Сообщения (Components v2) — заглушка.
- * Реагирует на interactionCreate, но ничего не отправляет.
- */
+const ROLE_BUTTON_RE = /^role_[a-z0-9]+_(\d+)_([a-z0-9]+)$/i;
+
 export default class MessagesModule extends Module {
-  get key() {
-    return 'messages';
-  }
+  get key() { return 'messages'; }
 
   async onEvent({ event, client, guildId, interaction }) {
     if (event !== 'interactionCreate') return;
-    if (!interaction.isButton?.() && !interaction.isStringSelectMenu?.()) return;
+    if (!interaction.isButton?.()) return;
 
-    this.logger.debug(
-      { botId: client.user.id, guildId, customId: interaction.customId },
-      'messages: component interaction (stub)',
-    );
+    const customId = interaction.customId || '';
+    const match = customId.match(ROLE_BUTTON_RE);
+    if (!match) return;
+
+    const roleId = match[1];
+    const guild = interaction.guild;
+    if (!guild) {
+      return interaction.reply({
+        content: '⚠ Кнопка доступна только на сервере',
+        ephemeral: true,
+      }).catch(() => {});
+    }
+
+    const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+    if (!role) {
+      return interaction.reply({
+        content: '❌ Роль не найдена — возможно, она была удалена',
+        ephemeral: true,
+      }).catch(() => {});
+    }
+
+    const me = guild.members.me;
+    if (!me?.permissions?.has('ManageRoles')) {
+      return interaction.reply({
+        content: '❌ У бота нет права «Управление ролями»',
+        ephemeral: true,
+      }).catch(() => {});
+    }
+
+    if (role.position >= me.roles.highest.position) {
+      return interaction.reply({
+        content: '❌ Роль выше роли бота — выдать нельзя',
+        ephemeral: true,
+      }).catch(() => {});
+    }
+
+    const member = interaction.member;
+    const hasRole = member.roles.cache.has(roleId);
+
+    try {
+      if (hasRole) {
+        await member.roles.remove(roleId, 'Role-button из панели');
+      } else {
+        await member.roles.add(roleId, 'Role-button из панели');
+      }
+      await interaction.reply({
+        content: hasRole
+          ? `✅ Роль **${role.name}** снята`
+          : `✅ Роль **${role.name}** выдана`,
+        ephemeral: true,
+      }).catch(() => {});
+    } catch (err) {
+      this.logger.warn(
+        { err, guildId, userId: interaction.user.id, roleId },
+        'messages: role-button toggle failed',
+      );
+      await interaction.reply({
+        content: '❌ Не удалось изменить роль',
+        ephemeral: true,
+      }).catch(() => {});
+    }
   }
 }

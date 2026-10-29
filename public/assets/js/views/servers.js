@@ -1,6 +1,7 @@
 // public/assets/js/views/servers.js
 import { store } from '../core/store.js';
 import { escapeHtml, fmtNum, fmtDate, WORD, initials, guildIconUrl } from '../core/utils.js';
+import { UI } from '/shared/ui-strings.js';
 
 export default {
   async render(container) {
@@ -10,15 +11,15 @@ export default {
     container.innerHTML = `
       <div class="view-head">
         <div class="view-title">
-          <h1>Список серверов</h1>
-          <p>Показаны только серверы, где у вас есть права администратора</p>
+          <h1>${UI.pages.servers.title}</h1>
+          <p>${UI.pages.servers.subtitle}</p>
         </div>
       </div>
       ${guilds.length ? `
         <div class="servers-toolbar">
           <div class="search-input" style="flex:1;max-width:420px;">
             <i class="fa-solid fa-magnifying-glass"></i>
-            <input type="text" id="serversSearch" placeholder="Поиск по названию или ID...">
+            <input type="text" id="serversSearch" placeholder="${UI.servers.searchPlaceholder}">
           </div>
           <span class="servers-count" id="serversCount">
             ${guilds.length} ${WORD.server(guilds.length)}
@@ -30,10 +31,10 @@ export default {
       ` : `
         <div class="empty-state">
           <i class="fa-brands fa-discord"></i>
-          <strong>Нет доступных серверов</strong>
-          <span>Добавьте бота на сервер, где у вас есть администраторские права</span>
+          <strong>${UI.servers.emptyTitle}</strong>
+          <span>${UI.servers.emptyHint}</span>
           <a href="/auth/discord/bot-invite" class="btn btn-primary">
-            <i class="fa-brands fa-discord"></i> Добавить бота на сервер
+            <i class="fa-brands fa-discord"></i> ${UI.actions.addBotOnServer}
           </a>
         </div>
       `}
@@ -82,7 +83,7 @@ export default {
               class="server-card"
               data-guild-id="${g.id}"
               data-name="${escapeHtml(g.name)}"
-              aria-label="Открыть панель ${escapeHtml(g.name)}">
+              aria-label="${UI.servers.openPanelLabel} ${escapeHtml(g.name)}">
         <span class="server-glow-card" aria-hidden="true"></span>
         <div class="server-card-head">
           <div class="server-card-avatar">${avatar}</div>
@@ -94,23 +95,23 @@ export default {
         <div class="server-card-stats">
           <div class="server-stat">
             <span class="server-stat-value">${fmtNum(memberCount)}</span>
-            <span class="server-stat-label">Участников</span>
+            <span class="server-stat-label">${UI.servers.statMembers}</span>
           </div>
           <div class="server-stat">
             <span class="server-stat-value">${online != null ? fmtNum(online) : '—'}</span>
-            <span class="server-stat-label">Онлайн</span>
+            <span class="server-stat-label">${UI.servers.statOnline}</span>
           </div>
           <div class="server-stat">
             <span class="server-stat-value">${g.createdAt ? fmtDate(g.createdAt) : '—'}</span>
-            <span class="server-stat-label">Создан</span>
+            <span class="server-stat-label">${UI.servers.statCreated}</span>
           </div>
         </div>
         <div class="server-card-footer">
           ${active
-            ? '<span class="badge online">Выбран</span>'
-            : '<span class="badge offline">Не выбран</span>'}
+            ? `<span class="badge online">${UI.servers.selected}</span>`
+            : `<span class="badge offline">${UI.servers.notSelected}</span>`}
           <span class="server-card-cta">
-            ${active ? 'Управлять' : 'Выбрать'}
+            ${active ? UI.servers.manage : UI.servers.select}
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="5" y1="12" x2="19" y2="12"></line>
               <polyline points="12 5 19 12 12 19"></polyline>

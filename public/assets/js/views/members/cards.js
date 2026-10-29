@@ -1,57 +1,10 @@
 // public/assets/js/views/members/cards.js
-import { escapeHtml, fmtDate, WORD } from '../../core/utils.js';
-import { openMemberDetail } from './detail.js';
+import { escapeHtml, fmtDate } from '../../core/utils.js';
+import { UI } from '/shared/ui-strings.js';
 
-export function renderGrid(view) {
-  const grid = view.container.querySelector('#memGrid');
-  const empty = view.container.querySelector('#memEmpty');
-  const count = view.container.querySelector('#memCount');
-  const q = view.state.search;
-  const roleFilter = view.state.roleFilter;
-  const status = view.state.statusFilter;
+const C = UI.members.card;
 
-  let filtered = view.state.members.filter((m) => {
-    const matchQ = !q
-      || (m.username || '').toLowerCase().includes(q)
-      || (m.displayName || '').toLowerCase().includes(q);
-    if (!matchQ) return false;
-    if (status === 'active' && m.left) return false;
-    if (status === 'left' && !m.left) return false;
-    if (roleFilter) return (m.roles || []).some((r) => r.id === roleFilter);
-    return true;
-  });
-
-  filtered = [...filtered].sort((a, b) => {
-    if (a.left !== b.left) return a.left ? 1 : -1;
-    return 0;
-  });
-
-  if (!filtered.length) {
-    grid.innerHTML = '';
-    empty.hidden = false;
-    count.textContent = `0 ${WORD.member(0)}`;
-    return;
-  }
-  empty.hidden = true;
-  count.textContent = `${filtered.length} из ${view.state.members.length}`;
-
-  grid.innerHTML = filtered.slice(0, 200).map(renderCard).join('');
-
-  grid.querySelectorAll('[data-open]').forEach((card) => {
-    card.addEventListener('click', (e) => {
-      if (e.target.closest('[data-edit]')) return;
-      openMemberDetail(view, card.dataset.open);
-    });
-  });
-  grid.querySelectorAll('[data-edit]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openMemberDetail(view, btn.dataset.edit);
-    });
-  });
-}
-
-function renderCard(m) {
+export function renderMemberCard(m) {
   const initial = (m.displayName || m.username || '?').trim()[0]?.toUpperCase() || '?';
   const avatarInner = m.avatar
     ? `<img src="${escapeHtml(m.avatar)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
@@ -59,14 +12,11 @@ function renderCard(m) {
 
   const roleBadges = (m.roles || []).slice(0, 2).map((r) => {
     const color = r.color && r.color !== '#000000' ? r.color : null;
-    const style = color
-      ? `background:${color}22;color:${color};border:1px solid ${color}33;`
-      : '';
+    const style = color ? `background:${color}22;color:${color};border:1px solid ${color}33;` : '';
     return `<span class="member-role-badge" style="${style}">${escapeHtml(r.name)}</span>`;
   }).join('');
   const moreRoles = (m.roles || []).length > 2
-    ? `<span class="member-role-badge more">+${(m.roles || []).length - 2}</span>`
-    : '';
+    ? `<span class="member-role-badge more">+${(m.roles || []).length - 2}</span>` : '';
 
   const percent = Math.max(0, Math.min(100, m.progressPercent || 0));
   const progressCurrent = m.progressCurrent || 0;
@@ -74,29 +24,29 @@ function renderCard(m) {
 
   return `
     <div class="member-card ${m.left ? 'is-left' : ''}" data-open="${m.id}">
-      <button class="member-settings-btn" type="button" data-edit="${m.id}" aria-label="Подробнее">
+      <button class="member-settings-btn" type="button" data-edit="${m.id}" aria-label="${C.openLabel}">
         <i class="fa-solid fa-arrow-right"></i>
       </button>
 
       <div class="member-top">
         <div class="member-avatar-lg">${avatarInner}</div>
         <div class="member-main">
-          <div class="member-display-name">${escapeHtml(m.displayName || m.username || 'Пользователь')}</div>
-          <div class="member-username">@${escapeHtml(m.username || 'unknown')}</div>
+          <div class="member-display-name">${escapeHtml(m.displayName || m.username || C.userFallback)}</div>
+          <div class="member-username">@${escapeHtml(m.username || C.unknown)}</div>
         </div>
       </div>
 
       ${m.left ? `
         <div class="member-left-chip">
           <i class="fa-solid fa-right-from-bracket"></i>
-          <span>Покинул${m.leftAt ? ' · ' + fmtDate(m.leftAt / 1000) : ''}</span>
+          <span>${C.leftLabel}${m.leftAt ? ' · ' + fmtDate(m.leftAt / 1000) : ''}</span>
         </div>
       ` : ''}
 
       <div class="member-level-row">
-        <span class="member-level-badge"><i class="fa-solid fa-star"></i> ${m.level} ур.</span>
+        <span class="member-level-badge"><i class="fa-solid fa-star"></i> ${m.level} ${C.levelSuffix}</span>
         ${m.title ? `<span class="member-title-badge">${escapeHtml(m.title)}</span>` : ''}
-        ${m.rank ? `<span class="member-rank-badge" title="Место в топе">#${m.rank}</span>` : ''}
+        ${m.rank ? `<span class="member-rank-badge" title="${C.rankTitle}">#${m.rank}</span>` : ''}
       </div>
 
       <div class="member-progress">
@@ -107,22 +57,22 @@ function renderCard(m) {
       </div>
 
       <div class="member-activity">
-        <span class="member-activity-item" title="Сообщений">
+        <span class="member-activity-item" title="${C.statMessages}">
           <i class="fa-solid fa-message"></i> ${m.messages || 0}
         </span>
-        <span class="member-activity-item" title="Подключений к войсу">
+        <span class="member-activity-item" title="${C.statVoice}">
           <i class="fa-solid fa-volume-high"></i> ${m.voice || 0}
         </span>
-        <span class="member-activity-item" title="Команд">
+        <span class="member-activity-item" title="${C.statCommands}">
           <i class="fa-solid fa-terminal"></i> ${m.commands || 0}
         </span>
         ${m.warnings > 0 ? `
-          <span class="member-activity-item warn" title="Предупреждения">
+          <span class="member-activity-item warn" title="${C.statWarnings}">
             <i class="fa-solid fa-triangle-exclamation"></i> ${m.warnings}
           </span>
         ` : ''}
         ${m.birthday ? `
-          <span class="member-meta-item" title="День рождения">
+          <span class="member-meta-item" title="${C.statBirthday}">
             <i class="fa-solid fa-cake-candles"></i> ${escapeHtml(m.birthday)}
           </span>
         ` : ''}
@@ -135,4 +85,9 @@ function renderCard(m) {
       ` : ''}
     </div>
   `;
+}
+
+export function renderGrid(grid, items) {
+  if (!grid) return;
+  grid.innerHTML = (items || []).map(renderMemberCard).join('');
 }

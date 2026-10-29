@@ -1,17 +1,19 @@
 // server/modules/scheduled.js
+// Стаб. Отложенные сообщения будут реализованы через очередь в БД.
+
 import { Module } from './_base.js';
 
-/**
- * Отложенные сообщения — заглушка. В будущем: планировщик через БД.
- */
 export default class ScheduledModule extends Module {
-  get key() {
-    return 'scheduled';
-  }
+  get key() { return 'scheduled'; }
 
   async register() {
-    this.logger.info({ module: 'scheduled' }, 'scheduled: stub registered (cron not implemented)');
+    this.logger.info(
+      { module: 'scheduled' },
+      'scheduled: registered (stub — queue not implemented)',
+    );
   }
 
-  async onEvent(_event) {}
+  async onEvent(_event) {
+    // Ничего
+  }
 }

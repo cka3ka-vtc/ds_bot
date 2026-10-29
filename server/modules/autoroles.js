@@ -1,39 +1,35 @@
 // server/modules/autoroles.js
+// Стаб. Реализация реакций появится позже вместе с событиями эмодзи.
+// Сейчас модуль явно сообщает о своём состоянии в логах.
+
 import { Module } from './_base.js';
 
-/**
- * Автороли — заглушка. Выдача ролей при входе и по реакциям.
- */
 export default class AutorolesModule extends Module {
-  get key() {
-    return 'autoroles';
+  get key() { return 'autoroles'; }
+
+  async register() {
+    this.logger.info(
+      { module: 'autoroles' },
+      'autoroles: registered (stub — reaction-roles not implemented)',
+    );
   }
 
-  async onEvent({ event, client, guildId, member, reaction, user }) {
-    if (event === 'guildMemberAdd') {
-      const { enabled, config } = await this.getConfig(client.user.id, guildId);
-      if (!enabled || !config.joinRoleId) return;
+  async onEvent({ event, client, guildId, member }) {
+    if (event !== 'guildMemberAdd') return;
 
-      try {
-        await member.roles.add(config.joinRoleId);
-        this.logger.info(
-          { botId: client.user.id, guildId, userId: member.id, roleId: config.joinRoleId },
-          'autoroles: role added on join',
-        );
-      } catch (err) {
-        this.logger.warn(
-          { err, guildId, roleId: config.joinRoleId },
-          'autoroles: failed to add join role',
-        );
-      }
-      return;
-    }
+    const { enabled, config } = await this.getConfig(client.user.id, guildId);
+    if (!enabled || !config.joinRoleId) return;
 
-    if (event === 'messageReactionAdd') {
-      // TODO: обработка реакций → роли (требует настройки mapping)
-      this.logger.debug(
-        { botId: client.user.id, guildId, emoji: reaction?.emoji?.name, userId: user?.id },
-        'autoroles: reaction received (stub)',
+    try {
+      await member.roles.add(config.joinRoleId);
+      this.logger.info(
+        { botId: client.user.id, guildId, userId: member.id, roleId: config.joinRoleId },
+        'autoroles: role added on join',
+      );
+    } catch (err) {
+      this.logger.warn(
+        { err, guildId, roleId: config.joinRoleId },
+        'autoroles: failed to add join role',
       );
     }
   }

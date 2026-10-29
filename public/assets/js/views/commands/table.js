@@ -3,6 +3,7 @@ import { escapeHtml, WORD } from '../../core/utils.js';
 import { api } from '../../core/api.js';
 import { toast } from '../../core/toast.js';
 import { store } from '../../core/store.js';
+import { UI } from '/shared/ui-strings.js';
 import { openEditor } from './editor.js';
 
 export function renderTable(view) {
@@ -44,16 +45,16 @@ export function renderTable(view) {
       <td><span class="cat-pill util">${escapeHtml(c.category || 'Custom')}</span></td>
       <td>
         <span class="type-badge ${c._src === 'custom' ? 'custom' : 'functional'}">
-          ${c._src === 'custom' ? 'Custom' : 'Встроенная'}
+          ${c._src === 'custom' ? UI.commands.typeCustom : UI.commands.typeBuiltin}
         </span>
       </td>
       <td>
         <div class="row-actions">
           ${c._src === 'custom'
-            ? `<button class="btn btn-icon btn-ghost" data-edit="${c.id}" title="Редактировать"><i class="fa-solid fa-gear"></i></button>
-               <button class="btn btn-icon btn-ghost" data-delete="${c.id}" title="Удалить"><i class="fa-solid fa-trash"></i></button>
-               <button class="toggle ${c.enabled ? 'on' : ''}" data-toggle="${c.id}" role="switch" aria-checked="${c.enabled}"></button>`
-            : `<span class="badge online">Встроенная</span>`}
+            ? `<button class="btn btn-icon btn-ghost" data-edit="${c.id}" title="${UI.common.edit}" aria-label="${UI.common.edit}"><i class="fa-solid fa-gear"></i></button>
+               <button class="btn btn-icon btn-ghost" data-delete="${c.id}" title="${UI.common.delete}" aria-label="${UI.common.delete}"><i class="fa-solid fa-trash"></i></button>
+               <button class="toggle ${c.enabled ? 'on' : ''}" data-toggle="${c.id}" role="switch" aria-checked="${c.enabled}" aria-label="/${escapeHtml(c.name)}"></button>`
+            : `<span class="badge online">${UI.commands.badgeBuiltin}</span>`}
         </div>
       </td>
     </tr>
@@ -68,13 +69,13 @@ export function renderTable(view) {
 }
 
 async function removeCommand(view, id) {
-  if (!confirm('Удалить команду?')) return;
+  if (!confirm(UI.commands.confirmDelete)) return;
   try {
     await api.del(`/api/commands/${id}?botId=${store.get('activeBotId')}&guildId=${store.get('activeGuildId')}`);
-    toast('Удалено', 'success');
+    toast(UI.toast.deleted, 'success');
     await view.render(view.container);
   } catch (err) {
-    toast('Ошибка: ' + (err.data?.error || err.message), 'error');
+    toast(UI.common.error + ': ' + (err.data?.error || err.message), 'error');
   }
 }
 
@@ -89,6 +90,6 @@ async function toggleCommand(id, btn) {
     });
   } catch {
     btn.classList.toggle('on');
-    toast('Ошибка', 'error');
+    toast(UI.common.error, 'error');
   }
 }

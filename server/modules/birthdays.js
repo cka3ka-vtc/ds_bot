@@ -1,17 +1,19 @@
 // server/modules/birthdays.js
+// Стаб. Планировщик поздравлений пока не реализован.
+
 import { Module } from './_base.js';
 
-/**
- * Дни рождения — заглушка. Поздравления и роль именинника.
- */
 export default class BirthdaysModule extends Module {
-  get key() {
-    return 'birthdays';
-  }
+  get key() { return 'birthdays'; }
 
   async register() {
-    this.logger.info({ module: 'birthdays' }, 'birthdays: stub registered (cron not implemented)');
+    this.logger.info(
+      { module: 'birthdays' },
+      'birthdays: registered (stub — scheduler not implemented)',
+    );
   }
 
-  async onEvent(_event) {}
+  async onEvent(_event) {
+    // Ничего — событий не обрабатывает
+  }
 }

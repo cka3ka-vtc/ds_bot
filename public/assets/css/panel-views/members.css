@@ -79,10 +79,30 @@
 }
 .role-filter-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 12px; }
 
+/* Пагинация */
+.members-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 4px;
+}
+.members-pagination .btn { min-width: 100px; }
+.members-pagination .btn[disabled] { opacity: .5; cursor: not-allowed; }
+.members-pagination .page-info {
+  font-size: 13px;
+  color: var(--muted);
+  min-width: 120px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .members-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
   gap: 14px;
+  transition: opacity .15s;
 }
 
 .member-card {

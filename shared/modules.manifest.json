@@ -8,7 +8,7 @@
       "color": "green",
       "category": "engagement",
       "version": "2.1.0",
-      "defaultEnabled": true,
+      "defaultEnabled": false,
       "events": ["guildMemberAdd", "guildMemberRemove"],
       "configSchema": {
         "channelId": { "type": "text", "label": "ID канала" },
@@ -24,7 +24,7 @@
       "color": "orange",
       "category": "engagement",
       "version": "2.0.0",
-      "defaultEnabled": true,
+      "defaultEnabled": false,
       "events": ["messageCreate", "interactionCreate", "voiceStateUpdate"],
       "configSchema": {
         "announceChannelId": { "type": "text", "label": "ID канала объявлений" },
@@ -47,7 +47,7 @@
       "color": "blue",
       "category": "engagement",
       "version": "1.0.0",
-      "defaultEnabled": true,
+      "defaultEnabled": false,
       "events": [],
       "configSchema": {
         "announceChannelId": { "type": "text",   "label": "ID канала анонсов" },
@@ -63,7 +63,7 @@
       "color": "pink",
       "category": "engagement",
       "version": "1.0.0",
-      "defaultEnabled": true,
+      "defaultEnabled": false,
       "events": [],
       "configSchema": {
         "channelId":      { "type": "text",     "label": "ID канала поздравлений" },
@@ -80,7 +80,7 @@
       "color": "red",
       "category": "moderation",
       "version": "1.0.0",
-      "defaultEnabled": true,
+      "defaultEnabled": false,
       "events": ["messageCreate", "guildMemberAdd"],
       "configSchema": {
         "filterProfanity": { "type": "boolean", "label": "Фильтр мата", "default": true },
@@ -100,7 +100,7 @@
       "category": "moderation",
       "version": "1.0.0",
       "defaultEnabled": false,
-      "events": ["guildMemberAdd", "messageReactionAdd"],
+      "events": ["guildMemberAdd"],
       "configSchema": {
         "joinRoleId":        { "type": "text",    "label": "ID роли при входе" },
         "reactionChannelId": { "type": "text",    "label": "ID канала с реакциями" },
@@ -131,7 +131,7 @@
       "color": "pink",
       "category": "utility",
       "version": "1.0.0",
-      "defaultEnabled": true,
+      "defaultEnabled": false,
       "events": [],
       "configSchema": {
         "channelId": { "type": "text", "label": "ID канала" },
@@ -146,7 +146,7 @@
       "color": "purple",
       "category": "utility",
       "version": "1.0.0",
-      "defaultEnabled": true,
+      "defaultEnabled": false,
       "events": ["interactionCreate"],
       "configSchema": {
         "templates": { "type": "json", "label": "Шаблоны сообщений" }
@@ -160,7 +160,7 @@
       "color": "blue",
       "category": "support",
       "version": "1.0.0",
-      "defaultEnabled": true,
+      "defaultEnabled": false,
       "events": ["interactionCreate"],
       "configSchema": {
         "categoryId":         { "type": "text",   "label": "ID категории Discord" },

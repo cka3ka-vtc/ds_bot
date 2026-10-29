@@ -5,36 +5,10 @@ import { toast } from '../../core/toast.js';
 import { escapeHtml } from '../../core/utils.js';
 import { channelPickerHTML, bindChannelPicker } from './pickers.js';
 import { MessageEditor, emptyMessageConfig } from './message-editor.js';
+import { mergeGreetingsConfig } from '/shared/greetings-config.js';
+import { UI } from '/shared/ui-strings.js';
 
-function uid() {
-  return 'blk_' + Math.random().toString(36).slice(2, 10);
-}
-
-function normalizeConfig(raw) {
-  const cfg = {
-    channelId: raw?.channelId || '',
-    events: { join: true, leave: false },
-    messages: { join: emptyMessageConfig(), leave: emptyMessageConfig() },
-  };
-
-  if (raw?.message && !raw?.messages) {
-    cfg.messages.join.blocks = [{ id: uid(), type: 'text', content: String(raw.message) }];
-    if (raw.sendEmbed) cfg.messages.join.displayMode = 'embed-color';
-  }
-
-  if (raw?.events && typeof raw.events === 'object') {
-    cfg.events = { ...cfg.events, ...raw.events };
-  }
-  if (raw?.messages && typeof raw.messages === 'object') {
-    if (raw.messages.join) cfg.messages.join = { ...cfg.messages.join, ...raw.messages.join };
-    if (raw.messages.leave) cfg.messages.leave = { ...cfg.messages.leave, ...raw.messages.leave };
-  }
-
-  for (const key of ['join', 'leave']) {
-    if (!Array.isArray(cfg.messages[key].blocks)) cfg.messages[key].blocks = [];
-  }
-  return cfg;
-}
+const G = UI.greetings;
 
 function setChannelStatus(el, status, tooltip) {
   if (!el) return;
@@ -72,10 +46,10 @@ function buildPageHTML(cfg) {
       <div class="view-head">
         <div class="view-title">
           <a href="#modules" class="back-link">
-            <i class="fa-solid fa-arrow-left"></i> К модулям
+            <i class="fa-solid fa-arrow-left"></i> ${UI.common.backToModules.replace('← ', '')}
           </a>
-          <h1>Приветствия</h1>
-          <p>Настройки модуля</p>
+          <h1>${G.pageTitle}</h1>
+          <p>${G.pageSubtitle}</p>
         </div>
       </div>
 
@@ -84,13 +58,13 @@ function buildPageHTML(cfg) {
           <section class="gr-section">
             <div class="gr-section-head">
               <div>
-                <h3>Канал</h3>
-                <p>Куда отправлять сообщения модуля</p>
+                <h3>${G.channelTitle}</h3>
+                <p>${G.channelSubtitle}</p>
               </div>
             </div>
             <div class="gr-section-body">
               <div class="channel-row">
-                <div class="channel-status empty" data-channel-status data-tooltip="Канал не выбран">
+                <div class="channel-status empty" data-channel-status data-tooltip="${G.channelStatus.empty}">
                   <i class="fa-solid fa-circle-minus"></i>
                 </div>
                 ${channelPickerHTML({ id: 'greetings_channel' })}
@@ -98,10 +72,10 @@ function buildPageHTML(cfg) {
 
               <div class="channel-test-actions" data-test-actions ${!anyEvent ? 'hidden' : ''}>
                 <button type="button" class="btn btn-ghost btn-sm" data-test-message="join" ${!cfg.events.join ? 'hidden' : ''}>
-                  <i class="fa-solid fa-paper-plane"></i> Тест: приветствие
+                  <i class="fa-solid fa-paper-plane"></i> ${G.testJoin}
                 </button>
                 <button type="button" class="btn btn-ghost btn-sm" data-test-message="leave" ${!cfg.events.leave ? 'hidden' : ''}>
-                  <i class="fa-solid fa-paper-plane"></i> Тест: прощание
+                  <i class="fa-solid fa-paper-plane"></i> ${G.testLeave}
                 </button>
               </div>
             </div>
@@ -110,24 +84,14 @@ function buildPageHTML(cfg) {
           <section class="gr-section">
             <div class="gr-section-head">
               <div>
-                <h3>События</h3>
-                <p>На какие события реагировать</p>
+                <h3>${G.eventsTitle}</h3>
+                <p>${G.eventsSubtitle}</p>
               </div>
             </div>
             <div class="gr-section-body">
               <div class="gr-toggles">
-                ${toggleHTML({
-                  eventKey: 'join',
-                  title: 'При вступлении',
-                  description: 'Сообщение при входе нового участника',
-                  checked: cfg.events.join,
-                })}
-                ${toggleHTML({
-                  eventKey: 'leave',
-                  title: 'При выходе',
-                  description: 'Сообщение, если участник покинул сервер',
-                  checked: cfg.events.leave,
-                })}
+                ${toggleHTML({ eventKey: 'join', title: G.eventJoinTitle, description: G.eventJoinDesc, checked: cfg.events.join })}
+                ${toggleHTML({ eventKey: 'leave', title: G.eventLeaveTitle, description: G.eventLeaveDesc, checked: cfg.events.leave })}
               </div>
             </div>
           </section>
@@ -136,29 +100,29 @@ function buildPageHTML(cfg) {
         <section class="gr-section">
           <div class="gr-section-head">
             <div>
-              <h3>Сообщения</h3>
-              <p>Настройка текста, блоков и оформления</p>
+              <h3>${G.messagesTitle}</h3>
+              <p>${G.messagesSubtitle}</p>
             </div>
           </div>
           <div class="gr-section-body">
             <div class="gr-tabs" data-tabs ${anyEvent ? '' : 'hidden'}>
-              <button type="button" class="gr-tab ${activeTab === 'join' ? 'active' : ''}" data-tab="join" ${!cfg.events.join ? 'hidden' : ''}>Вступление</button>
-              <button type="button" class="gr-tab ${activeTab === 'leave' ? 'active' : ''}" data-tab="leave" ${!cfg.events.leave ? 'hidden' : ''}>Выход</button>
+              <button type="button" class="gr-tab ${activeTab === 'join' ? 'active' : ''}" data-tab="join" ${!cfg.events.join ? 'hidden' : ''}>${G.tabJoin}</button>
+              <button type="button" class="gr-tab ${activeTab === 'leave' ? 'active' : ''}" data-tab="leave" ${!cfg.events.leave ? 'hidden' : ''}>${G.tabLeave}</button>
             </div>
             <div class="gr-editor-container" data-editor-container ${anyEvent ? '' : 'hidden'}></div>
             <div class="gr-messages-empty" data-messages-empty ${anyEvent ? 'hidden' : ''}>
               <i class="fa-solid fa-bell-slash" aria-hidden="true"></i>
-              <strong>Выберите хотя бы одно событие</strong>
-              <span>Чтобы настроить сообщения, включите <b>«При вступлении»</b> и/или <b>«При выходе»</b> в блоке «События».</span>
+              <strong>${G.emptyTitle}</strong>
+              <span>${G.emptyHint}</span>
             </div>
           </div>
         </section>
       </div>
 
       <div class="module-page-savebar">
-        <a href="#modules" class="btn btn-ghost">Отмена</a>
+        <a href="#modules" class="btn btn-ghost">${UI.common.cancel}</a>
         <button type="button" class="btn btn-primary" data-save>
-          <i class="fa-solid fa-check"></i> Сохранить
+          <i class="fa-solid fa-check"></i> ${UI.common.save}
         </button>
       </div>
     </div>
@@ -171,21 +135,20 @@ export default {
 
   async render(container) {
     this.container = container;
-
     const botId = store.get('activeBotId');
     const guildId = store.get('activeGuildId');
     if (!botId || !guildId) {
       container.innerHTML = `
         <div class="empty-state">
           <i class="fa-solid fa-hand"></i>
-          <strong>Выберите сервер</strong>
-          <span>Сначала выберите сервер в сайдбаре</span>
-          <a href="#modules" class="btn btn-ghost" style="margin-top:16px;">← Назад к модулям</a>
+          <strong>${UI.common.selectServer}</strong>
+          <span>${UI.common.selectServerHint}</span>
+          <a href="#modules" class="btn btn-ghost" style="margin-top:16px;">${UI.common.backToModules}</a>
         </div>`;
       return;
     }
 
-    container.innerHTML = '<div class="boot-screen"><i class="fa-solid fa-circle-notch fa-spin"></i><span>Загрузка...</span></div>';
+    container.innerHTML = `<div class="boot-screen"><i class="fa-solid fa-circle-notch fa-spin"></i><span>${UI.common.loading}</span></div>`;
 
     let channels = [];
     let roles = [];
@@ -203,14 +166,17 @@ export default {
       container.innerHTML = `
         <div class="empty-state">
           <i class="fa-solid fa-triangle-exclamation"></i>
-          <strong>Не удалось загрузить настройки</strong>
+          <strong>${UI.common.errorLoad}</strong>
           <span>${escapeHtml(err.message)}</span>
-          <a href="#modules" class="btn btn-ghost" style="margin-top:16px;">← Назад к модулям</a>
+          <a href="#modules" class="btn btn-ghost" style="margin-top:16px;">${UI.common.backToModules}</a>
         </div>`;
       return;
     }
 
-    const cfg = normalizeConfig(serverConfig.config);
+    const cfg = mergeGreetingsConfig(serverConfig.config);
+    if (!cfg.messages.join) cfg.messages.join = emptyMessageConfig();
+    if (!cfg.messages.leave) cfg.messages.leave = emptyMessageConfig();
+
     const bot = (store.get('bots') || []).find((b) => b.id === botId) || { name: 'Bot', avatarUrl: null };
 
     this.state = {
@@ -229,7 +195,7 @@ export default {
     if (this.state?.editor) this.state.editor.destroy();
     this.state = null;
     this.container = null;
-    document.querySelectorAll('.picker-popup, .time-dropdown').forEach((p) => p.remove());
+    document.querySelectorAll('.picker-popup, .time-dropdown, .tokens-dropdown').forEach((p) => p.remove());
   },
 
   _setupHandlers(container, state, ctx) {
@@ -240,10 +206,10 @@ export default {
     const checkPermissions = async (channel) => {
       if (!channel) {
         state.permissions = null;
-        setChannelStatus(statusEl, 'empty');
+        setChannelStatus(statusEl, 'empty', G.channelStatus.empty);
         return;
       }
-      setChannelStatus(statusEl, 'checking', `Проверка прав в #${channel.name}...`);
+      setChannelStatus(statusEl, 'checking', G.channelStatus.checking(channel.name));
       try {
         const perms = await api.get(
           `/api/guilds/channels/${channel.id}/permissions?botId=${state.botId}&guildId=${state.guildId}`,
@@ -251,7 +217,7 @@ export default {
         state.permissions = perms;
 
         if (!perms || !perms.channelExists) {
-          setChannelStatus(statusEl, 'error', 'Канал не найден');
+          setChannelStatus(statusEl, 'error', G.channelStatus.notFound);
           return;
         }
 
@@ -261,13 +227,10 @@ export default {
         if (!perms.canEmbed) missing.push('Встраивание ссылок');
         if (!perms.canAttachFiles) missing.push('Прикрепление файлов');
 
-        if (missing.length === 0) {
-          setChannelStatus(statusEl, 'ok', 'Бот может отправлять сообщения в выбранный канал');
-        } else {
-          setChannelStatus(statusEl, 'error', 'Бот не может отправлять сообщения: ' + missing.join(', '));
-        }
+        if (missing.length === 0) setChannelStatus(statusEl, 'ok', G.channelStatus.ok);
+        else setChannelStatus(statusEl, 'error', G.channelStatus.missing(missing.join(', ')));
       } catch (err) {
-        setChannelStatus(statusEl, 'error', 'Не удалось проверить права: ' + (err.message || ''));
+        setChannelStatus(statusEl, 'error', G.channelStatus.checkFailed + ': ' + (err.message || ''));
       }
     };
 
@@ -325,7 +288,6 @@ export default {
       }
       if (editorEl) editorEl.hidden = !anyOn;
       if (emptyEl) emptyEl.hidden = anyOn;
-
       if (testWrap) testWrap.hidden = !anyOn;
       if (testJoin) testJoin.hidden = !joinOn;
       if (testLeave) testLeave.hidden = !leaveOn;
@@ -344,41 +306,33 @@ export default {
         (state.activeTab === 'join' && joinOn) ||
         (state.activeTab === 'leave' && leaveOn);
 
-      if (!joinOn && !leaveOn) {
-        toast('Включите хотя бы одно событие', 'warn');
-      } else if (!activeTabIsValid) {
-        switchTab(joinOn ? 'join' : 'leave');
-      } else if (!state.editor) {
-        renderEditor(root, state, bot, roles);
-      }
+      if (!joinOn && !leaveOn) toast(G.needEvent, 'warn');
+      else if (!activeTabIsValid) switchTab(joinOn ? 'join' : 'leave');
+      else if (!state.editor) renderEditor(root, state, bot, roles);
     };
 
     root.querySelectorAll('[data-event]').forEach((el) => {
       el.addEventListener('change', updateToggles);
     });
-
     syncToggleClasses();
 
     root.querySelectorAll('.gr-tab').forEach((btn) => {
       btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
 
-    /* ── Test message ── */
     root.querySelectorAll('[data-test-message]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const which = btn.dataset.testMessage;
-        if (!state.config.channelId) return toast('Сначала выберите канал', 'warn');
+        if (!state.config.channelId) return toast(G.needChannel, 'warn');
         if (state.permissions && state.permissions.canSend === false) {
-          return toast('У бота нет прав на отправку сообщений в этот канал', 'error');
+          return toast(UI.errors.send_failed, 'error');
         }
 
-        if (state.editor) {
-          state.config.messages[state.activeTab] = state.editor.getConfig();
-        }
+        if (state.editor) state.config.messages[state.activeTab] = state.editor.getConfig();
 
         const orig = btn.innerHTML;
         btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Отправка...';
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${UI.common.sending}`;
 
         try {
           await api.post('/api/modules/greetings/test', {
@@ -388,22 +342,11 @@ export default {
             channelId: state.config.channelId,
             messageConfig: state.config.messages[which],
           });
-          toast(
-            which === 'join' ? 'Тестовое приветствие отправлено' : 'Тестовое прощание отправлено',
-            'success',
-          );
+          toast(which === 'join' ? G.testJoinSent : G.testLeaveSent, 'success');
         } catch (err) {
           const code = err.data?.error;
-          const map = {
-            no_channel: 'Выберите канал',
-            no_message: 'Настройте сообщение перед отправкой',
-            empty_message: 'Сообщение пустое',
-            invalid_channel: 'Канал не найден или недоступен боту',
-            bot_offline: 'Бот офлайн — запустите его и повторите',
-            send_failed: 'Не удалось отправить сообщение — проверьте права бота',
-            build_failed: 'Ошибка сборки сообщения',
-          };
-          toast(map[code] || ('Ошибка: ' + (err.data?.details || err.message)), 'error');
+          const map = { ...UI.errors };
+          toast(map[code] || (UI.common.error + ': ' + (err.data?.details || err.message)), 'error');
         } finally {
           btn.disabled = false;
           btn.innerHTML = orig;
@@ -421,15 +364,13 @@ export default {
 
   async _save(state, root) {
     if (state.editor) state.config.messages[state.activeTab] = state.editor.getConfig();
-    if (!state.config.channelId) return toast('Выберите канал для модуля', 'warn');
-    if (!state.config.events.join && !state.config.events.leave) {
-      return toast('Включите хотя бы одно событие', 'warn');
-    }
+    if (!state.config.channelId) return toast(G.needChannel, 'warn');
+    if (!state.config.events.join && !state.config.events.leave) return toast(G.needEvent, 'warn');
 
     const btn = root.querySelector('[data-save]');
     const html = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Сохранение...';
+    btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${UI.common.saving}`;
 
     try {
       const payload = {
@@ -443,14 +384,16 @@ export default {
       await api.put('/api/modules/greetings/config', {
         botId: state.botId, guildId: state.guildId, config: payload,
       });
-      toast('Настройки сохранены', 'success');
+      toast(G.saved, 'success');
 
       try {
         const mods = await api.get(`/api/modules?botId=${state.botId}&guildId=${state.guildId}`);
         store.set('modulesEnabledCount', mods.filter((m) => m.enabled).length);
       } catch {}
     } catch (err) {
-      toast('Ошибка сохранения: ' + (err.data?.error || err.message), 'error');
+      const code = err.data?.error;
+      const map = { invalid_channel: UI.errors.invalid_channel, validation_failed: UI.errors.validation_failed };
+      toast(map[code] || (UI.common.errorSave + ': ' + (err.data?.error || err.message)), 'error');
     } finally {
       btn.disabled = false;
       btn.innerHTML = html;
@@ -463,7 +406,11 @@ function renderEditor(root, state, bot, roles) {
   container.innerHTML = '';
   const initial = state.config.messages[state.activeTab] || emptyMessageConfig();
   const editor = new MessageEditor(container, initial, {
-    bot, roles, context: 'greetings', guildId: state.guildId,
+    bot, roles,
+    context: 'greetings',
+    presetKey: state.activeTab === 'join' ? 'greetings.join' : 'greetings.leave',
+    guildId: state.guildId,
+    botId: state.botId,
   });
   editor.onChange = (cfg) => { state.config.messages[state.activeTab] = cfg; };
   editor.mount();

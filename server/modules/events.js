@@ -1,20 +1,19 @@
 // server/modules/events.js
+// Стаб. Планировщик ивентов пока не реализован.
+
 import { Module } from './_base.js';
 
-/**
- * События — заглушка. Планировщик ивентов и напоминаний.
- */
 export default class EventsModule extends Module {
-  get key() {
-    return 'events';
-  }
+  get key() { return 'events'; }
 
-  // Модуль работает по расписанию (setInterval), но пока ничего не делает.
   async register() {
-    this.logger.info({ module: 'events' }, 'events: stub registered (scheduler not implemented)');
+    this.logger.info(
+      { module: 'events' },
+      'events: registered (stub — scheduler not implemented)',
+    );
   }
 
   async onEvent(_event) {
-    // Ничего — событий нет, пока не реализован планировщик.
+    // Ничего
   }
 }

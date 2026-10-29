@@ -8,7 +8,10 @@ export async function ensureMainBot({ db, botManager, logger }) {
   const existing = db.getMainBot();
   if (existing) {
     if (!botManager.get(existing.id)) {
-      logger.warn({ botId: existing.id }, 'main bot not running — check token');
+      logger.warn(
+        { botId: existing.id },
+        'main bot exists in DB but not running — check DISCORD_MAIN_BOT_TOKEN in .env',
+      );
     }
     return;
   }
@@ -21,21 +24,35 @@ export async function ensureMainBot({ db, botManager, logger }) {
     logger,
     eventBus,
   });
-  await instance.start();
 
-  db.createBot({
-    id: instance.id,
-    owner_id: null,
-    name: instance.name,
-    avatar_url: instance.avatarUrl,
-    token_encrypted: encrypt(config.DISCORD_MAIN_BOT_TOKEN),
-    is_main: 1,
-  });
+  try {
+    await instance.start();
+  } catch (err) {
+    // Не роняем процесс: бот может быть недоступен, но панель должна работать
+    logger.error(
+      { err: err?.message || err },
+      'failed to start main bot — check DISCORD_MAIN_BOT_TOKEN; web panel continues',
+    );
+    return;
+  }
+
+  try {
+    db.createBot({
+      id: instance.id,
+      owner_id: null,
+      name: instance.name,
+      avatar_url: instance.avatarUrl,
+      token_encrypted: encrypt(config.DISCORD_MAIN_BOT_TOKEN),
+      is_main: 1,
+    });
+  } catch (err) {
+    logger.error({ err }, 'failed to save main bot to DB — continuing');
+    return;
+  }
 
   botManager.bots.set(instance.id, instance);
 }
 
-/** Запускает задачи с ограничением параллелизма. */
 async function runWithConcurrency(items, limit, fn) {
   const results = [];
   let i = 0;

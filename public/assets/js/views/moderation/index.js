@@ -1,19 +1,11 @@
 // public/assets/js/views/moderation/index.js
 import { api } from '../../core/api.js';
 import { store } from '../../core/store.js';
-import { escapeHtml, WORD } from '../../core/utils.js';
+import { WORD } from '../../core/utils.js';
+import { UI } from '/shared/ui-strings.js';
 import { renderLogList } from './log.js';
 import { renderActiveSections } from './active.js';
 import { openPunishModal } from './punishModal.js';
-
-const KIND_META = {
-  warn: { icon: 'fa-triangle-exclamation', label: 'Предупреждение', color: 'orange' },
-  mute: { icon: 'fa-microphone-slash', label: 'Мут', color: 'purple' },
-  ban:  { icon: 'fa-ban', label: 'Бан', color: 'red' },
-  auto: { icon: 'fa-shield-halved', label: 'Авто', color: 'blue' },
-};
-
-export { KIND_META };
 
 export default {
   container: null,
@@ -25,7 +17,7 @@ export default {
     const guildId = store.get('activeGuildId');
     if (!botId || !guildId) return this._empty(container);
 
-    container.innerHTML = '<div class="boot-screen"><i class="fa-solid fa-circle-notch fa-spin"></i><span>Загрузка...</span></div>';
+    container.innerHTML = `<div class="boot-screen"><i class="fa-solid fa-circle-notch fa-spin"></i><span>${UI.common.loading}</span></div>`;
 
     try {
       this.actions = await api.get(`/api/moderation/actions?botId=${botId}&guildId=${guildId}`);
@@ -41,40 +33,40 @@ export default {
     this.container.innerHTML = `
       <div class="view-head">
         <div class="view-title">
-          <h1>Модерация</h1>
-          <p>Журнал действий, наказания и права</p>
+          <h1>${UI.pages.moderation.title}</h1>
+          <p>${UI.pages.moderation.subtitle}</p>
         </div>
         <div class="view-actions">
           <button class="btn btn-primary" id="punishBtn">
-            <i class="fa-solid fa-gavel"></i> Выдать наказание
+            <i class="fa-solid fa-gavel"></i> ${UI.moderation.punish}
           </button>
         </div>
       </div>
       <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
-        ${kpi('Предупреждения', counts.warn, 'fa-triangle-exclamation', 'orange')}
-        ${kpi('Муты', counts.mute, 'fa-microphone-slash', 'purple')}
-        ${kpi('Баны', counts.ban, 'fa-ban', 'red')}
-        ${kpi('Автодействия', counts.auto, 'fa-shield-halved', 'blue')}
+        ${kpi(UI.moderation.kpi.warns, counts.warn, 'fa-triangle-exclamation', 'orange')}
+        ${kpi(UI.moderation.kpi.mutes, counts.mute, 'fa-microphone-slash', 'purple')}
+        ${kpi(UI.moderation.kpi.bans, counts.ban, 'fa-ban', 'red')}
+        ${kpi(UI.moderation.kpi.auto, counts.auto, 'fa-shield-halved', 'blue')}
       </div>
       <div class="mod-layout">
         <div class="card">
           <div class="card-head">
             <div>
-              <span class="card-title">Журнал действий</span>
+              <span class="card-title">${UI.moderation.log.title}</span>
               <span class="card-sub" id="logCount">${this.actions.length} ${WORD.record(this.actions.length)}</span>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <div class="search-input" style="min-width:200px;">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="modSearch" placeholder="Поиск...">
+                <input type="text" id="modSearch" placeholder="${UI.moderation.log.searchPlaceholder}">
               </div>
               <div class="select-wrap" style="width:150px;">
                 <select id="modKindFilter">
-                  <option value="">Все типы</option>
-                  <option value="warn">Предупреждения</option>
-                  <option value="mute">Муты</option>
-                  <option value="ban">Баны</option>
-                  <option value="auto">Авто</option>
+                  <option value="">${UI.moderation.log.filterAll}</option>
+                  <option value="warn">${UI.moderation.kinds.warn}</option>
+                  <option value="mute">${UI.moderation.kinds.mute}</option>
+                  <option value="ban">${UI.moderation.kinds.ban}</option>
+                  <option value="auto">${UI.moderation.kinds.auto}</option>
                 </select>
               </div>
             </div>
@@ -96,8 +88,8 @@ export default {
     container.innerHTML = `
       <div class="empty-state">
         <i class="fa-solid fa-shield-halved"></i>
-        <strong>Выберите сервер</strong>
-        <span>Сначала выберите сервер в сайдбаре</span>
+        <strong>${UI.moderation.emptyTitle}</strong>
+        <span>${UI.moderation.emptyHint}</span>
       </div>`;
   },
 };

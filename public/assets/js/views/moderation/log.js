@@ -3,7 +3,14 @@ import { api } from '../../core/api.js';
 import { store } from '../../core/store.js';
 import { toast } from '../../core/toast.js';
 import { escapeHtml, WORD } from '../../core/utils.js';
-import { KIND_META } from './index.js';
+import { UI } from '/shared/ui-strings.js';
+
+const KIND_LABELS = {
+  warn: UI.moderation.kinds.warn,
+  mute: UI.moderation.kinds.mute,
+  ban: UI.moderation.kinds.ban,
+  auto: UI.moderation.kinds.auto,
+};
 
 export function renderLogList(view) {
   const el = view.container.querySelector('#logList');
@@ -14,8 +21,8 @@ export function renderLogList(view) {
     el.innerHTML = `
       <div class="empty-state">
         <i class="fa-solid fa-shield-halved"></i>
-        <strong>Журнал пуст</strong>
-        <span>Наказания будут появляться здесь</span>
+        <strong>${UI.moderation.log.emptyTitle}</strong>
+        <span>${UI.moderation.log.emptyHint}</span>
       </div>`;
     view.container.querySelector('#logCount').textContent = `0 ${WORD.record(0)}`;
     return;
@@ -31,23 +38,25 @@ export function renderLogList(view) {
   view.container.querySelector('#logCount').textContent = `${filtered.length} ${WORD.record(filtered.length)}`;
 
   if (!filtered.length) {
-    el.innerHTML = `<div class="empty-state"><i class="fa-solid fa-filter"></i><strong>Ничего не найдено</strong></div>`;
+    el.innerHTML = `<div class="empty-state"><i class="fa-solid fa-filter"></i><strong>${UI.moderation.log.notFoundTitle}</strong></div>`;
     return;
   }
 
   el.innerHTML = filtered.map((a) => {
-    const meta = KIND_META[a.kind] || { label: a.kind };
+    const metaLabel = KIND_LABELS[a.kind] || a.kind;
     const time = new Date(a.createdAt * 1000).toLocaleString('ru-RU');
-    const expires = a.expiresAt ? `<span>· истекает ${new Date(a.expiresAt * 1000).toLocaleString('ru-RU')}</span>` : '';
+    const expires = a.expiresAt
+      ? `<span>· ${UI.moderation.log.expires} ${new Date(a.expiresAt * 1000).toLocaleString('ru-RU')}</span>`
+      : '';
     return `<div class="mod-entry">
       <div class="mod-entry-body">
-        <div class="mod-entry-title"><strong>&lt;@${escapeHtml(a.userId)}&gt;</strong> — ${meta.label.toLowerCase()}</div>
+        <div class="mod-entry-title"><strong>&lt;@${escapeHtml(a.userId)}&gt;</strong> — ${metaLabel.toLowerCase()}</div>
         <div class="mod-entry-meta">
-          <span>${escapeHtml(a.reason || 'без причины')}</span>${expires}
+          <span>${escapeHtml(a.reason || UI.moderation.log.noReason)}</span>${expires}
         </div>
       </div>
       <span class="mod-entry-time">${time}</span>
-      <button class="btn btn-icon btn-ghost" data-remove="${a.id}" title="Снять" style="margin-left:8px;">
+      <button class="btn btn-icon btn-ghost" data-remove="${a.id}" title="${UI.moderation.log.removeLabel}" aria-label="${UI.moderation.log.removeLabel}" style="margin-left:8px;">
         <i class="fa-solid fa-xmark"></i>
       </button>
     </div>`;
@@ -59,12 +68,12 @@ export function renderLogList(view) {
 }
 
 async function removeAction(view, id) {
-  if (!confirm('Снять наказание?')) return;
+  if (!confirm(UI.moderation.log.removeConfirm)) return;
   try {
     await api.del(`/api/moderation/actions/${id}?botId=${store.get('activeBotId')}&guildId=${store.get('activeGuildId')}`);
-    toast('Наказание снято', 'success');
+    toast(UI.moderation.log.removed, 'success');
     await view.render(view.container);
   } catch (err) {
-    toast('Ошибка: ' + (err.data?.error || err.message), 'error');
+    toast(UI.common.error + ': ' + (err.data?.error || err.message), 'error');
   }
 }

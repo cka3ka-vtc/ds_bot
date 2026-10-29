@@ -1,5 +1,6 @@
 // public/assets/js/views/overview/chart.js
 import { escapeHtml } from '../../core/utils.js';
+import { UI } from '/shared/ui-strings.js';
 
 const WEEKDAYS_RU = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
@@ -21,15 +22,15 @@ export function renderChartSection(d, filter) {
       <div class="card">
         <div class="card-head">
           <div>
-            <span class="card-title">Активность</span>
-            <span class="card-sub">за 14 дней</span>
+            <span class="card-title">${UI.overview.chart.title}</span>
+            <span class="card-sub">${UI.overview.chart.subtitle}</span>
           </div>
         </div>
         <div class="chart-wrap">
           <div class="empty-state" style="padding:32px 16px;">
             <i class="fa-solid fa-chart-line"></i>
-            <strong>Пока нет данных</strong>
-            <span>Активность появится, когда участники начнут писать сообщения и использовать команды</span>
+            <strong>${UI.overview.chart.emptyTitle}</strong>
+            <span>${UI.overview.chart.emptyHint}</span>
           </div>
         </div>
       </div>`;
@@ -45,22 +46,22 @@ export function renderChartSection(d, filter) {
     <div class="card">
       <div class="card-head">
         <div>
-          <span class="card-title">Активность</span>
-          <span class="card-sub">за 14 дней</span>
+          <span class="card-title">${UI.overview.chart.title}</span>
+          <span class="card-sub">${UI.overview.chart.subtitle}</span>
         </div>
         <div class="chart-filters" role="tablist">
-          <button class="chart-filter ${activeAll}" data-filter="all">Всё</button>
-          <button class="chart-filter ${activeMsg}" data-filter="messages">Сообщения</button>
-          <button class="chart-filter ${activeCmd}" data-filter="commands">Команды</button>
-          <button class="chart-filter ${activeVoice}" data-filter="voice">Голос</button>
+          <button class="chart-filter ${activeAll}" data-filter="all">${UI.overview.chart.filterAll}</button>
+          <button class="chart-filter ${activeMsg}" data-filter="messages">${UI.overview.chart.filterMessages}</button>
+          <button class="chart-filter ${activeCmd}" data-filter="commands">${UI.overview.chart.filterCommands}</button>
+          <button class="chart-filter ${activeVoice}" data-filter="voice">${UI.overview.chart.filterVoice}</button>
         </div>
       </div>
       <div class="chart-wrap">
         ${hideLegend ? '' : `
           <div class="chart-legend">
-            <span><span class="dot blue"></span> Сообщения</span>
-            <span><span class="dot purple"></span> Команды</span>
-            <span><span class="dot pink"></span> Голос</span>
+            <span><span class="dot blue"></span> ${UI.overview.chart.legendMessages}</span>
+            <span><span class="dot purple"></span> ${UI.overview.chart.legendCommands}</span>
+            <span><span class="dot pink"></span> ${UI.overview.chart.legendVoice}</span>
           </div>
         `}
         <div class="chart" id="activityChart"></div>
@@ -72,7 +73,6 @@ export function renderChart(view, container) {
   const chartEl = container.querySelector('#activityChart');
   if (!chartEl) return;
 
-  // Формируем 14 локальных дней (учитываем TZ пользователя)
   const days = [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -81,7 +81,7 @@ export function renderChart(view, container) {
     dt.setDate(dt.getDate() - i);
     days.push({
       key: toYmd(dt),
-      dayLabel: `${dt.getDate()} ${MONTHS_SHORT[dt.getMonth()]}`,   // «15 окт.»
+      dayLabel: `${dt.getDate()} ${MONTHS_SHORT[dt.getMonth()]}`,
       tooltipLabel: `${WEEKDAYS_RU[dt.getDay()]}, ${dt.getDate()} ${MONTHS_FULL[dt.getMonth()]}`,
     });
   }
@@ -160,9 +160,9 @@ function showTip(view, col) {
 
   let html = `<div class="chart-tooltip-title">${escapeHtml(col.dataset.date)}</div>`;
   const rows = [];
-  if (filter === 'all' || filter === 'messages') rows.push({ cls: 'blue', label: 'Сообщения', val: m });
-  if (filter === 'all' || filter === 'commands') rows.push({ cls: 'purple', label: 'Команды', val: c });
-  if (filter === 'all' || filter === 'voice') rows.push({ cls: 'pink', label: 'Голос', val: v });
+  if (filter === 'all' || filter === 'messages') rows.push({ cls: 'blue', label: UI.overview.tooltip.messages, val: m });
+  if (filter === 'all' || filter === 'commands') rows.push({ cls: 'purple', label: UI.overview.tooltip.commands, val: c });
+  if (filter === 'all' || filter === 'voice') rows.push({ cls: 'pink', label: UI.overview.tooltip.voice, val: v });
   html += rows.map((r) => `<div class="chart-tooltip-row">
     <span class="chart-tooltip-dot ${r.cls}"></span> ${r.label}
     <span class="chart-tooltip-val">${r.val}</span>

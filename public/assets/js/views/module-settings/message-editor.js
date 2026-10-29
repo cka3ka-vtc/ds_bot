@@ -1,54 +1,58 @@
 // public/assets/js/views/module-settings/message-editor.js
 import { escapeHtml } from '../../core/utils.js';
+import { api } from '../../core/api.js';
+import { store } from '../../core/store.js';
+import { openModal } from '../../core/modal.js';
 import { rolePickerHTML, bindRolePicker, emojiPickerHTML, bindEmojiPicker, positionPopup } from './pickers.js';
+import { getPresetsFor, hasMessageContent } from '/shared/message-presets.js';
+import { UI } from '/shared/ui-strings.js';
 
-const LIMITS = { MAX_BLOCKS: 40, MAX_BUTTONS: 5, MAX_TEXT: 4000, MAX_LABEL: 80 };
+const LIMITS = UI.msgEditor.limits;
+const TYPE_LABELS = UI.msgEditor.types;
+const TIME_FORMAT_CODES = Object.entries(UI.msgEditor.timeFormats);
+const CATEGORY_LABELS = UI.msgEditor.categories;
 
-const TYPE_LABELS = {
-  text: 'Текст', sections: 'Секция', separator: 'Разделитель',
-  image: 'Картинка', images: 'Картинки', file: 'Файл',
-  buttons: 'Кнопки', 'role-buttons': 'Кнопки ролей', footer: 'Футер',
-};
-
-const TIME_FORMAT_CODES = [
-  ['R', 'Относительное время'], ['f', 'Дата и время'], ['F', 'Полная дата'],
-  ['d', 'Краткая дата'], ['D', 'Полная дата'], ['t', 'Краткое время'], ['T', 'Полное время'],
-];
-
-/* Набор токенов и демо-значений — зависит от контекста */
 const TOKENS_BY_CONTEXT = {
   greetings: {
-    list: [
-      ['user', '{user}', 'Упоминание'],
-      ['username', '{username}', 'Ник'],
-      ['displayName', '{displayName}', 'Отображаемое имя'],
-      ['guild', '{guild}', 'Имя сервера'],
-      ['count', '{count}', 'Участников'],
+    categories: [
+      { label: CATEGORY_LABELS.user, items: [
+        ['user', UI.msgEditor.tokens.greetings.user],
+        ['username', UI.msgEditor.tokens.greetings.username],
+        ['displayName', UI.msgEditor.tokens.greetings.displayName],
+      ]},
+      { label: CATEGORY_LABELS.server, items: [
+        ['guild', UI.msgEditor.tokens.greetings.guild],
+        ['count', UI.msgEditor.tokens.greetings.count],
+      ]},
     ],
-    preview: { user: '@Иван', mention: '@Иван', username: 'ivan', displayName: 'Иван', guild: 'Мой сервер', count: '1234' },
+    preview: {
+      user: '@Иван', mention: '@Иван', username: 'ivan',
+      displayName: 'Иван', guild: 'Мой сервер', count: '1234',
+      avatarUrl: '', guildIconUrl: '',
+    },
   },
   levels: {
-    list: [
-      // Пользователь
-      ['user', '{user}', 'Упоминание'],
-      ['displayName', '{displayName}', 'Отображаемое имя'],
-      // Уровни и звания
-      ['level', '{level}', 'Текущий уровень (число)'],
-      ['oldLevel', '{oldLevel}', 'Прошлый уровень'],
-      ['title', '{title}', 'Звание для текущего уровня'],
-      // Опыт
-      ['xp', '{xp}', 'Накопленный XP'],
-      ['nextLevelXp', '{nextLevelXp}', 'Всего XP для след. уровня'],
-      ['xpToNext', '{xpToNext}', 'Осталось до след. уровня'],
-      ['progress', '{progress}', 'Прогресс текущего уровня'],
-      ['progressPercent', '{progressPercent}', 'Процент прогресса'],
-      // Топ
-      ['position', '{position}', 'Место в топе сервера'],
-      // Роль
-      ['rewardRole', '{rewardRole}', 'Роль-награда за уровень'],
-      // Сервер
-      ['guild', '{guild}', 'Имя сервера'],
-      ['count', '{count}', 'Участников'],
+    categories: [
+      { label: CATEGORY_LABELS.user, items: [
+        ['user', UI.msgEditor.tokens.levels.user],
+        ['displayName', UI.msgEditor.tokens.levels.displayName],
+      ]},
+      { label: CATEGORY_LABELS.levels, items: [
+        ['level', UI.msgEditor.tokens.levels.level],
+        ['oldLevel', UI.msgEditor.tokens.levels.oldLevel],
+        ['title', UI.msgEditor.tokens.levels.title],
+        ['xp', UI.msgEditor.tokens.levels.xp],
+        ['nextLevelXp', UI.msgEditor.tokens.levels.nextLevelXp],
+        ['xpToNext', UI.msgEditor.tokens.levels.xpToNext],
+        ['progress', UI.msgEditor.tokens.levels.progress],
+        ['progressPercent', UI.msgEditor.tokens.levels.progressPercent],
+        ['position', UI.msgEditor.tokens.levels.position],
+        ['rewardRole', UI.msgEditor.tokens.levels.rewardRole],
+      ]},
+      { label: CATEGORY_LABELS.server, items: [
+        ['guild', UI.msgEditor.tokens.levels.guild],
+        ['count', UI.msgEditor.tokens.levels.count],
+      ]},
     ],
     preview: {
       user: '@Иван', mention: '@Иван', username: 'ivan', displayName: 'Иван',
@@ -58,6 +62,7 @@ const TOKENS_BY_CONTEXT = {
       progress: '680 / 1100', progressPercent: '62',
       position: '42', rank: '42',
       rewardRole: '@Постоянный',
+      avatarUrl: '', guildIconUrl: '',
     },
   },
 };
@@ -100,27 +105,53 @@ export class MessageEditor {
     this._blocksEl = null;
     this._previewEl = null;
     this._dragSrcIndex = -1;
+    this._abort = null;
 
     this._collapseKey = `msg_editor_collapsed_${opts.guildId || 'x'}_${opts.context || 'default'}`;
     this._settingsCollapseKey = `msg_editor_settings_collapsed_${opts.guildId || 'x'}_${opts.context || 'default'}`;
+    this._templatesCollapseKey = `msg_editor_templates_collapsed_${opts.guildId || 'x'}_${opts.context || 'default'}`;
 
     this._ctx = TOKENS_BY_CONTEXT[opts.context] || TOKENS_BY_CONTEXT.greetings;
-    this._previewTokens = this._ctx.preview;
+    this._previewTokens = { ...this._ctx.preview };
     this._botAvatarUrl = opts.bot?.avatarUrl || '';
+    this._presets = getPresetsFor(opts.presetKey || opts.context || '');
     this._markDirty = debounce(() => this.onChange?.(this.getConfig()), 150);
   }
 
   mount() {
     this._render();
     this._bind();
+    this._loadPreviewTokens();
     requestAnimationFrame(() => this._resizeAllTextareas());
     return this;
   }
+
   destroy() {
-    document.querySelectorAll('.picker-popup, .time-dropdown').forEach((p) => p.remove());
+    this._abort?.abort();
+    this._abort = null;
+    document.querySelectorAll('.picker-popup, .time-dropdown, .tokens-dropdown').forEach((p) => p.remove());
     this._root = null;
   }
+
   getConfig() { return this.config; }
+
+  /* ─── Загрузка реальных токенов ─── */
+
+  async _loadPreviewTokens() {
+    const botId = this.opts.botId || store.get('activeBotId');
+    const guildId = this.opts.guildId || store.get('activeGuildId');
+    if (!botId || !guildId) return;
+
+    try {
+      const tokens = await api.get(`/api/preview/tokens?botId=${botId}&guildId=${guildId}`);
+      this._previewTokens = { ...this._previewTokens, ...tokens };
+      this._renderPreview();
+    } catch {
+      // silent — используем fallback
+    }
+  }
+
+  /* ─── Вспомогательные ─── */
 
   _loadCollapseState() { try { const raw = localStorage.getItem(this._collapseKey); return raw ? JSON.parse(raw) : {}; } catch { return {}; } }
   _saveCollapseState(s) { try { localStorage.setItem(this._collapseKey, JSON.stringify(s)); } catch {} }
@@ -128,6 +159,8 @@ export class MessageEditor {
   _toggleCollapse(id) { const s = this._loadCollapseState(); s[id] = !s[id]; this._saveCollapseState(s); return s[id]; }
   _isSettingsCollapsed() { try { return localStorage.getItem(this._settingsCollapseKey) === '1'; } catch { return false; } }
   _saveSettingsCollapse(v) { try { localStorage.setItem(this._settingsCollapseKey, v ? '1' : '0'); } catch {} }
+  _isTemplatesCollapsed() { try { return localStorage.getItem(this._templatesCollapseKey) === '1'; } catch { return false; } }
+  _saveTemplatesCollapse(v) { try { localStorage.setItem(this._templatesCollapseKey, v ? '1' : '0'); } catch {} }
 
   _autoResize(el) {
     if (!el || el.tagName !== 'TEXTAREA') return;
@@ -138,6 +171,58 @@ export class MessageEditor {
   }
   _resizeAllTextareas() { this.container.querySelectorAll('textarea').forEach((t) => this._autoResize(t)); }
 
+  /* ─── Модальное подтверждение ─── */
+
+  async _confirm({ title, text, ctaLabel }) {
+    const result = await openModal({
+      title,
+      body: `<div style="padding:4px 0; font-size:14px; line-height:1.55; color:var(--text-soft);">${escapeHtml(text)}</div>`,
+      ctaLabel: ctaLabel || UI.common.confirm,
+      onSubmit: async () => true,
+    });
+    return result === true;
+  }
+
+  /* ─── Применение шаблона / очистка ─── */
+
+  async _applyPreset(preset) {
+    const P = UI.msgEditor.presets;
+    if (hasMessageContent(this.config)) {
+      const ok = await this._confirm({
+        title: P.confirmReplaceTitle,
+        text: P.confirmReplace,
+        ctaLabel: UI.common.confirm,
+      });
+      if (!ok) return;
+    }
+    this.config = structuredClone(preset.build());
+    this._rerenderAndRebind();
+    this._markDirty();
+  }
+
+  async _clearConfig() {
+    const P = UI.msgEditor.presets;
+    if (hasMessageContent(this.config)) {
+      const ok = await this._confirm({
+        title: P.confirmClearTitle,
+        text: P.confirmClear,
+        ctaLabel: P.clear,
+      });
+      if (!ok) return;
+    }
+    this.config = emptyMessageConfig();
+    this._rerenderAndRebind();
+    this._markDirty();
+  }
+
+  _rerenderAndRebind() {
+    this._render();
+    this._bind();
+    requestAnimationFrame(() => this._resizeAllTextareas());
+  }
+
+  /* ─── Render ─── */
+
   _render() {
     const bot = this.opts.bot || { name: 'Bot', avatarUrl: null };
     const botName = bot.name || 'Bot';
@@ -145,17 +230,57 @@ export class MessageEditor {
       ? `<img src="${escapeHtml(bot.avatarUrl)}" alt="">`
       : botName.charAt(0).toUpperCase();
     const settingsCollapsed = this._isSettingsCollapsed();
+    const templatesCollapsed = this._isTemplatesCollapsed();
+    const S = UI.msgEditor.settings;
+    const B = UI.msgEditor.blocks;
+    const P = UI.msgEditor.preview;
+    const TPL = UI.msgEditor.presets;
+
+    const templatesHTML = this._presets.length ? `
+      <div class="card msg-templates-card ${templatesCollapsed ? 'collapsed' : ''}" data-templates-card>
+        <div class="card-head" data-templates-toggle role="button" tabindex="0"
+             aria-expanded="${!templatesCollapsed}"
+             title="${templatesCollapsed ? TPL.expand : TPL.collapse}">
+          <div>
+            <span class="card-title">${TPL.title}</span>
+            <span class="card-sub">${TPL.subtitle}</span>
+          </div>
+          <span class="card-collapse-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </div>
+        <div class="card-body">
+          <div class="msg-templates-grid">
+            ${this._presets.map((p) => `
+              <button type="button" class="msg-template-btn" data-preset="${escapeHtml(p.key)}">
+                <span class="msg-template-icon"><i class="fa-solid ${escapeHtml(p.icon)}"></i></span>
+                <span class="msg-template-text">
+                  <strong>${escapeHtml(p.label)}</strong>
+                  <span>${escapeHtml(p.description || '')}</span>
+                </span>
+              </button>
+            `).join('')}
+          </div>
+          <div class="msg-templates-actions">
+            <button type="button" class="btn btn-ghost btn-sm" data-clear-template>
+              <i class="fa-solid fa-eraser"></i> ${TPL.clear}
+            </button>
+          </div>
+        </div>
+      </div>
+    ` : '';
 
     this.container.innerHTML = `
       <div class="msg-editor">
         <div class="msg-editor-col">
+          ${templatesHTML}
           <div class="card editor-settings-card ${settingsCollapsed ? 'collapsed' : ''}" data-settings-card>
             <div class="card-head" data-settings-toggle role="button" tabindex="0"
                  aria-expanded="${!settingsCollapsed}"
-                 title="${settingsCollapsed ? 'Развернуть настройки' : 'Свернуть настройки'}">
+                 title="${settingsCollapsed ? S.expand : S.collapse}">
               <div>
-                <span class="card-title">Настройки сообщения</span>
-                <span class="card-sub">Режим, оформление</span>
+                <span class="card-title">${S.title}</span>
+                <span class="card-sub">${S.subtitle}</span>
               </div>
               <span class="card-collapse-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
@@ -164,33 +289,32 @@ export class MessageEditor {
             <div class="card-body">
               <div class="editor-grid compact-grid">
                 <div class="form-field" style="margin-bottom:0;">
-                  <label>Режим отображения</label>
+                  <label>${S.displayMode}</label>
                   <div class="segmented-control" data-mode-seg>
-                    <button type="button" data-value="flat" class="seg-btn">Обычный</button>
-                    <button type="button" data-value="embed" class="seg-btn">Блок</button>
-                    <button type="button" data-value="embed-color" class="seg-btn">Цветной</button>
+                    <button type="button" data-value="flat" class="seg-btn">${S.modeFlat}</button>
+                    <button type="button" data-value="embed" class="seg-btn">${S.modeEmbed}</button>
+                    <button type="button" data-value="embed-color" class="seg-btn">${S.modeColor}</button>
                   </div>
                 </div>
-                <div class="form-field" data-color-group style="margin-bottom:0;">
-                  <label>Цвет</label>
+                <div class="form-field" data-color-group style="margin-bottom:0; align-self: end;">
                   <div class="color-picker-compact">
-                    <input type="color" data-accent-color value="#5865F2">
+                    <input type="color" data-accent-color value="#5865F2" aria-label="${S.color}" title="${S.color}">
                   </div>
                 </div>
               </div>
               <div class="form-field" style="margin-top:14px;">
-                <label>Заголовок</label>
+                <label>${S.titleLabel}</label>
                 ${this._toolbarHTML()}
-                <textarea class="input" data-title-input rows="1" maxlength="4000" placeholder="Заголовок"></textarea>
+                <textarea class="input" data-title-input rows="1" maxlength="4000" placeholder="${S.placeholderTitle}"></textarea>
               </div>
               <div class="form-field">
-                <label>Подзаголовок</label>
+                <label>${S.subtitleLabel}</label>
                 ${this._toolbarHTML()}
-                <textarea class="input" data-subtitle-input rows="1" maxlength="4000" placeholder="Краткое описание под заголовком"></textarea>
+                <textarea class="input" data-subtitle-input rows="1" maxlength="4000" placeholder="${S.placeholderSubtitle}"></textarea>
               </div>
               <div class="form-field">
-                <label>Thumbnail (URL)</label>
-                <input class="input" data-thumbnail-input placeholder="https://... или {avatarUrl}">
+                <label>${S.thumbnailLabel}</label>
+                <input class="input" data-thumbnail-input placeholder="${S.placeholderThumbnail}">
               </div>
             </div>
           </div>
@@ -198,10 +322,10 @@ export class MessageEditor {
           <div class="card" style="margin-top:12px;">
             <div class="card-head">
               <div>
-                <span class="card-title">Блоки</span>
-                <span class="card-sub">Перетащите <b>⠿</b> для смены порядка · клик по типу — свернуть</span>
+                <span class="card-title">${B.title}</span>
+                <span class="card-sub">${B.subtitle}</span>
               </div>
-              <span class="badge idle" data-block-count>0 блоков</span>
+              <span class="badge idle" data-block-count>0 ${UI.words.block(0)}</span>
             </div>
             <div class="card-body">
               <div class="blocks-list" data-blocks></div>
@@ -214,8 +338,8 @@ export class MessageEditor {
           <div class="card">
             <div class="card-head">
               <div>
-                <span class="card-title">Предпросмотр</span>
-                <span class="card-sub">Как это увидят участники</span>
+                <span class="card-title">${P.title}</span>
+                <span class="card-sub">${P.subtitle}</span>
               </div>
             </div>
             <div class="card-body">
@@ -224,7 +348,7 @@ export class MessageEditor {
                   <div class="dp-avatar" style="${bot.avatarUrl ? 'background:transparent;' : ''}">${avatarInner}</div>
                   <div>
                     <span class="dp-name">${escapeHtml(botName)}<span class="bot-tag">BOT</span></span>
-                    <span class="dp-time">Сегодня</span>
+                    <span class="dp-time">${P.timeNow}</span>
                   </div>
                 </div>
                 <div data-preview></div>
@@ -246,12 +370,12 @@ export class MessageEditor {
   }
 
   _addMenuButtons() {
-    const items = [
-      ['text', '+ Текст'], ['sections', '+ Секция'], ['separator', '+ Разделитель'],
-      ['image', '+ Картинка'], ['images', '+ Картинки'], ['file', '+ Файл'],
-      ['buttons', '+ Кнопки'], ['role-buttons', '+ Кнопки ролей'], ['footer', '+ Футер'],
-    ];
-    return items.map(([t, l]) => `<button type="button" data-add="${t}">${l}</button>`).join('');
+    const B = UI.msgEditor.blocks;
+    return [
+      ['text', B.addText], ['sections', B.addSections], ['separator', B.addSeparator],
+      ['image', B.addImage], ['images', B.addImages], ['file', B.addFile],
+      ['buttons', B.addButtons], ['role-buttons', B.addRoleButtons], ['footer', B.addFooter],
+    ].map(([t, l]) => `<button type="button" data-add="${t}">${l}</button>`).join('');
   }
 
   _renderSettings() {
@@ -274,7 +398,7 @@ export class MessageEditor {
 
   _updateCount() {
     const el = this.container.querySelector('[data-block-count]');
-    if (el) el.textContent = `${this.config.blocks.length} блоков`;
+    if (el) el.textContent = UI.msgEditor.blocks.count(this.config.blocks.length);
   }
 
   _renderBlocks() {
@@ -286,7 +410,7 @@ export class MessageEditor {
       return 0;
     });
     if (!this.config.blocks.length) {
-      container.innerHTML = '<div class="msg-editor-empty">Нет блоков. Добавьте первый.</div>';
+      container.innerHTML = `<div class="msg-editor-empty">${UI.msgEditor.blocks.empty}</div>`;
       return;
     }
     container.innerHTML = this.config.blocks.map((b, i) => this._renderBlock(b, i)).join('');
@@ -299,6 +423,7 @@ export class MessageEditor {
     const isFooter = block.type === 'footer';
     const nextIsFooter = this.config.blocks[idx + 1]?.type === 'footer';
     const isCollapsed = this._isCollapsed(block.id);
+    const B = UI.msgEditor.blocks;
 
     return `
       <div class="block-card ${isCollapsed ? 'collapsed' : ''}" data-block-id="${block.id}" data-idx="${idx}">
@@ -306,16 +431,16 @@ export class MessageEditor {
           <span class="block-drag-handle" data-drag-handle draggable="true" aria-label="Перетащить">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
           </span>
-          <span class="block-type-tag" data-toggle-collapse title="${isCollapsed ? 'Развернуть' : 'Свернуть'}">
+          <span class="block-type-tag" data-toggle-collapse title="${isCollapsed ? B.expand : B.collapse}">
             <span class="block-collapse-icon">
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </span>
             ${label}
           </span>
           <div class="block-actions">
-            ${!isFooter ? `<button type="button" class="block-act" data-action="up" title="Вверх"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg></button>` : ''}
-            ${!isFooter && !nextIsFooter ? `<button type="button" class="block-act" data-action="down" title="Вниз"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>` : ''}
-            <button type="button" class="block-act danger" data-action="remove" title="Удалить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+            ${!isFooter ? `<button type="button" class="block-act" data-action="up" title="${B.moveUp}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg></button>` : ''}
+            ${!isFooter && !nextIsFooter ? `<button type="button" class="block-act" data-action="down" title="${B.moveDown}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>` : ''}
+            <button type="button" class="block-act danger" data-action="remove" title="${B.remove}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
           </div>
         </div>
         <div class="block-body">${this._renderBlockBody(block)}</div>
@@ -324,112 +449,113 @@ export class MessageEditor {
   }
 
   _renderBlockBody(block) {
+    const B = UI.msgEditor.blocks;
     switch (block.type) {
       case 'text':
         return `
           ${this._toolbarHTML()}
-          <textarea class="input" data-field="content" rows="3" maxlength="${LIMITS.MAX_TEXT}">${escapeHtml(block.content || '')}</textarea>
-          <div class="char-counter" data-counter>${(block.content || '').length} / ${LIMITS.MAX_TEXT}</div>
+          <textarea class="input" data-field="content" rows="3" maxlength="${LIMITS.maxText}">${escapeHtml(block.content || '')}</textarea>
+          <div class="char-counter" data-counter>${(block.content || '').length} / ${LIMITS.maxText}</div>
         `;
       case 'sections': return this._sectionsHTML(block);
       case 'separator':
         return `
           <div class="segmented-control" data-spacing-seg>
-            <button type="button" class="seg-btn ${block.spacing != 2 ? 'active' : ''}" data-spacing-value="1">Маленький отступ</button>
-            <button type="button" class="seg-btn ${block.spacing == 2 ? 'active' : ''}" data-spacing-value="2">Большой отступ</button>
+            <button type="button" class="seg-btn ${block.spacing != 2 ? 'active' : ''}" data-spacing-value="1">${B.spacingSmall}</button>
+            <button type="button" class="seg-btn ${block.spacing == 2 ? 'active' : ''}" data-spacing-value="2">${B.spacingLarge}</button>
           </div>
         `;
       case 'image':
       case 'file':
-        return `<input class="input" data-field="url" placeholder="https://... или {avatarUrl}" value="${escapeHtml(block.url || '')}">`;
+        return `<input class="input" data-field="url" placeholder="${B.filePlaceholder}" value="${escapeHtml(block.url || '')}">`;
       case 'images':
         return `
-          <div class="sub-label">URL (по одному в строке)</div>
-          <textarea class="input" data-field="urls" rows="3" placeholder="https://...\nhttps://...">${(block.urls || []).join('\n')}</textarea>
+          <div class="sub-label">${B.urlsLabel}</div>
+          <textarea class="input" data-field="urls" rows="3" placeholder="${B.placeholderUrls}">${(block.urls || []).join('\n')}</textarea>
         `;
       case 'buttons': return this._buttonsHTML(block);
       case 'role-buttons': return this._roleButtonsHTML(block);
       case 'footer':
-        return `${this._toolbarHTML(true)}<input class="input" data-field="content" placeholder="Текст футера" value="${escapeHtml(block.content || '')}">`;
+        return `${this._toolbarHTML()}<input class="input" data-field="content" placeholder="${B.footerPlaceholder}" value="${escapeHtml(block.content || '')}">`;
       default: return '';
     }
   }
 
-  _toolbarHTML(noMarkup = false) {
+  _toolbarHTML() {
+    const T = UI.msgEditor.toolbar;
     return `
       <div class="editor-toolbar">
-        ${!noMarkup ? `
-          <button type="button" data-format="bold" title="Жирный"><b>B</b></button>
-          <button type="button" data-format="italic" title="Курсив"><i>I</i></button>
-          <button type="button" data-format="underline" title="Подчёркнутый"><u>U</u></button>
-          <button type="button" data-format="strike" title="Зачёркнутый"><s>S</s></button>
-          <button type="button" data-format="quote" title="Цитата">❝</button>
-          <button type="button" data-format="code" title="Код">&lt;/&gt;</button>
-          <button type="button" data-format="spoiler" title="Спойлер">▮</button>
-          <div class="toolbar-sep"></div>
-        ` : ''}
-        <button type="button" data-format="time" class="time-btn" title="Время">{time} ▾</button>
+        <button type="button" data-format="bold" title="${T.bold}"><b>B</b></button>
+        <button type="button" data-format="italic" title="${T.italic}"><i>I</i></button>
+        <button type="button" data-format="underline" title="${T.underline}"><u>U</u></button>
+        <button type="button" data-format="strike" title="${T.strike}"><s>S</s></button>
+        <button type="button" data-format="quote" title="${T.quote}">❝</button>
+        <button type="button" data-format="code" title="${T.code}">&lt;/&gt;</button>
+        <button type="button" data-format="spoiler" title="${T.spoiler}">▮</button>
         <div class="toolbar-sep"></div>
-        ${this._ctx.list.map(([id, label, title]) =>
-          `<button type="button" data-format="${id}" title="${escapeHtml(title)}">${escapeHtml(label)}</button>`
-        ).join('')}
+        <button type="button" data-format="time" class="time-btn" title="${T.insertTime}">${T.time} ▾</button>
+        <div class="toolbar-sep"></div>
+        <button type="button" data-tokens-btn class="tokens-btn" title="${T.insertVariable}">${T.variables} ▾</button>
       </div>
     `;
   }
 
   _sectionsHTML(block) {
+    const B = UI.msgEditor.blocks;
     const items = block.items || [];
     const isNumeric = block.listStyle !== 'dot';
     return `
-      <div class="sub-item-row"><input class="input" data-field="title" placeholder="Заголовок секции" value="${escapeHtml(block.title || '')}"></div>
+      <div class="sub-item-row"><input class="input" data-field="title" placeholder="${B.sectionTitle}" value="${escapeHtml(block.title || '')}"></div>
       <div class="sub-item-row">
-        <label style="font-size:12px;color:var(--text-soft);">Стиль:</label>
+        <label style="font-size:12px;color:var(--text-soft);">${B.style}</label>
         <select class="input" data-field="listStyle" style="width:auto;">
-          <option value="numeric" ${isNumeric ? 'selected' : ''}>1. 2. 3.</option>
-          <option value="dot" ${!isNumeric ? 'selected' : ''}>· · ·</option>
+          <option value="numeric" ${isNumeric ? 'selected' : ''}>${B.listNumeric}</option>
+          <option value="dot" ${!isNumeric ? 'selected' : ''}>${B.listDot}</option>
         </select>
       </div>
-      <div class="sub-label">Пункты</div>
+      <div class="sub-label">${B.items}</div>
       ${items.map((item, i) => `
         <div class="sub-item-row">
           <span style="min-width:24px;text-align:center;font-size:11.5px;color:var(--muted);">${isNumeric ? (i + 1) + '.' : '·'}</span>
           <input class="input" data-item-idx="${i}" value="${escapeHtml(item)}">
-          <button type="button" class="block-act" data-action="remove-item" data-item-idx="${i}" title="Удалить">
+          <button type="button" class="block-act" data-action="remove-item" data-item-idx="${i}" title="${B.remove}">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
       `).join('')}
-      <button type="button" class="btn btn-ghost btn-sm" data-action="add-item">+ Добавить пункт</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-action="add-item">${B.addItem}</button>
     `;
   }
 
   _buttonsHTML(block) {
+    const B = UI.msgEditor.blocks;
     const buttons = block.buttons || [];
     return `
-      <div class="sub-label">Кнопки-ссылки (${buttons.length}/${LIMITS.MAX_BUTTONS})</div>
+      <div class="sub-label">${B.buttonsLabel(buttons.length, LIMITS.maxButtons)}</div>
       ${buttons.map((btn) => `
         <div class="sub-item" data-button-id="${btn.id}">
           <div class="sub-item-row">
-            <input class="input" data-btn-field="label" placeholder="Название" maxlength="${LIMITS.MAX_LABEL}" value="${escapeHtml(btn.label || '')}">
+            <input class="input" data-btn-field="label" placeholder="${B.buttonLabelPlaceholder}" maxlength="${LIMITS.maxLabel}" value="${escapeHtml(btn.label || '')}">
             <button type="button" class="block-act danger" data-action="remove-button" data-button-id="${btn.id}">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
-          <div class="sub-item-row"><input class="input" data-btn-field="url" placeholder="https://..." value="${escapeHtml(btn.url || '')}"></div>
+          <div class="sub-item-row"><input class="input" data-btn-field="url" placeholder="${B.buttonUrlPlaceholder}" value="${escapeHtml(btn.url || '')}"></div>
           <div class="sub-item-row">${emojiPickerHTML({ id: btn.id, value: btn.emoji || '' })}</div>
         </div>
       `).join('')}
-      ${buttons.length < LIMITS.MAX_BUTTONS ? `<button type="button" class="btn btn-ghost btn-sm" data-action="add-button">+ Добавить кнопку</button>` : ''}
+      ${buttons.length < LIMITS.maxButtons ? `<button type="button" class="btn btn-ghost btn-sm" data-action="add-button">${B.addButton}</button>` : ''}
     `;
   }
 
   _roleButtonsHTML(block) {
+    const B = UI.msgEditor.blocks;
     const buttons = block.buttons || [];
     return `
       ${buttons.map((btn) => `
         <div class="sub-item" data-button-id="${btn.id}">
           <div class="sub-item-row">
-            <input class="input" data-btn-field="label" placeholder="Название" maxlength="${LIMITS.MAX_LABEL}" value="${escapeHtml(btn.label || '')}">
+            <input class="input" data-btn-field="label" placeholder="${B.buttonLabelPlaceholder}" maxlength="${LIMITS.maxLabel}" value="${escapeHtml(btn.label || '')}">
             <select class="input" data-btn-field="style" style="width:120px;">
               <option value="primary" ${btn.style === 'primary' ? 'selected' : ''}>Primary</option>
               <option value="secondary" ${btn.style === 'secondary' ? 'selected' : ''}>Secondary</option>
@@ -444,7 +570,7 @@ export class MessageEditor {
           <div class="sub-item-row">${emojiPickerHTML({ id: 'e_' + btn.id, value: btn.emoji || '' })}</div>
         </div>
       `).join('')}
-      ${buttons.length < LIMITS.MAX_BUTTONS ? `<button type="button" class="btn btn-ghost btn-sm" data-action="add-role-button">+ Добавить кнопку роли</button>` : ''}
+      ${buttons.length < LIMITS.maxButtons ? `<button type="button" class="btn btn-ghost btn-sm" data-action="add-role-button">${B.addRoleButton}</button>` : ''}
     `;
   }
 
@@ -484,9 +610,16 @@ export class MessageEditor {
     return null;
   }
 
+  /* ─── Bind ─── */
+
   _bind() {
+    this._abort?.abort();
+    this._abort = new AbortController();
+    const { signal } = this._abort;
+
     const root = this.container;
 
+    /* Settings card collapse */
     const settingsCard = root.querySelector('[data-settings-card]');
     const settingsToggle = root.querySelector('[data-settings-toggle]');
     if (settingsCard && settingsToggle) {
@@ -495,7 +628,7 @@ export class MessageEditor {
         settingsCard.classList.toggle('collapsed', collapsed);
         this._saveSettingsCollapse(collapsed);
         settingsToggle.setAttribute('aria-expanded', String(!collapsed));
-        settingsToggle.title = collapsed ? 'Развернуть настройки' : 'Свернуть настройки';
+        settingsToggle.title = collapsed ? UI.msgEditor.settings.expand : UI.msgEditor.settings.collapse;
         if (!collapsed) requestAnimationFrame(() => {
           settingsCard.querySelectorAll('textarea').forEach((t) => this._autoResize(t));
         });
@@ -503,13 +636,46 @@ export class MessageEditor {
       settingsToggle.addEventListener('click', (e) => {
         if (e.target.closest('button, input, select, textarea, a, label')) return;
         toggle();
-      });
+      }, { signal });
       settingsToggle.addEventListener('keydown', (e) => {
         if (e.target !== settingsToggle) return;
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
-      });
+      }, { signal });
     }
 
+    /* Templates card collapse + пресеты */
+    const templatesCard = root.querySelector('[data-templates-card]');
+    const templatesToggle = root.querySelector('[data-templates-toggle]');
+    if (templatesCard && templatesToggle) {
+      const toggle = () => {
+        const collapsed = !templatesCard.classList.contains('collapsed');
+        templatesCard.classList.toggle('collapsed', collapsed);
+        this._saveTemplatesCollapse(collapsed);
+        templatesToggle.setAttribute('aria-expanded', String(!collapsed));
+        templatesToggle.title = collapsed ? UI.msgEditor.presets.expand : UI.msgEditor.presets.collapse;
+      };
+      templatesToggle.addEventListener('click', (e) => {
+        if (e.target.closest('button, input, select, textarea, a, label')) return;
+        toggle();
+      }, { signal });
+      templatesToggle.addEventListener('keydown', (e) => {
+        if (e.target !== templatesToggle) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      }, { signal });
+    }
+
+    root.querySelectorAll('[data-preset]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const key = btn.dataset.preset;
+        const preset = this._presets.find((p) => p.key === key);
+        if (preset) await this._applyPreset(preset);
+      }, { signal });
+    });
+
+    const clearBtn = root.querySelector('[data-clear-template]');
+    if (clearBtn) clearBtn.addEventListener('click', () => this._clearConfig(), { signal });
+
+    /* Режим отображения */
     root.querySelectorAll('[data-mode-seg] .seg-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         root.querySelectorAll('[data-mode-seg] .seg-btn').forEach((b) => b.classList.toggle('active', b === btn));
@@ -517,16 +683,18 @@ export class MessageEditor {
         this._updateColorVisibility();
         this._renderPreview();
         this._markDirty();
-      });
+      }, { signal });
     });
 
+    /* Цвет */
     const colorInput = root.querySelector('[data-accent-color]');
     if (colorInput) colorInput.addEventListener('input', () => {
       this.config.accentColor = colorInput.value;
       this._renderPreview();
       this._markDirty();
-    });
+    }, { signal });
 
+    /* Title / subtitle / thumbnail */
     const bind = (sel, key) => {
       const el = root.querySelector(sel);
       if (!el) return;
@@ -534,48 +702,68 @@ export class MessageEditor {
         this.config[key] = el.value;
         this._renderPreview();
         this._markDirty();
-      });
+      }, { signal });
     };
     bind('[data-title-input]', 'title');
     bind('[data-subtitle-input]', 'subtitle');
     bind('[data-thumbnail-input]', 'thumbnail');
 
+    /* Меню добавления блоков */
     const addMenu = root.querySelector('[data-add-menu]');
     if (addMenu) addMenu.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-add]');
       if (!btn) return;
       const type = btn.dataset.add;
-      if (this.config.blocks.length >= LIMITS.MAX_BLOCKS) return;
+      if (this.config.blocks.length >= LIMITS.maxBlocks) return;
       if (type === 'footer' && this.config.blocks.some((b) => b.type === 'footer')) return;
       this.config.blocks.push(this._createBlock(type));
       this._renderBlocks(); this._renderPreview(); this._updateCount(); this._markDirty();
-    });
+    }, { signal });
 
+    /* Тулбар: форматирование и переменные */
     root.addEventListener('click', (e) => {
+      const tokensBtn = e.target.closest('[data-tokens-btn]');
+      if (tokensBtn && tokensBtn.closest('.editor-toolbar')) {
+        e.preventDefault();
+        e.stopPropagation();
+        const blockCard = tokensBtn.closest('.block-card');
+        let target;
+        if (blockCard) {
+          target = blockCard.querySelector('textarea[data-field="content"]') || blockCard.querySelector('input[data-field="content"]');
+        } else {
+          const field = tokensBtn.closest('.form-field');
+          target = field?.querySelector('textarea');
+        }
+        if (target) this._showTokensMenu(tokensBtn, target);
+        return;
+      }
+
       const fmtBtn = e.target.closest('[data-format]');
       if (!fmtBtn || !fmtBtn.closest('.editor-toolbar')) return;
       e.preventDefault();
       e.stopPropagation();
       const blockCard = fmtBtn.closest('.block-card');
-      let textarea;
+      let target;
       if (blockCard) {
-        textarea = blockCard.querySelector('textarea[data-field="content"]') || blockCard.querySelector('input[data-field="content"]');
+        target = blockCard.querySelector('textarea[data-field="content"]') || blockCard.querySelector('input[data-field="content"]');
       } else {
         const field = fmtBtn.closest('.form-field');
-        textarea = field?.querySelector('textarea');
+        target = field?.querySelector('textarea');
       }
-      if (textarea) this._handleFormat(fmtBtn, textarea);
-    });
+      if (target) this._handleFormat(fmtBtn, target);
+    }, { signal });
 
+    /* Авто-ресайз textarea */
     root.addEventListener('input', (e) => {
       if (e.target.tagName === 'TEXTAREA') this._autoResize(e.target);
-    });
+    }, { signal });
 
+    /* Блоки */
     const blocksEl = this._blocksEl;
     if (blocksEl) {
-      blocksEl.addEventListener('click', (e) => this._handleBlockClick(e));
-      blocksEl.addEventListener('input', (e) => this._handleBlockInput(e));
-      blocksEl.addEventListener('change', (e) => this._handleBlockInput(e));
+      blocksEl.addEventListener('click', (e) => this._handleBlockClick(e), { signal });
+      blocksEl.addEventListener('input', (e) => this._handleBlockInput(e), { signal });
+      blocksEl.addEventListener('change', (e) => this._handleBlockInput(e), { signal });
 
       blocksEl.addEventListener('dragstart', (e) => {
         const handle = e.target.closest('[data-drag-handle]');
@@ -586,17 +774,17 @@ export class MessageEditor {
         card.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', String(this._dragSrcIndex));
-      });
+      }, { signal });
       blocksEl.addEventListener('dragend', () => {
         blocksEl.querySelectorAll('.block-card').forEach((c) => c.classList.remove('dragging', 'drag-over'));
-      });
+      }, { signal });
       blocksEl.addEventListener('dragover', (e) => {
         const card = e.target.closest('.block-card');
         if (!card) return;
         e.preventDefault();
         blocksEl.querySelectorAll('.block-card').forEach((c) => c.classList.remove('drag-over'));
         if (parseInt(card.dataset.idx) !== this._dragSrcIndex) card.classList.add('drag-over');
-      });
+      }, { signal });
       blocksEl.addEventListener('drop', (e) => {
         const card = e.target.closest('.block-card');
         if (!card) return;
@@ -607,7 +795,7 @@ export class MessageEditor {
         this.config.blocks.splice(toIdx, 0, moved);
         this._dragSrcIndex = -1;
         this._renderBlocks(); this._renderPreview(); this._markDirty();
-      });
+      }, { signal });
     }
   }
 
@@ -623,7 +811,7 @@ export class MessageEditor {
       e.preventDefault();
       const collapsed = this._toggleCollapse(block.id);
       card.classList.toggle('collapsed', collapsed);
-      typeTag.title = collapsed ? 'Развернуть' : 'Свернуть';
+      typeTag.title = collapsed ? UI.msgEditor.blocks.expand : UI.msgEditor.blocks.collapse;
       if (!collapsed) requestAnimationFrame(() => {
         card.querySelectorAll('textarea').forEach((t) => this._autoResize(t));
       });
@@ -657,12 +845,12 @@ export class MessageEditor {
         this._renderBlocks(); this._renderPreview(); this._updateCount(); this._markDirty();
       } else if (action === 'add-button') {
         if (!block.buttons) block.buttons = [];
-        if (block.buttons.length >= LIMITS.MAX_BUTTONS) return;
+        if (block.buttons.length >= LIMITS.maxButtons) return;
         block.buttons.push({ id: uid(), label: 'Ссылка', url: '', emoji: '' });
         this._renderBlocks(); this._renderPreview(); this._markDirty();
       } else if (action === 'add-role-button') {
         if (!block.buttons) block.buttons = [];
-        if (block.buttons.length >= LIMITS.MAX_BUTTONS) return;
+        if (block.buttons.length >= LIMITS.maxButtons) return;
         block.buttons.push({ id: uid(), label: 'Роль', style: 'primary', roleId: '', emoji: '' });
         this._renderBlocks(); this._renderPreview(); this._markDirty();
       } else if (action === 'remove-button') {
@@ -698,8 +886,8 @@ export class MessageEditor {
         block.content = e.target.value;
         const counter = card.querySelector('[data-counter]');
         if (counter) {
-          counter.textContent = `${e.target.value.length} / ${LIMITS.MAX_TEXT}`;
-          counter.classList.toggle('warn', e.target.value.length > LIMITS.MAX_TEXT * 0.9);
+          counter.textContent = `${e.target.value.length} / ${LIMITS.maxText}`;
+          counter.classList.toggle('warn', e.target.value.length > LIMITS.maxText * 0.9);
         }
       } else block[field] = e.target.value;
     } else if (btnField && buttonId) {
@@ -713,37 +901,34 @@ export class MessageEditor {
     this._markDirty();
   }
 
-  _handleFormat(btn, textarea) {
-    if (!textarea) return;
+  _handleFormat(btn, target) {
+    if (!target) return;
     const format = btn.dataset.format;
-    if (format === 'time') return this._showTimeMenu(btn, textarea);
+    if (format === 'time') return this._showTimeMenu(btn, target);
 
-    const tokenIds = new Set(this._ctx.list.map(([id]) => id));
-    if (tokenIds.has(format)) return this._insertToken(textarea, `{${format}}`);
-
-    const start = textarea.selectionStart ?? textarea.value.length;
-    const end = textarea.selectionEnd ?? textarea.value.length;
-    const value = textarea.value;
+    const start = target.selectionStart ?? target.value.length;
+    const end = target.selectionEnd ?? target.value.length;
+    const value = target.value;
     const selected = value.substring(start, end);
     const wrap = { bold: '**', italic: '*', underline: '__', strike: '~~', code: '`', spoiler: '||' }[format];
 
     if (format === 'quote') {
       const text = selected || 'цитата';
       const quoted = text.split('\n').map((l) => '> ' + l).join('\n');
-      textarea.value = value.substring(0, start) + quoted + value.substring(end);
-      textarea.selectionStart = start;
-      textarea.selectionEnd = start + quoted.length;
+      target.value = value.substring(0, start) + quoted + value.substring(end);
+      target.selectionStart = start;
+      target.selectionEnd = start + quoted.length;
     } else if (wrap) {
       const insert = selected || format;
-      textarea.value = value.substring(0, start) + wrap + insert + wrap + value.substring(end);
-      textarea.selectionStart = start + wrap.length;
-      textarea.selectionEnd = start + wrap.length + insert.length;
+      target.value = value.substring(0, start) + wrap + insert + wrap + value.substring(end);
+      target.selectionStart = start + wrap.length;
+      target.selectionEnd = start + wrap.length + insert.length;
     }
-    textarea.focus();
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    target.focus();
+    target.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
-  _showTimeMenu(anchor, textarea) {
+  _showTimeMenu(anchor, target) {
     document.querySelectorAll('.time-dropdown').forEach((d) => d.remove());
     const dd = document.createElement('div');
     dd.className = 'time-dropdown';
@@ -761,20 +946,58 @@ export class MessageEditor {
       const b = e.target.closest('[data-code]');
       if (!b) return;
       e.preventDefault();
-      this._insertToken(textarea, `{time:${b.dataset.code}}`);
+      this._insertToken(target, `{time:${b.dataset.code}}`);
       dd.remove();
       document.removeEventListener('mousedown', close);
     });
   }
 
-  _insertToken(textarea, token) {
-    const start = textarea.selectionStart ?? textarea.value.length;
-    const end = textarea.selectionEnd ?? textarea.value.length;
-    const value = textarea.value;
-    textarea.value = value.substring(0, start) + token + value.substring(end);
-    textarea.selectionStart = textarea.selectionEnd = start + token.length;
-    textarea.focus();
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  _showTokensMenu(anchor, target) {
+    document.querySelectorAll('.tokens-dropdown').forEach((d) => d.remove());
+    const dd = document.createElement('div');
+    dd.className = 'tokens-dropdown';
+
+    dd.innerHTML = this._ctx.categories.map((cat) => `
+      <div class="tokens-category">
+        <div class="tokens-category-label">${escapeHtml(cat.label)}</div>
+        ${cat.items.map(([id, desc]) => `
+          <button type="button" class="tokens-item" data-token-id="${escapeHtml(id)}">
+            <code class="tokens-item-code">{${escapeHtml(id)}}</code>
+            <span class="tokens-item-desc">${escapeHtml(desc || '')}</span>
+          </button>
+        `).join('')}
+      </div>
+    `).join('');
+
+    document.body.appendChild(dd);
+    positionPopup(dd, anchor, 280);
+
+    const close = (ev) => {
+      if (!dd.contains(ev.target) && !anchor.contains(ev.target)) {
+        dd.remove();
+        document.removeEventListener('mousedown', close);
+      }
+    };
+    setTimeout(() => document.addEventListener('mousedown', close), 0);
+
+    dd.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-token-id]');
+      if (!btn) return;
+      e.preventDefault();
+      this._insertToken(target, `{${btn.dataset.tokenId}}`);
+      dd.remove();
+      document.removeEventListener('mousedown', close);
+    });
+  }
+
+  _insertToken(target, token) {
+    const start = target.selectionStart ?? target.value.length;
+    const end = target.selectionEnd ?? target.value.length;
+    const value = target.value;
+    target.value = value.substring(0, start) + token + value.substring(end);
+    target.selectionStart = target.selectionEnd = start + token.length;
+    target.focus();
+    target.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   _createBlock(type) {
@@ -796,13 +1019,14 @@ export class MessageEditor {
   _renderPreview() {
     if (!this._previewEl) return;
     const inner = this._buildPreviewInner(this.config);
+    const emptyText = `<div class="dp-empty">${UI.msgEditor.preview.empty}</div>`;
     if (this.config.displayMode === 'flat') {
-      this._previewEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px;">${inner || '<div class="dp-empty">Сообщение пустое</div>'}</div>`;
+      this._previewEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px;">${inner || emptyText}</div>`;
     } else {
       const color = this.config.displayMode === 'embed-color' && this.config.accentColor
         ? `border-left:4px solid ${this.config.accentColor};`
         : 'border-left:1px solid rgba(255,255,255,.08);';
-      this._previewEl.innerHTML = `<div class="dp-container" style="${color}">${inner || '<div class="dp-empty">Сообщение пустое</div>'}</div>`;
+      this._previewEl.innerHTML = `<div class="dp-container" style="${color}">${inner || emptyText}</div>`;
     }
   }
 
@@ -869,8 +1093,8 @@ export class MessageEditor {
   _resolveUrl(url) {
     if (!url) return '';
     const t = String(url).trim();
-    if (t === '{avatarUrl}') return this._botAvatarUrl || '';
-    if (t === '{guildIconUrl}') return this._botAvatarUrl || '';
+    if (t === '{avatarUrl}') return this._previewTokens?.avatarUrl || '';
+    if (t === '{guildIconUrl}') return this._previewTokens?.guildIconUrl || '';
     return t;
   }
 
@@ -894,19 +1118,18 @@ export class MessageEditor {
     html = html.replace(/\{username\}/g, wrapAccent(t.username || ''));
     html = html.replace(/\{displayName\}/g, wrapBold(t.displayName || ''));
     html = html.replace(/\{guild\}/g, wrapBold(t.guild || ''));
-    html = html.replace(/\{count\}/g, t.count || '');
+    html = html.replace(/\{count\}/g, t.count != null ? String(t.count) : '');
 
-    /* Токены levels */
     html = html.replace(/\{level\}/g, wrapBold(t.level || ''));
-    html = html.replace(/\{oldLevel\}/g, t.oldLevel || '');
+    html = html.replace(/\{oldLevel\}/g, t.oldLevel != null ? String(t.oldLevel) : '');
     html = html.replace(/\{title\}/g, `<span class="dp-mention role">${escapeHtml(t.title || '')}</span>`);
     html = html.replace(/\{xp\}/g, wrapBold(t.xp || ''));
-    html = html.replace(/\{nextLevelXp\}/g, t.nextLevelXp || '');
+    html = html.replace(/\{nextLevelXp\}/g, t.nextLevelXp != null ? String(t.nextLevelXp) : '');
     html = html.replace(/\{xpToNext\}/g, wrapBold(t.xpToNext || ''));
     html = html.replace(/\{progress\}/g, t.progress || '');
-    html = html.replace(/\{progressPercent\}/g, (t.progressPercent || '') + '%');
-    html = html.replace(/\{position\}/g, wrapBold('#' + (t.position || '')));
-    html = html.replace(/\{rank\}/g, wrapBold('#' + (t.rank || '')));
+    html = html.replace(/\{progressPercent\}/g, (t.progressPercent != null ? String(t.progressPercent) : '') + '%');
+    html = html.replace(/\{position\}/g, t.position ? wrapBold('#' + t.position) : '');
+    html = html.replace(/\{rank\}/g, t.rank ? wrapBold('#' + t.rank) : '');
     html = html.replace(/\{rewardRole\}/g, t.rewardRole ? wrapMention(t.rewardRole) : '');
 
     html = html.replace(/\{avatarUrl\}/g, '<span class="dp-mention">[avatar]</span>');

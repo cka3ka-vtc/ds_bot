@@ -1,12 +1,13 @@
 // public/assets/js/views/overview/lists.js
 import { escapeHtml, fmtNum, timeAgo } from '../../core/utils.js';
+import { UI } from '/shared/ui-strings.js';
 
 export function renderTopCommands(commands) {
   if (!commands || !commands.length) {
     return `<div class="empty-state" style="padding:32px 16px;">
       <i class="fa-solid fa-terminal"></i>
-      <strong>Пока нет данных</strong>
-      <span>Команды появятся здесь, когда ими начнут пользоваться</span>
+      <strong>${UI.overview.topCommands.emptyTitle}</strong>
+      <span>${UI.overview.topCommands.emptyHint}</span>
     </div>`;
   }
   return `<div class="top-list">
@@ -14,23 +15,20 @@ export function renderTopCommands(commands) {
       const rankClass = ['gold', 'silver', 'bronze'][i] || '';
       return `<div class="top-item">
         <span class="top-rank ${rankClass}">${i + 1}</span>
-        <span class="top-cmd">/${escapeHtml(c.cmd || 'неизвестно')}</span>
+        <span class="top-cmd">/${escapeHtml(c.cmd || UI.overview.topCommands.unknown)}</span>
         <span class="top-count">${fmtNum(c.count)}</span>
       </div>`;
     }).join('')}
   </div>`;
 }
 
-/**
- * channels = [{ name, count }] — count = уникальные пользователи
- * filter   = 'text' | 'voice'
- */
 export function renderTopChannels(channels, filter = 'text') {
   if (!channels || !channels.length) {
+    const isEmptyText = filter !== 'voice';
     return `<div class="empty-state" style="padding:28px 16px;">
       <i class="fa-solid fa-${filter === 'voice' ? 'microphone' : 'hashtag'}"></i>
-      <strong>Пока нет данных</strong>
-      <span>Статистика появится после активности в ${filter === 'voice' ? 'голосовых' : 'текстовых'} каналах</span>
+      <strong>${isEmptyText ? UI.overview.topChannels.emptyTextTitle : UI.overview.topChannels.emptyVoiceTitle}</strong>
+      <span>${isEmptyText ? UI.overview.topChannels.emptyTextHint : UI.overview.topChannels.emptyVoiceHint}</span>
     </div>`;
   }
   const icon = filter === 'voice' ? 'fa-volume-high' : 'fa-hashtag';
@@ -41,7 +39,7 @@ export function renderTopChannels(channels, filter = 'text') {
         <span class="top-rank ${rankClass}">${i + 1}</span>
         <span class="top-cmd channel">
           <i class="fa-solid ${icon}"></i>
-          ${escapeHtml(ch.name || 'unknown')}
+          ${escapeHtml(ch.name || UI.overview.topChannels.unknown)}
         </span>
         <span class="top-count">${fmtNum(ch.count)}</span>
       </div>`;
@@ -53,8 +51,8 @@ export function renderRecentEvents(events) {
   if (!events || !events.length) {
     return `<div class="empty-state" style="padding:32px 16px;">
       <i class="fa-solid fa-clock-rotate-left"></i>
-      <strong>Пока нет событий</strong>
-      <span>Здесь появятся действия модерации и логи</span>
+      <strong>${UI.overview.recentEvents.emptyTitle}</strong>
+      <span>${UI.overview.recentEvents.emptyHint}</span>
     </div>`;
   }
   return `<div class="activity-list">

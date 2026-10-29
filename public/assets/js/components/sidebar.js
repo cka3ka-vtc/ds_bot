@@ -2,15 +2,16 @@
 import { store } from '../core/store.js';
 import { api } from '../core/api.js';
 import { escapeHtml, userAvatarUrl } from '../core/utils.js';
+import { UI } from '/shared/ui-strings.js';
 import { renderGuildSwitcher } from './guildSwitcher.js';
 
 export function renderSidebar(container) {
   container.innerHTML = `
-    <div class="sidebar-brand" aria-label="Ckaзka Dev">
+    <div class="sidebar-brand" aria-label="${UI.brand.name}">
       <span class="brand-mark">
         <i class="fa-solid fa-bolt"></i>
       </span>
-      <span class="brand-title">Ckaзka Dev</span>
+      <span class="brand-title">${UI.brand.name}</span>
     </div>
     <div class="switcher" id="guildSwitcher"></div>
     <nav class="sidebar-nav" id="navMenu"></nav>
@@ -32,15 +33,15 @@ export function renderSidebar(container) {
 }
 
 const NAV_ITEMS = [
-  { section: 'Сервер' },
-  { key: 'overview',   icon: 'fa-chart-pie',     label: 'Дашборд' },
-  { key: 'modules',    icon: 'fa-puzzle-piece',  label: 'Модули', badge: 'modules' },
-  { key: 'moderation', icon: 'fa-shield-halved', label: 'Модерация' },
-  { key: 'commands',   icon: 'fa-terminal',      label: 'Команды' },
-  { key: 'members',    icon: 'fa-user-group',    label: 'Участники' },
-  { key: 'settings',   icon: 'fa-gear',          label: 'Настройки' },
-  { section: 'Аккаунт' },
-  { key: 'bots',       icon: 'fa-robot',         label: 'Мои боты' },
+  { section: UI.nav.sectionServer },
+  { key: 'overview',   icon: 'fa-chart-pie',     label: UI.nav.overview },
+  { key: 'modules',    icon: 'fa-puzzle-piece',  label: UI.nav.modules, badge: 'modules' },
+  { key: 'moderation', icon: 'fa-shield-halved', label: UI.nav.moderation },
+  { key: 'commands',   icon: 'fa-terminal',      label: UI.nav.commands },
+  { key: 'members',    icon: 'fa-user-group',    label: UI.nav.members },
+  { key: 'settings',   icon: 'fa-gear',          label: UI.nav.settings },
+  { section: UI.nav.sectionAccount },
+  { key: 'bots',       icon: 'fa-robot',         label: UI.nav.bots },
 ];
 
 function renderNav(container) {
@@ -74,7 +75,7 @@ function renderUser(container) {
     <div class="user-info">
       <span class="user-name">${escapeHtml(user.username)}</span>
     </div>
-    <a href="#" class="logout-btn" data-logout title="Выйти" aria-label="Выйти">
+    <a href="#" class="logout-btn" data-logout title="${UI.actions.logout}" aria-label="${UI.actions.logout}">
       <i class="fa-solid fa-right-from-bracket"></i>
     </a>
   `;

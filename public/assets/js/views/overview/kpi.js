@@ -1,37 +1,42 @@
 // public/assets/js/views/overview/kpi.js
 import { escapeHtml } from '../../core/utils.js';
+import { UI } from '/shared/ui-strings.js';
 
 const KPI_CONFIG = [
   {
     key: 'totalMembers',
-    label: 'Всего участников',
+    label: UI.overview.kpi.totalMembers,
     icon: 'fa-users',
     color: 'blue',
-    hint: 'Общее число участников на сервере прямо сейчас.',
+    hint: UI.overview.kpi.hintTotalMembers,
+    ariaLabel: UI.overview.kpi.goMembers,
     nav: 'members',
   },
   {
     key: 'newMembers',
-    label: 'Новые',
+    label: UI.overview.kpi.newMembers,
     icon: 'fa-user-plus',
     color: 'green',
-    hint: 'Сколько присоединилось за последние 7 дней.',
+    hint: UI.overview.kpi.hintNewMembers,
+    ariaLabel: UI.overview.kpi.openJoined,
     action: 'joined',
   },
   {
     key: 'leftMembers',
-    label: 'Покинули',
+    label: UI.overview.kpi.leftMembers,
     icon: 'fa-user-minus',
     color: 'red',
-    hint: 'Сколько покинуло сервер за последние 7 дней.',
+    hint: UI.overview.kpi.hintLeftMembers,
+    ariaLabel: UI.overview.kpi.openLeft,
     action: 'left',
   },
   {
     key: 'activeUsers',
-    label: 'Активные',
+    label: UI.overview.kpi.activeUsers,
     icon: 'fa-bolt',
     color: 'orange',
-    hint: 'Уникальные авторы сообщений, команд и голосовой активности за 7 дней.',
+    hint: UI.overview.kpi.hintActiveUsers,
+    ariaLabel: UI.overview.kpi.openActive,
     action: 'active',
   },
 ];
@@ -45,13 +50,12 @@ export function renderKpiGrid(d) {
 function kpi(c, value) {
   const v = Number(value) || 0;
   const clickable = !!(c.action || c.nav);
-  const ariaLabel = c.action ? `Открыть: ${c.label}` : `Перейти: ${c.label}`;
 
   let attrs = '';
   if (clickable) {
     if (c.action) attrs += ` data-kpi-action="${c.action}"`;
     if (c.nav)    attrs += ` data-kpi-nav="${c.nav}"`;
-    attrs += ` role="button" tabindex="0" aria-label="${escapeHtml(ariaLabel)}"`;
+    attrs += ` role="button" tabindex="0" aria-label="${escapeHtml(c.ariaLabel || c.label)}"`;
   }
 
   return `

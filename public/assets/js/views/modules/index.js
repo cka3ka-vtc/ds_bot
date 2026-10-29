@@ -5,6 +5,7 @@ import { openableModules, renderModulesGrid } from './grid.js';
 
 export default {
   container: null,
+  activeSub: null,
 
   async render(container) {
     this.container = container;
@@ -13,7 +14,15 @@ export default {
     const query = hash.includes('?') ? hash.split('?')[1] : '';
     const sub = new URLSearchParams(query).get('sub');
 
+    // Уничтожаем предыдущий subview, если был
+    if (this.activeSub && this.activeSub !== sub) {
+      const prev = openableModules[this.activeSub];
+      if (prev?.destroy) { try { prev.destroy(); } catch {} }
+      this.activeSub = null;
+    }
+
     if (sub && openableModules[sub]) {
+      this.activeSub = sub;
       return openableModules[sub].render(container);
     }
 
@@ -37,10 +46,11 @@ export default {
   },
 
   destroy() {
-    const hash = location.hash.slice(1) || '';
-    const query = hash.includes('?') ? hash.split('?')[1] : '';
-    const sub = new URLSearchParams(query).get('sub');
-    if (sub && openableModules[sub]) openableModules[sub].destroy?.();
+    if (this.activeSub) {
+      const prev = openableModules[this.activeSub];
+      if (prev?.destroy) { try { prev.destroy(); } catch {} }
+      this.activeSub = null;
+    }
     this.container = null;
   },
 

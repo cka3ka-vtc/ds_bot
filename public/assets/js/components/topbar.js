@@ -1,46 +1,30 @@
 // public/assets/js/components/topbar.js
 import { store } from '../core/store.js';
 import { escapeHtml } from '../core/utils.js';
+import { UI } from '/shared/ui-strings.js';
 import { openContactModal } from './contactModal.js';
 import { openModal } from '../core/modal.js';
 
-/** Названия модулей для хлебных крошек. Дополнять по мере реализации. */
-const MODULE_LABELS = {
-  greetings: 'Приветствия',
-  levels: 'Уровни',
-  tickets: 'Тикеты',
-  moderation: 'Автомодерация',
-  events: 'События',
-  autoroles: 'Автороли',
-  scheduled: 'Отложенные сообщения',
-  messages: 'Сообщения',
-  autodelete: 'Автоудаление',
-  birthdays: 'Дни рождения',
-};
-
-const PAGE_LABELS = {
-  overview: 'Дашборд', modules: 'Модули', moderation: 'Модерация',
-  commands: 'Команды', members: 'Участники', settings: 'Настройки',
-  bots: 'Мои боты', servers: 'Список серверов',
-};
+const MODULE_LABELS = UI.moduleLabels;
+const PAGE_LABELS = UI.nav;
 
 export function renderTopbar(container) {
   const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
   const themeIconClass = currentTheme === 'dark' ? 'fa-sun' : 'fa-moon';
 
   container.innerHTML = `
-    <button class="topbar-menu" id="menuToggle" type="button" aria-label="Меню">
+    <button class="topbar-menu" id="menuToggle" type="button" aria-label="${UI.actions.openMenu}">
       <i class="fa-solid fa-bars"></i>
     </button>
     <div class="topbar-title" id="topbarTitle"></div>
     <div class="topbar-actions">
-      <button class="icon-btn" data-tour type="button" aria-label="Тур по панели">
+      <button class="icon-btn" data-tour type="button" aria-label="${UI.actions.panelTour}">
         <i class="fa-solid fa-route"></i>
       </button>
-      <button class="icon-btn" data-contacts type="button" aria-label="Связаться с нами">
+      <button class="icon-btn" data-contacts type="button" aria-label="${UI.actions.contactUs}">
         <i class="fa-solid fa-headset"></i>
       </button>
-      <button class="icon-btn" data-theme-toggle type="button" aria-label="Тема">
+      <button class="icon-btn" data-theme-toggle type="button" aria-label="${UI.actions.toggleTheme}">
         <i class="fa-solid ${themeIconClass}"></i>
       </button>
     </div>
@@ -73,13 +57,13 @@ function updateTitle(container) {
   if (!title) return;
 
   let html = `
-    <span class="crumb">${escapeHtml(bot?.name || 'Бот')}</span>
+    <span class="crumb">${escapeHtml(bot?.name || UI.words.bot(1))}</span>
     <span class="crumb">${escapeHtml(guild?.name || '—')}</span>
   `;
 
   if (sub) {
     html += `
-      <span class="crumb">Модуль</span>
+      <span class="crumb">${UI.nav.modules}</span>
       <span>${escapeHtml(MODULE_LABELS[sub] || sub)}</span>
     `;
   } else {
@@ -89,57 +73,35 @@ function updateTitle(container) {
   title.innerHTML = html;
 }
 
-/* Мини-тур: карточки с кратким обзором разделов */
 function openPanelTour() {
+  const s = UI.topbar.tourSections;
+  const rows = ['overview', 'modules', 'moderation', 'commands', 'members', 'settings']
+    .map((key) => {
+      const row = s[key];
+      if (!row) return '';
+      const icons = {
+        overview: 'fa-chart-pie',
+        modules: 'fa-puzzle-piece',
+        moderation: 'fa-shield-halved',
+        commands: 'fa-terminal',
+        members: 'fa-user-group',
+        settings: 'fa-gear',
+      };
+      return `
+        <div class="contact-link" style="cursor:default;">
+          <i class="fa-solid ${icons[key]}"></i>
+          <div>
+            <strong>${escapeHtml(row.title)}</strong>
+            <span>${escapeHtml(row.text)}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
   openModal({
-    title: 'Тур по панели',
-    subtitle: 'Ключевые разделы и возможности',
-    body: `
-      <div class="contact-list">
-        <div class="contact-link" style="cursor:default;">
-          <i class="fa-solid fa-chart-pie"></i>
-          <div>
-            <strong>Дашборд</strong>
-            <span>Ключевые метрики, графики активности, топ команд и каналов</span>
-          </div>
-        </div>
-        <div class="contact-link" style="cursor:default;">
-          <i class="fa-solid fa-puzzle-piece"></i>
-          <div>
-            <strong>Модули</strong>
-            <span>Приветствия, уровни, тикеты, дни рождения и другое — включаются в один клик</span>
-          </div>
-        </div>
-        <div class="contact-link" style="cursor:default;">
-          <i class="fa-solid fa-shield-halved"></i>
-          <div>
-            <strong>Модерация</strong>
-            <span>Автомодерация, ручные наказания и журнал действий</span>
-          </div>
-        </div>
-        <div class="contact-link" style="cursor:default;">
-          <i class="fa-solid fa-terminal"></i>
-          <div>
-            <strong>Команды</strong>
-            <span>Встроенные и пользовательские слэш-команды сервера</span>
-          </div>
-        </div>
-        <div class="contact-link" style="cursor:default;">
-          <i class="fa-solid fa-user-group"></i>
-          <div>
-            <strong>Участники</strong>
-            <span>Уровни, предупреждения и роли — управление составом</span>
-          </div>
-        </div>
-        <div class="contact-link" style="cursor:default;">
-          <i class="fa-solid fa-gear"></i>
-          <div>
-            <strong>Настройки</strong>
-            <span>Канал логов и роли-исключения для статистики</span>
-          </div>
-        </div>
-      </div>
-    `,
-    ctaLabel: 'Понятно',
+    title: UI.topbar.tourTitle,
+    subtitle: UI.topbar.tourSubtitle,
+    body: `<div class="contact-list">${rows}</div>`,
+    ctaLabel: UI.topbar.tourCta,
   });
 }

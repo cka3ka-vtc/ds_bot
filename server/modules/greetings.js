@@ -4,9 +4,7 @@ import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../core/component
 import { getNonBotMemberCount } from '../core/guildCounts.js';
 
 export default class GreetingsModule extends Module {
-  get key() {
-    return 'greetings';
-  }
+  get key() { return 'greetings'; }
 
   async onEvent({ event, client, guildId, member }) {
     if (event !== 'guildMemberAdd' && event !== 'guildMemberRemove') return;
@@ -24,8 +22,12 @@ export default class GreetingsModule extends Module {
     if (!config?.channelId || !msgConfig) return;
 
     const channel = await client.channels.fetch(config.channelId).catch(() => null);
-    if (!channel?.isTextBased?.()) {
-      this.logger.warn({ guildId, channelId: config.channelId }, 'greetings: invalid channel');
+    // Проверяем, что канал существует и принадлежит этой гильдии
+    if (!channel?.isTextBased?.() || channel.guild.id !== guildId) {
+      this.logger.warn(
+        { guildId, channelId: config.channelId },
+        'greetings: channel invalid or foreign guild',
+      );
       return;
     }
 

@@ -1,6 +1,7 @@
 // public/assets/js/components/guildSwitcher.js
 import { store } from '../core/store.js';
 import { escapeHtml, initials, guildIconUrl, fmtNum } from '../core/utils.js';
+import { UI } from '/shared/ui-strings.js';
 
 function avatarHtml(g) {
   const url = guildIconUrl(g?.id, g?.icon, 64);
@@ -18,16 +19,16 @@ export function renderGuildSwitcher(container) {
 
   if (!active) {
     container.innerHTML = `
-      <button class="switcher-btn" data-goto-servers type="button" aria-label="Сменить сервер">
+      <button class="switcher-btn" data-goto-servers type="button" aria-label="${UI.sidebar.changeServer}">
         <span class="switcher-glow" aria-hidden="true"></span>
         <span class="switcher-inner-glow" aria-hidden="true"></span>
         <span class="switcher-avatar"><i class="fa-solid fa-server" style="font-size:12px;"></i></span>
         <span class="switcher-info">
-          <span class="switcher-name">Нет серверов</span>
-          <span class="switcher-meta"><i class="fa-solid fa-circle-info"></i> Добавьте бота</span>
+          <span class="switcher-name">${UI.sidebar.noServers}</span>
+          <span class="switcher-meta"><i class="fa-solid fa-circle-info"></i> ${UI.sidebar.addBotToStart}</span>
         </span>
         <i class="fa-solid fa-bars"></i>
-        <span class="switcher-hint">Сменить сервер</span>
+        <span class="switcher-hint">${UI.sidebar.changeServer}</span>
       </button>
     `;
     container.querySelector('[data-goto-servers]').addEventListener('click', () => {
@@ -37,7 +38,7 @@ export function renderGuildSwitcher(container) {
   }
 
   container.innerHTML = `
-    <button class="switcher-btn" data-goto-servers type="button" aria-label="Сменить сервер">
+    <button class="switcher-btn" data-goto-servers type="button" aria-label="${UI.sidebar.changeServer}">
       <span class="switcher-glow" aria-hidden="true"></span>
       <span class="switcher-inner-glow" aria-hidden="true"></span>
       <span class="switcher-avatar">${avatarHtml(active)}</span>
@@ -45,11 +46,11 @@ export function renderGuildSwitcher(container) {
         <span class="switcher-name">${escapeHtml(active.name)}</span>
         <span class="switcher-meta">
           <i class="fa-solid fa-users"></i>
-          ${memberCountOf(active)} участников
+          ${memberCountOf(active)} ${UI.words.member(Number(active.nonBotMemberCount ?? active.memberCount) || 0)}
         </span>
       </span>
       <i class="fa-solid fa-bars"></i>
-      <span class="switcher-hint">Сменить сервер</span>
+      <span class="switcher-hint">${UI.sidebar.changeServer}</span>
     </button>
   `;
 

@@ -1,7 +1,7 @@
 // public/assets/js/views/commands/index.js
 import { api } from '../../core/api.js';
 import { store } from '../../core/store.js';
-import { WORD } from '../../core/utils.js';
+import { UI } from '/shared/ui-strings.js';
 import { renderTable } from './table.js';
 import { openEditor } from './editor.js';
 
@@ -15,7 +15,7 @@ export default {
     const guildId = store.get('activeGuildId');
     if (!botId || !guildId) return this._empty(container);
 
-    container.innerHTML = '<div class="boot-screen"><i class="fa-solid fa-circle-notch fa-spin"></i><span>Загрузка...</span></div>';
+    container.innerHTML = `<div class="boot-screen"><i class="fa-solid fa-circle-notch fa-spin"></i><span>${UI.common.loading}</span></div>`;
 
     try {
       const data = await api.get(`/api/commands?botId=${botId}&guildId=${guildId}`);
@@ -33,38 +33,38 @@ export default {
     this.container.innerHTML = `
       <div class="view-head">
         <div class="view-title">
-          <h1>Команды</h1>
-          <p>Слэш-команды, доступные на этом сервере</p>
+          <h1>${UI.pages.commands.title}</h1>
+          <p>${UI.pages.commands.subtitle}</p>
         </div>
         <div class="view-actions">
           <button class="btn btn-primary" id="newCmdBtn">
-            <i class="fa-solid fa-plus"></i> Новая команда
+            <i class="fa-solid fa-plus"></i> ${UI.commands.new}
           </button>
         </div>
       </div>
       <div class="tabs" role="tablist" style="margin-bottom:16px;">
-        <button class="tab ${this.state.filter === 'all' ? 'active' : ''}" data-filter="all">Все <span class="count">${total}</span></button>
-        <button class="tab ${this.state.filter === 'builtin' ? 'active' : ''}" data-filter="builtin">Встроенные <span class="count">${this.state.builtin.length}</span></button>
-        <button class="tab ${this.state.filter === 'custom' ? 'active' : ''}" data-filter="custom">Пользовательские <span class="count">${this.state.custom.length}</span></button>
+        <button class="tab ${this.state.filter === 'all' ? 'active' : ''}" data-filter="all">${UI.commands.tabAll} <span class="count">${total}</span></button>
+        <button class="tab ${this.state.filter === 'builtin' ? 'active' : ''}" data-filter="builtin">${UI.commands.tabBuiltin} <span class="count">${this.state.builtin.length}</span></button>
+        <button class="tab ${this.state.filter === 'custom' ? 'active' : ''}" data-filter="custom">${UI.commands.tabCustom} <span class="count">${this.state.custom.length}</span></button>
       </div>
       <div class="table-wrap">
         <div class="table-toolbar">
           <div class="search-input" style="max-width:320px;">
             <i class="fa-solid fa-magnifying-glass"></i>
-            <input type="text" id="cmdSearch" placeholder="Поиск команды..." value="${this.state.search}">
+            <input type="text" id="cmdSearch" placeholder="${UI.commands.searchPlaceholder}" value="${this.state.search}">
           </div>
           <span class="count" id="cmdCount"></span>
         </div>
         <table class="tbl">
           <thead><tr>
-            <th>Команда</th><th>Категория</th><th>Тип</th>
-            <th style="text-align:right;">Действия</th>
+            <th>${UI.commands.tableCommand}</th><th>${UI.commands.tableCategory}</th><th>${UI.commands.tableType}</th>
+            <th style="text-align:right;">${UI.commands.tableActions}</th>
           </tr></thead>
           <tbody id="cmdBody"></tbody>
         </table>
         <div class="empty-state" id="cmdEmpty" hidden>
           <i class="fa-solid fa-terminal"></i>
-          <strong>Команды не найдены</strong>
+          <strong>${UI.commands.emptyTitle}</strong>
         </div>
       </div>
     `;
@@ -88,8 +88,8 @@ export default {
     container.innerHTML = `
       <div class="empty-state">
         <i class="fa-solid fa-terminal"></i>
-        <strong>Выберите сервер</strong>
-        <span>Сначала выберите сервер в сайдбаре</span>
+        <strong>${UI.commands.noCommandsEmptyTitle}</strong>
+        <span>${UI.commands.noCommandsEmptyHint}</span>
       </div>`;
   },
 };

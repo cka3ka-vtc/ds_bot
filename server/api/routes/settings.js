@@ -1,6 +1,10 @@
 // server/api/routes/settings.js
+// Раздел настроек находится в разработке.
+// Пока возвращаем безопасные значения по умолчанию, чтобы не ломать другие модули.
+
 import { Router } from 'express';
 import { requireAuth, requireBotAccess } from '../auth-middleware.js';
+import { guildSettingsToDto } from '../dto/index.js';
 
 export function settingsRouter() {
   const router = Router();
@@ -8,15 +12,20 @@ export function settingsRouter() {
 
   router.get('/', requireBotAccess, (req, res) => {
     const { botId, guildId } = req.query;
-    res.json(req.app.locals.db.getGuildSettings(botId, guildId));
+    const row = req.app.locals.db.getGuildSettings(botId, guildId);
+    res.json({
+      ...guildSettingsToDto(row),
+      stub: true,
+      message: 'Раздел находится в разработке',
+    });
   });
 
   router.put('/', requireBotAccess, (req, res) => {
-    const { botId, guildId, language, welcomeChannel, logChannel, excludedRoles } = req.body;
-    req.app.locals.db.setGuildSettings(botId, guildId, {
-      language, welcomeChannel, logChannel, excludedRoles,
+    res.json({
+      ok: true,
+      stub: true,
+      message: 'Раздел находится в разработке — изменения не сохранены',
     });
-    res.json({ ok: true });
   });
 
   return router;

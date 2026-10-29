@@ -1,6 +1,5 @@
 // shared/builtin-commands.js
 // Единый источник истины для встроенных команд бота.
-// Используется: commandSync.js (Discord API), commands.js (UI-список), interaction.js (роутинг).
 
 export const BUILTIN_COMMANDS = [
   {
@@ -27,6 +26,11 @@ export const BUILTIN_COMMANDS = [
 ];
 
 export const BUILTIN_NAMES = new Set(BUILTIN_COMMANDS.map((c) => c.name));
+
+/** Проверяет, зарезервировано ли имя под встроенную команду. */
+export function isReservedCommandName(name) {
+  return BUILTIN_NAMES.has(String(name || '').toLowerCase().trim());
+}
 
 /** Discord-формат (name + description + options). */
 export function toDiscordCommand(cmd) {

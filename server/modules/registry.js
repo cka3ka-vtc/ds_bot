@@ -2,12 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { configCache } from '../core/config-cache.js';
 
-/**
- * Реестр модулей. Читает manifest.json и импортирует файлы модулей.
- * Если файла модуля нет — пишет warning и продолжает (graceful degradation).
- * Так можно спокойно держать в манифесте больше модулей, чем реализовано.
- */
 export class ModuleRegistry {
   constructor({ db, logger, eventBus, botManager }) {
     this.ctx = { db, logger, eventBus, botManager };
@@ -15,7 +11,7 @@ export class ModuleRegistry {
     this.db = db;
     this.modules = new Map();
     this.manifest = null;
-    this.missingModules = [];   // ключи модулей, файлы которых не найдены
+    this.missingModules = [];
   }
 
   async load() {
@@ -30,17 +26,15 @@ export class ModuleRegistry {
     for (const entry of this.manifest.modules) {
       const filePath = path.join(modulesDir, `${entry.key}.js`);
 
-      // ── 1. Файл не существует? Пропускаем с warning ────────
       if (!fs.existsSync(filePath)) {
         this.missingModules.push(entry.key);
         this.logger.warn(
           { module: entry.key, expectedPath: filePath },
-          'module file not found — skipping (will be shown as "not implemented" in UI)',
+          'module file not found — skipping',
         );
         continue;
       }
 
-      // ── 2. Пробуем импортировать ───────────────────────────
       try {
         const mod = await import(pathToFileURL(filePath).href + `?v=${Date.now()}`);
         const ModClass = mod.default || mod.Module;
@@ -59,12 +53,8 @@ export class ModuleRegistry {
 
         this.logger.info({ module: entry.key }, 'module loaded');
       } catch (err) {
-        // ── 3. Ошибка импорта — логируем, продолжаем ─────────
         this.missingModules.push(entry.key);
-        this.logger.error(
-          { err, module: entry.key },
-          'failed to load module — skipping',
-        );
+        this.logger.error({ err, module: entry.key }, 'failed to load module — skipping');
       }
     }
 
@@ -78,27 +68,25 @@ export class ModuleRegistry {
     );
   }
 
-  get(key) {
-    return this.modules.get(key);
+  async unregisterAll() {
+    for (const [key, mod] of this.modules) {
+      try { await mod.unregister?.(); }
+      catch (err) { this.logger.warn({ err, module: key }, 'module unregister failed'); }
+    }
   }
 
-  all() {
-    return [...this.modules.values()];
-  }
+  get(key) { return this.modules.get(key); }
+  all() { return [...this.modules.values()]; }
 
-  /**
-   * Диспатч события всем ВКЛЮЧЁННЫМ на этом сервере модулям.
-   * Если модуль не реализован — просто пропускается.
-   */
+  /** Использует кэш enabled-модулей. */
   async dispatch(event) {
     const { botId, guildId } = event;
     if (!guildId) return;
 
-    const enabled = this.db.getEnabledModules(botId, guildId);
+    const enabled = await configCache.getEnabled(this.db, botId, guildId);
     for (const key of enabled) {
       const mod = this.modules.get(key);
       if (!mod) continue;
-
       if (mod.meta.events && !mod.meta.events.includes(event.event)) continue;
 
       try {

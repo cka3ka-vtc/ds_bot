@@ -5,60 +5,11 @@ import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../core/component
 import { getNonBotMemberCount } from '../core/guildCounts.js';
 import { xpForLevel, getLevelFromXp, progressOf } from '../core/formulas.js';
 import { DEFAULT_TITLES, getTitleForLevel } from '../../shared/titles.js';
+import { mergeLevelsConfig } from '../../shared/levels-config.js';
+import { configCache } from '../core/config-cache.js';
 import {
   startVoice, stopVoice, getActiveSessions, touchAward,
 } from '../core/voiceTracker.js';
-
-function normalizeEvents(rawEvents) {
-  const fallback = { message: 1, command: 2, voice: 5 };
-  const out = {};
-  for (const key of ['message', 'command', 'voice']) {
-    const ev = rawEvents?.[key] || {};
-    let min = ev.cooldownMin;
-    if (min == null) {
-      min = ev.cooldownSec != null ? Math.max(1, Math.round(ev.cooldownSec / 60)) : fallback[key];
-    }
-    out[key] = { xp: ev.xp ?? 0, cooldownMin: Math.max(1, min) };
-  }
-  return out;
-}
-
-function normalizeConfig(raw) {
-  const cfg = structuredClone(raw || {});
-  cfg.enabledEvents = { message: true, command: true, voice: true, ...(cfg.enabledEvents || {}) };
-  cfg.events = normalizeEvents(cfg.events);
-  cfg.announceChannelId = cfg.announceChannelId || '';
-  cfg.formula = cfg.formula === 'linear' ? 'linear' : 'classic';
-  cfg.linearBase = cfg.linearBase ?? 100;
-  cfg.maxLevel = cfg.maxLevel ?? 100;
-  cfg.boostMultiplier = cfg.boostMultiplier ?? 2;
-  cfg.excludedChannels = Array.isArray(cfg.excludedChannels) ? cfg.excludedChannels : [];
-  cfg.excludedRoles = Array.isArray(cfg.excludedRoles) ? cfg.excludedRoles : [];
-  cfg.titles = Array.isArray(cfg.titles) && cfg.titles.length
-    ? cfg.titles
-    : structuredClone(DEFAULT_TITLES);
-
-  const isOldDailyDefault =
-    (cfg.dailyXp === undefined || cfg.dailyXp === 50) &&
-    (cfg.dailyEnabled === undefined || cfg.dailyEnabled === false);
-  if (isOldDailyDefault) {
-    cfg.dailyEnabled = true;
-    cfg.dailyXp = 150;
-  } else {
-    cfg.dailyEnabled = !!cfg.dailyEnabled;
-    cfg.dailyXp = cfg.dailyXp ?? 150;
-  }
-
-  cfg.rewards = {
-    enabled: cfg.rewards?.enabled !== false,
-    entries: Array.isArray(cfg.rewards?.entries) ? cfg.rewards.entries : [],
-  };
-  cfg.inactivity = {
-    enabled: false, days: 30, penaltyXp: 50, removeRolesOnDecrease: false,
-    ...(cfg.inactivity || {}),
-  };
-  return cfg;
-}
 
 export default class LevelsModule extends Module {
   get key() { return 'levels'; }
@@ -75,6 +26,10 @@ export default class LevelsModule extends Module {
     this._tickInterval = setInterval(() => this._voiceTick().catch(() => {}), 60_000);
     this._inactivityInterval = setInterval(() => this._inactivityTick().catch(() => {}), 60 * 60_000);
     this._cleanupInterval = setInterval(() => this._cleanup(), 10 * 60_000);
+
+    // Восстанавливаем voice-сессии после рестарта бота
+    this._restoreVoiceSessions().catch(() => {});
+
     this.logger.info({ module: 'levels' }, 'levels: registered');
   }
 
@@ -83,6 +38,24 @@ export default class LevelsModule extends Module {
     clearInterval(this._inactivityInterval);
     clearInterval(this._cleanupInterval);
     this._cooldowns.clear();
+  }
+
+  /** При рестарте подхватываем тех, кто уже в голосовом канале. */
+  async _restoreVoiceSessions() {
+    for (const inst of this.botManager.all()) {
+      if (!inst?.client?.isReady()) continue;
+      for (const guild of inst.client.guilds.cache.values()) {
+        const afkId = guild.afkChannelId;
+        for (const [, state] of guild.voiceStates.cache) {
+          const member = state.member;
+          if (!member || member.user.bot) continue;
+          if (!state.channelId) continue;
+          if (state.channelId === afkId) continue;
+          if (state.selfDeaf || state.serverDeaf) continue;
+          startVoice(inst.id, guild.id, member.id, state.channelId);
+        }
+      }
+    }
   }
 
   /* ─── Slash-команды ─── */
@@ -104,18 +77,18 @@ export default class LevelsModule extends Module {
       }).catch(() => {});
     }
 
-    const config = normalizeConfig(rawConfig);
+    const config = mergeLevelsConfig(rawConfig);
     const ctx = { botId, guildId, config };
+
+    // Всегда defer, чтобы уложиться в 3 секунды
+    try { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); } catch {}
 
     switch (interaction.commandName) {
       case 'rank':        return this._cmdRank(interaction, ctx);
       case 'leaderboard': return this._cmdLeaderboard(interaction, ctx);
       case 'daily':       return this._cmdDaily(interaction, ctx);
       default:
-        return interaction.reply({
-          content: 'Неизвестная команда',
-          flags: MessageFlags.Ephemeral,
-        }).catch(() => {});
+        return interaction.editReply({ content: 'Неизвестная команда' }).catch(() => {});
     }
   }
 
@@ -125,7 +98,7 @@ export default class LevelsModule extends Module {
       const member = interaction.guild.members.cache.get(targetUser.id)
         || await interaction.guild.members.fetch(targetUser.id).catch(() => null);
       if (!member) {
-        return interaction.reply({ content: '❌ Пользователь не найден на сервере', flags: MessageFlags.Ephemeral }).catch(() => {});
+        return interaction.editReply({ content: '❌ Пользователь не найден на сервере' }).catch(() => {});
       }
       const data = this.db.getMemberData(botId, guildId, targetUser.id) || { xp: 0, level: 0 };
       const rank = this.db.getUserRank(botId, guildId, targetUser.id);
@@ -147,10 +120,10 @@ export default class LevelsModule extends Module {
         )
         .setFooter({ text: `Прогресс: ${progress.percent}%` });
 
-      return interaction.reply({ embeds: [embed] }).catch(() => {});
+      return interaction.editReply({ embeds: [embed] }).catch(() => {});
     } catch (err) {
       this.logger.warn({ err, userId: interaction.user.id }, 'levels /rank failed');
-      return interaction.reply({ content: '❌ Ошибка', flags: MessageFlags.Ephemeral }).catch(() => {});
+      return interaction.editReply({ content: '❌ Ошибка' }).catch(() => {});
     }
   }
 
@@ -158,12 +131,11 @@ export default class LevelsModule extends Module {
     try {
       const rows = this.db.getLeaderboard(botId, guildId, 10, 0);
       if (!rows.length) {
-        return interaction.reply({ content: '📊 Пока нет активных участников', flags: MessageFlags.Ephemeral }).catch(() => {});
+        return interaction.editReply({ content: '📊 Пока нет активных участников' }).catch(() => {});
       }
       const medals = ['🥇', '🥈', '🥉'];
       const lines = rows.map((r, i) => {
-        const pos = i + 1;
-        const prefix = medals[i] || `**${pos}.**`;
+        const prefix = medals[i] || `**${i + 1}.**`;
         const title = getTitleForLevel(r.level, config.titles);
         return `${prefix} <@${r.user_id}> — **${r.xp.toLocaleString('ru-RU')} XP** · Ур. ${r.level}${title ? ` · ${title}` : ''}`;
       });
@@ -173,17 +145,17 @@ export default class LevelsModule extends Module {
         .setTitle('🏆 Топ по уровням')
         .setDescription(lines.join('\n'))
         .setFooter({ text: `Всего в топе: ${total}` });
-      return interaction.reply({ embeds: [embed] }).catch(() => {});
+      return interaction.editReply({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => {});
     } catch (err) {
       this.logger.warn({ err, userId: interaction.user.id }, 'levels /leaderboard failed');
-      return interaction.reply({ content: '❌ Ошибка', flags: MessageFlags.Ephemeral }).catch(() => {});
+      return interaction.editReply({ content: '❌ Ошибка' }).catch(() => {});
     }
   }
 
   async _cmdDaily(interaction, { botId, guildId, config }) {
     try {
       if (!config.dailyEnabled) {
-        return interaction.reply({ content: '⚠ Ежедневная награда отключена', flags: MessageFlags.Ephemeral }).catch(() => {});
+        return interaction.editReply({ content: '⚠ Ежедневная награда отключена' }).catch(() => {});
       }
       const userId = interaction.user.id;
       const now = Math.floor(Date.now() / 1000);
@@ -193,22 +165,21 @@ export default class LevelsModule extends Module {
         const rem = nextAt - now;
         const h = Math.floor(rem / 3600);
         const m = Math.floor((rem % 3600) / 60);
-        return interaction.reply({ content: `⏳ Следующая награда через **${h} ч ${m} мин**`, flags: MessageFlags.Ephemeral }).catch(() => {});
+        return interaction.editReply({ content: `⏳ Следующая награда через **${h} ч ${m} мин**` }).catch(() => {});
       }
       const member = interaction.member;
       if (!member) {
-        return interaction.reply({ content: '❌ Не удалось получить профиль участника', flags: MessageFlags.Ephemeral }).catch(() => {});
+        return interaction.editReply({ content: '❌ Не удалось получить профиль участника' }).catch(() => {});
       }
       this.db.setDailyAt(botId, guildId, userId, now);
       await this._awardXp({ botId, guildId, member, config, amount: config.dailyXp });
       const after = this.db.getMemberData(botId, guildId, userId) || { xp: 0, level: 0 };
-      return interaction.reply({
+      return interaction.editReply({
         content: `🎁 Ты получил **${config.dailyXp} XP**! Теперь у тебя **${after.xp.toLocaleString('ru-RU')} XP** (Уровень ${after.level})`,
-        flags: MessageFlags.Ephemeral,
       }).catch(() => {});
     } catch (err) {
       this.logger.warn({ err, userId: interaction.user.id }, 'levels /daily failed');
-      return interaction.reply({ content: '❌ Ошибка', flags: MessageFlags.Ephemeral }).catch(() => {});
+      return interaction.editReply({ content: '❌ Ошибка' }).catch(() => {});
     }
   }
 
@@ -218,7 +189,7 @@ export default class LevelsModule extends Module {
     const botId = client.user.id;
     const { enabled, config: rawConfig } = await this.getConfig(botId, guildId);
     if (!enabled) return;
-    const config = normalizeConfig(rawConfig);
+    const config = mergeLevelsConfig(rawConfig);
 
     switch (event) {
       case 'messageCreate':     return this._onMessage({ botId, guildId, message, config });
@@ -259,8 +230,17 @@ export default class LevelsModule extends Module {
     const isAfk = newState.channel?.id === newState.guild.afkChannelId;
     const isMuted = newState.selfDeaf || newState.serverDeaf;
     const shouldTrack = isIn && !isAfk && !isMuted;
-    if (!wasIn && shouldTrack) startVoice(botId, guildId, member.id, newState.channelId);
-    else if (wasIn && (!isIn || isAfk || isMuted)) stopVoice(botId, guildId, member.id);
+
+    // Вошёл/перешёл в войс — начинаем трекинг
+    if (shouldTrack) {
+      startVoice(botId, guildId, member.id, newState.channelId);
+      // При переходе из другого канала — сбрасываем таймер, чтобы XP шёл с нового канала
+      if (wasIn && oldState.channelId !== newState.channelId) {
+        touchAward(botId, guildId, member.id);
+      }
+    } else {
+      stopVoice(botId, guildId, member.id);
+    }
   }
 
   async _voiceTick() {
@@ -268,15 +248,31 @@ export default class LevelsModule extends Module {
       try {
         const { enabled, config: rawConfig } = await this.getConfig(s.botId, s.guildId);
         if (!enabled) { stopVoice(s.botId, s.guildId, s.userId); continue; }
-        const config = normalizeConfig(rawConfig);
-        if (!config.enabledEvents.voice) continue;
-        const minGap = config.events.voice.cooldownMin * 60_000;
-        if (Date.now() - s.lastAwardAt < minGap) continue;
+        const config = mergeLevelsConfig(rawConfig);
+        if (!config.enabledEvents.voice) { stopVoice(s.botId, s.guildId, s.userId); continue; }
+
         const inst = this.botManager.get(s.botId);
         const guild = inst?.client?.guilds?.cache?.get(s.guildId);
         if (!guild) { stopVoice(s.botId, s.guildId, s.userId); continue; }
+
+        // Проверяем, что пользователь всё ещё в том же канале и не в AFK/mute
+        const voiceState = guild.voiceStates.cache.get(s.userId);
+        if (!voiceState?.channelId) { stopVoice(s.botId, s.guildId, s.userId); continue; }
+        if (voiceState.channelId === guild.afkChannelId) { stopVoice(s.botId, s.guildId, s.userId); continue; }
+        if (voiceState.selfDeaf || voiceState.serverDeaf) { stopVoice(s.botId, s.guildId, s.userId); continue; }
+
         const member = guild.members.cache.get(s.userId);
         if (!member) { stopVoice(s.botId, s.guildId, s.userId); continue; }
+
+        const minGap = config.events.voice.cooldownMin * 60_000;
+        const firstTick = s.lastAwardAt === 0;
+        // Первый тик: выдаём XP только после полного кулдауна с момента входа
+        const shouldAward = firstTick
+          ? Date.now() - s.startedAt >= minGap
+          : Date.now() - s.lastAwardAt >= minGap;
+
+        if (!shouldAward) continue;
+
         await this._awardXp({ botId: s.botId, guildId: s.guildId, member, config, amount: config.events.voice.xp });
         touchAward(s.botId, s.guildId, s.userId);
       } catch (err) {
@@ -308,6 +304,7 @@ export default class LevelsModule extends Module {
     const newXp = Math.min(oldXp + gained, maxXp);
     const newLevel = getLevelFromXp(newXp, config.formula, config, config.maxLevel);
 
+    // Роли выдаём ДО записи, чтобы пометить только успешно выданные
     const desired = new Set();
     if (config.rewards.enabled) {
       for (const r of config.rewards.entries) {
@@ -315,10 +312,17 @@ export default class LevelsModule extends Module {
       }
     }
     const currentAuto = new Set(this._parseAutoRoles(data.auto_roles));
+    const granted = [];
     for (const roleId of desired) {
       if (!currentAuto.has(roleId) && !member.roles.cache.has(roleId)) {
-        await member.roles.add(roleId).catch(() => {});
+        try {
+          await member.roles.add(roleId);
+          granted.push(roleId);
+        } catch (err) {
+          this.logger.warn({ err, roleId, userId: member.id }, 'levels: role grant failed');
+        }
       }
+      // Отмечаем как «автороль» в любом случае — это след, что модуль пытался её выдать
       currentAuto.add(roleId);
     }
 
@@ -327,7 +331,7 @@ export default class LevelsModule extends Module {
     });
 
     if (newLevel > oldLevel && config.announceChannelId && config.messages?.levelUp) {
-      await this._sendLevelUp({ botId, guildId, member, config, oldLevel, newLevel, newXp, grantedRoles: [...desired] });
+      await this._sendLevelUp({ botId, guildId, member, config, oldLevel, newLevel, newXp, grantedRoles: granted });
     }
   }
 
@@ -335,7 +339,7 @@ export default class LevelsModule extends Module {
     const inst = this.botManager.get(botId);
     if (!inst?.client?.isReady()) return;
     const channel = await inst.client.channels.fetch(config.announceChannelId).catch(() => null);
-    if (!channel?.isTextBased?.()) return;
+    if (!channel?.isTextBased?.() || channel.guild.id !== guildId) return;
 
     const count = await getNonBotMemberCount(member.guild);
     const progress = progressOf(newXp, newLevel, config.formula, config);
@@ -343,7 +347,7 @@ export default class LevelsModule extends Module {
     const title = getTitleForLevel(newLevel, config.titles);
     const position = this.db.getUserRank(botId, guildId, member.id);
 
-    const granted = grantedRoles
+    const granted = (grantedRoles || [])
       .filter((id) => config.rewards.entries.some((r) => r.roleId === id && Number(r.level) === newLevel))
       .map((id) => `<@&${id}>`);
 
@@ -394,14 +398,13 @@ export default class LevelsModule extends Module {
         try {
           const { enabled, config: rawConfig } = await this.getConfig(inst.id, guild.id);
           if (!enabled) continue;
-          const config = normalizeConfig(rawConfig);
+          const config = mergeLevelsConfig(rawConfig);
           if (!config.inactivity.enabled) continue;
 
           const threshold = now - config.inactivity.days * 86400;
           const inactive = this.db.getInactive(inst.id, guild.id, threshold);
 
           for (const row of inactive) {
-            // Уже штрафовали в последние 24 часа?
             const lastPenalty = row.last_penalty_at | 0;
             if (lastPenalty > dayAgo) continue;
 
@@ -419,9 +422,22 @@ export default class LevelsModule extends Module {
                 config.rewards.entries.filter((r) => Number(r.level) <= newLevel).map((r) => r.roleId),
               );
               const toRemove = currentAuto.filter((id) => !allowed.has(id));
+
+              // Снимаем роли только у реально существующих участников
               const member = guild.members.cache.get(row.user_id);
-              if (member) for (const roleId of toRemove) await member.roles.remove(roleId).catch(() => {});
-              newAuto = currentAuto.filter((id) => allowed.has(id));
+              if (member) {
+                const removed = [];
+                for (const roleId of toRemove) {
+                  try {
+                    await member.roles.remove(roleId);
+                    removed.push(roleId);
+                  } catch (err) {
+                    this.logger.warn({ err, roleId, userId: row.user_id }, 'levels: inactivity role remove failed');
+                  }
+                }
+                newAuto = currentAuto.filter((id) => allowed.has(id) || !removed.includes(id));
+              }
+              // Если member не в кэше — не трогаем auto_roles, чтобы не потерять данные
             }
 
             this.db.applyPenalty(inst.id, guild.id, row.user_id, {
@@ -445,6 +461,8 @@ export default class LevelsModule extends Module {
     for (const [k, ts] of this._cooldowns) {
       if (now - ts > 24 * 3600_000) this._cooldowns.delete(k);
     }
+    // Инвалидируем кэш конфигов (модуль мог долго работать)
+    configCache.cleanup();
   }
 
   _parseAutoRoles(raw) {

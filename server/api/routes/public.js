@@ -4,10 +4,6 @@ import { Router } from 'express';
 export function publicRouter() {
   const router = Router();
 
-  /**
-   * GET /api/public/stats — публичная статистика для лендинга.
-   * Не требует авторизации, кэшируется 30 сек.
-   */
   router.get('/stats', (req, res) => {
     const botManager = req.app.locals.botManager;
 
@@ -33,7 +29,6 @@ export function publicRouter() {
       ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
       : 0;
 
-    // Uptime: process uptime в % (пока без истории рестартов)
     const uptimePct = 99.9;
 
     res.set('Cache-Control', 'public, max-age=30');

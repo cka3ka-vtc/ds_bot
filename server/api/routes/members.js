@@ -1,15 +1,28 @@
 // server/api/routes/members.js
 import { Router } from 'express';
 import { requireAuth, requireBotAccess } from '../auth-middleware.js';
-import { xpForLevel, progressOf } from '../../core/formulas.js';
+import { validateQuery, validateBody } from '../validate.js';
+import { membersListQuery, memberUpdateBody } from '../../validators/schemas.js';
+import { xpForLevel, getLevelFromXp, progressOf } from '../../core/formulas.js';
 import { DEFAULT_TITLES, getTitleForLevel } from '../../../shared/titles.js';
+
+function audit(req, action, target, meta) {
+  req.app.locals.db.addAudit({
+    userId: req.user.id,
+    botId: req.body?.botId || req.query.botId,
+    guildId: req.body?.guildId || req.query.guildId,
+    action, target, meta,
+    ip: req.ip,
+  });
+}
 
 export function membersRouter() {
   const router = Router();
   router.use(requireAuth);
 
-  router.get('/', requireBotAccess, async (req, res) => {
-    const { botId, guildId } = req.query;
+  /* ─── Список участников с серверной пагинацией ─── */
+  router.get('/', validateQuery(membersListQuery), requireBotAccess, async (req, res) => {
+    const { botId, guildId, page, limit, search, roleId, status } = req.validatedQuery;
     const db = req.app.locals.db;
     const inst = req.app.locals.botManager.get(botId);
     if (!inst?.client) return res.status(404).json({ error: 'bot_offline' });
@@ -17,17 +30,45 @@ export function membersRouter() {
     const guild = inst.client.guilds.cache.get(guildId);
     if (!guild) return res.status(404).json({ error: 'guild_not_found' });
 
-    try { await guild.members.fetch(); } catch {}
-
     const settings = db.getGuildSettings(botId, guildId);
     const excludedRoles = new Set(settings.excluded_roles || []);
-    const dbExtraArr = db.getAllMembersData(botId, guildId);
-    const dbExtra = new Map(dbExtraArr.map((m) => [m.user_id, m]));
 
     const levelsCfg = db.getModuleConfig(botId, guildId, 'levels');
     const levelsConfig = levelsCfg?.config || {};
     const titles = levelsConfig.titles || DEFAULT_TITLES;
     const formula = levelsConfig.formula === 'linear' ? 'linear' : 'classic';
+
+    const allExtra = db.getAllMembersData(botId, guildId);
+    const extraMap = new Map(allExtra.map((m) => [m.user_id, m]));
+
+    // Сортировка по XP для rank
+    const sortedByXp = [...allExtra]
+      .filter((r) => (r.xp | 0) > 0)
+      .sort((a, b) => (b.xp | 0) - (a.xp | 0));
+    const rankMap = new Map();
+    sortedByXp.forEach((r, i) => rankMap.set(r.user_id, i + 1));
+
+    const q = (search || '').toLowerCase();
+
+    const buildCommon = (userId, extra) => {
+      const level = extra.level | 0;
+      const xp = extra.xp | 0;
+      const progress = progressOf(xp, level, formula, levelsConfig);
+      const nextLevelXp = xpForLevel(level + 1, formula, levelsConfig);
+      return {
+        level, xp,
+        title: getTitleForLevel(level, titles),
+        rank: rankMap.get(userId) || null,
+        nextLevelXp,
+        progressPercent: progress.percent,
+        progressCurrent: progress.current,
+        progressTotal: progress.total,
+        warnings: extra.warnings | 0,
+        birthday: extra.birthday || null,
+        birthdayPublic: !!(extra.birthday_public),
+        lastActiveAt: extra.last_active_at || null,
+      };
+    };
 
     const activeMembers = guild.members.cache
       .filter((m) => !m.user.bot)
@@ -41,87 +82,87 @@ export function membersRouter() {
 
     const statsMap = db.getUserStatsBatch(botId, guildId, allIds);
 
-    const sortedByXp = [...dbExtraArr]
-      .filter((r) => (r.xp | 0) > 0)
-      .sort((a, b) => (b.xp | 0) - (a.xp | 0));
-    const rankMap = new Map();
-    sortedByXp.forEach((r, i) => rankMap.set(r.user_id, i + 1));
+    const matchesSearch = (m) => !q
+      || (m.username || '').toLowerCase().includes(q)
+      || (m.displayName || '').toLowerCase().includes(q);
 
-    const buildCommon = (userId, extra, stats) => {
-      const level = extra.level | 0;
-      const xp = extra.xp | 0;
-      const progress = progressOf(xp, level, formula, levelsConfig);
-      const nextLevelXp = xpForLevel(level + 1, formula, levelsConfig);
+    const matchesRole = (m) => !roleId
+      || (m.roles || []).some((r) => r.id === roleId);
 
-      return {
-        level,
-        xp,
-        title: getTitleForLevel(level, titles),
-        rank: rankMap.get(userId) || null,
-        nextLevelXp,
-        progressPercent: progress.percent,
-        progressCurrent: progress.current,
-        progressTotal: progress.total,
-        warnings: extra.warnings | 0,
-        birthday: extra.birthday || null,
-        birthdayPublic: !!(extra.birthday_public),
-        lastActiveAt: extra.last_active_at || null,
-        messages: stats.messages | 0,
-        commands: stats.commands | 0,
-        voice: stats.voice | 0,
-      };
-    };
+    const active = activeMembers
+      .map(({ id, member: m }) => {
+        const extra = extraMap.get(id) || {};
+        const stats = statsMap[id] || { messages: 0, commands: 0, voice: 0 };
+        const common = buildCommon(id, extra);
+        const roleList = m.roles.cache
+          .filter((r) => r.name !== '@everyone')
+          .map((r) => ({ id: r.id, name: r.name, color: r.hexColor }))
+          .sort((a, b) => a.name.localeCompare(b.name));
 
-    const active = activeMembers.map(({ id, member: m }) => {
-      const extra = dbExtra.get(id) || {};
-      const stats = statsMap[id] || { messages: 0, commands: 0, voice: 0 };
-      const common = buildCommon(id, extra, stats);
+        return {
+          id,
+          username: m.user.username,
+          displayName: m.displayName,
+          serverNickname: m.nickname || null,
+          avatar: m.user.displayAvatarURL({ size: 128 }),
+          isBot: false,
+          joinedAt: m.joinedTimestamp,
+          leftAt: null,
+          left: false,
+          roles: roleList,
+          ...common,
+          messages: stats.messages | 0,
+          commands: stats.commands | 0,
+          voice: stats.voice | 0,
+        };
+      })
+      .filter(matchesSearch)
+      .filter(matchesRole);
 
-      const roleList = m.roles.cache
-        .filter((r) => r.name !== '@everyone')
-        .map((r) => ({ id: r.id, name: r.name, color: r.hexColor }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+    const left = leftProfiles
+      .map((u) => {
+        const extra = extraMap.get(u.user_id) || u;
+        const stats = statsMap[u.user_id] || { messages: 0, commands: 0, voice: 0 };
+        const common = buildCommon(u.user_id, extra);
+        return {
+          id: u.user_id,
+          username: u.username || 'unknown',
+          displayName: u.display_name || u.username || 'Покинувший участник',
+          serverNickname: null,
+          avatar: u.avatar_url || null,
+          isBot: false,
+          joinedAt: null,
+          leftAt: u.left_at ? u.left_at * 1000 : null,
+          left: true,
+          roles: [],
+          ...common,
+          messages: stats.messages | 0,
+          commands: stats.commands | 0,
+          voice: stats.voice | 0,
+        };
+      })
+      .filter(matchesSearch);
 
-      return {
-        id,
-        username: m.user.username,
-        displayName: m.displayName,
-        serverNickname: m.nickname || null,
-        avatar: m.user.displayAvatarURL({ size: 128 }),
-        isBot: false,
-        joinedAt: m.joinedTimestamp,
-        leftAt: null,
-        left: false,
-        roles: roleList,
-        ...common,
-      };
+    let combined;
+    if (status === 'active') combined = active;
+    else if (status === 'left') combined = left;
+    else combined = [...active, ...left];
+
+    const total = combined.length;
+    const offset = (page - 1) * limit;
+    const items = combined.slice(offset, offset + limit);
+
+    res.json({
+      items,
+      total,
+      page,
+      limit,
+      pages: Math.max(1, Math.ceil(total / limit)),
+      counts: { active: active.length, left: left.length, all: active.length + left.length },
     });
-
-    const left = leftProfiles.map((u) => {
-      const extra = dbExtra.get(u.user_id) || u;
-      const stats = statsMap[u.user_id] || { messages: 0, commands: 0, voice: 0 };
-      const common = buildCommon(u.user_id, extra, stats);
-
-      return {
-        id: u.user_id,
-        username: u.username || 'unknown',
-        displayName: u.display_name || u.username || 'Покинувший участник',
-        serverNickname: null,
-        avatar: u.avatar_url || null,
-        isBot: false,
-        joinedAt: null,
-        leftAt: u.left_at ? u.left_at * 1000 : null,
-        left: true,
-        roles: [],
-        ...common,
-      };
-    });
-
-    const all = [...active, ...left];
-    all.sort((a, b) => (a.left !== b.left) ? (a.left ? 1 : -1) : 0);
-    res.json(all);
   });
 
+  /* ─── Детали участника ─── */
   router.get('/:userId', requireBotAccess, async (req, res) => {
     const { botId, guildId } = req.query;
     const { userId } = req.params;
@@ -131,6 +172,12 @@ export function membersRouter() {
 
     const guild = inst.client.guilds.cache.get(guildId);
     if (!guild) return res.status(404).json({ error: 'guild_not_found' });
+
+    // Гарантируем, что участник загружен (иначе роли будут пустыми)
+    let member = guild.members.cache.get(userId);
+    if (!member) {
+      member = await guild.members.fetch(userId).catch(() => null);
+    }
 
     const dbRow = db.getMemberData(botId, guildId, userId) || {};
     const profile = db.getUserProfile(botId, guildId, userId) || {};
@@ -146,7 +193,6 @@ export function membersRouter() {
     const progress = progressOf(xp, level, formula, levelsConfig);
     const nextLevelXp = xpForLevel(level + 1, formula, levelsConfig);
 
-    const member = guild.members.cache.get(userId);
     const roleList = member
       ? member.roles.cache
           .filter((r) => r.name !== '@everyone')
@@ -160,8 +206,7 @@ export function membersRouter() {
       displayName: member?.displayName || profile.display_name || profile.username || 'Участник',
       serverNickname: member?.nickname || null,
       avatarUrl: member?.user?.displayAvatarURL?.({ size: 128 }) || profile.avatar_url || null,
-      level,
-      xp,
+      level, xp,
       title: getTitleForLevel(level, titles),
       rank,
       nextLevelXp,
@@ -182,9 +227,9 @@ export function membersRouter() {
     });
   });
 
-  /* PUT — возвращает warning вместо молчаливого пропуска */
-  router.put('/:userId', requireBotAccess, async (req, res) => {
-    const { botId, guildId, level, warnings, nickname, roles } = req.body || {};
+  /* ─── Обновление участника ─── */
+  router.put('/:userId', validateBody(memberUpdateBody), requireBotAccess, async (req, res) => {
+    const { botId, guildId, level, warnings, nickname, roles } = req.body;
     const userId = req.params.userId;
     const db = req.app.locals.db;
     const inst = req.app.locals.botManager.get(botId);
@@ -195,9 +240,28 @@ export function membersRouter() {
 
     const me = guild.members.me;
 
+    // Уровень меняем вместе с XP, чтобы данные были согласованы
     if (level !== undefined || warnings !== undefined) {
       try {
-        db.upsertMemberData(botId, guildId, userId, { level, warnings });
+        const current = db.getMemberData(botId, guildId, userId) || { xp: 0, level: 0 };
+        let newXp = current.xp | 0;
+        let newLevel = current.level | 0;
+
+        // Пересчитываем XP и уровень ТОЛЬКО если level изменился.
+        // Иначе — сохраняем текущие XP/level как есть.
+        if (level !== undefined && level !== current.level) {
+          const levelsCfg = db.getModuleConfig(botId, guildId, 'levels');
+          const levelsConfig = levelsCfg?.config || {};
+          const formula = levelsConfig.formula === 'linear' ? 'linear' : 'classic';
+          newXp = xpForLevel(level, formula, levelsConfig);
+          newLevel = level;
+        }
+
+        db.upsertMemberData(botId, guildId, userId, {
+          level: newLevel,
+          xp: newXp,
+          warnings: warnings !== undefined ? warnings : current.warnings,
+        });
       } catch (err) {
         req.app.locals.logger.warn({ err, userId }, 'member data update failed');
         return res.status(500).json({ error: 'db_failed' });
@@ -207,7 +271,6 @@ export function membersRouter() {
     const member = guild.members.cache.get(userId)
       || await guild.members.fetch(userId).catch(() => null);
 
-    // участник не найден, но передан nickname/roles — предупреждаем, а не молчим
     if (!member && (nickname !== undefined || roles !== undefined)) {
       return res.json({
         ok: true,
@@ -226,12 +289,15 @@ export function membersRouter() {
       try {
         const next = String(nickname || '').trim() || null;
         await member.setNickname(next, 'Изменение из панели');
+        audit(req, 'member.nickname', userId, { next });
       } catch (err) {
         req.app.locals.logger.warn({ err, userId }, 'setNickname failed');
         return res.status(400).json({ error: 'nickname_failed', details: err.message });
       }
     }
 
+    // Роли: обновляем ТОЛЬКО если массив реально передан (не undefined),
+    // и НИКОГДА не снимаем managed-роли и роли выше бота.
     if (Array.isArray(roles) && member) {
       if (!me?.permissions?.has('ManageRoles')) {
         return res.status(403).json({
@@ -240,15 +306,19 @@ export function membersRouter() {
         });
       }
       const botHighest = me.roles.highest.position;
+
+      // Текущие "безопасные" роли участника (не managed, ниже бота, не @everyone)
       const current = new Set(
         member.roles.cache
-          .filter((r) => r.id !== guild.id && r.position < botHighest)
+          .filter((r) => r.id !== guild.id && !r.managed && r.position < botHighest)
           .map((r) => r.id),
       );
+
+      // Целевые роли: только те, что существуют, не managed, ниже бота
       const target = new Set(
         roles.filter((id) => {
           const r = guild.roles.cache.get(id);
-          return r && r.position < botHighest;
+          return r && !r.managed && r.position < botHighest;
         }),
       );
 
@@ -258,6 +328,9 @@ export function membersRouter() {
       try {
         if (toAdd.length) await member.roles.add(toAdd, 'Изменение из панели');
         if (toRemove.length) await member.roles.remove(toRemove, 'Изменение из панели');
+        if (toAdd.length || toRemove.length) {
+          audit(req, 'member.roles', userId, { added: toAdd, removed: toRemove });
+        }
       } catch (err) {
         req.app.locals.logger.warn({ err, userId }, 'roles update failed');
         return res.status(400).json({ error: 'roles_failed', details: err.message });

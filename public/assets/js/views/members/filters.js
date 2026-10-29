@@ -1,21 +1,16 @@
 // public/assets/js/views/members/filters.js
 import { escapeHtml } from '../../core/utils.js';
-import { renderGrid } from './cards.js';
+import { UI } from '/shared/ui-strings.js';
+
+const M = UI.members;
 
 export function bindFilters(view) {
   const container = view.container;
-
-  container.querySelector('#memSearch').addEventListener('input', (e) => {
-    view.state.search = e.target.value.trim().toLowerCase();
-    renderGrid(view);
-  });
-
-  container.querySelector('#memStatusFilter').addEventListener('change', (e) => {
-    view.state.statusFilter = e.target.value;
-    renderGrid(view);
-  });
+  if (!container) return;
 
   const filter = container.querySelector('#memRoleFilter');
+  if (!filter) return;
+
   const trigger = filter.querySelector('[data-role-filter-trigger]');
   const popup = filter.querySelector('[data-role-filter-popup]');
   const search = filter.querySelector('[data-role-filter-search]');
@@ -32,12 +27,12 @@ export function bindFilters(view) {
     let html = `
       <button type="button" class="role-filter-option ${allActive}" data-role-id="">
         <i class="fa-solid fa-users" style="width:10px;font-size:10px;color:var(--muted);flex-shrink:0;"></i>
-        <span class="role-filter-option-name">Все роли</span>
+        <span class="role-filter-option-name">${M.roleFilterAll}</span>
       </button>
     `;
 
     if (!roles.length) {
-      html += `<div class="role-filter-empty">${view.state.roles.length ? 'Ничего не найдено' : 'Роли недоступны'}</div>`;
+      html += `<div class="role-filter-empty">${view.state.roles.length ? M.roleFilterEmpty : M.roleFilterUnavailable}</div>`;
     } else {
       html += roles.map((r) => {
         const isSel = view.state.roleFilter === r.id;
@@ -89,10 +84,10 @@ export function bindFilters(view) {
       label.textContent = role ? role.name : view.state.roleFilter;
       label.classList.remove('empty');
     } else {
-      label.textContent = 'Все роли';
+      label.textContent = M.roleFilterAll;
       label.classList.add('empty');
     }
     closePopup();
-    renderGrid(view);
+    view._reload(1);
   });
 }

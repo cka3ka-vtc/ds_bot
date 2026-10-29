@@ -1,13 +1,14 @@
 // server/modules/tickets.js
+// Стаб. Отвечает на /ticket placeholder-сообщением.
+
+import { MessageFlags } from 'discord.js';
 import { Module } from './_base.js';
 
-/**
- * Тикеты — заглушка. Реагирует на /ticket как placeholder.
- * В будущем: создание приватных каналов, ролей поддержки, автозакрытие.
- */
 export default class TicketsModule extends Module {
-  get key() {
-    return 'tickets';
+  get key() { return 'tickets'; }
+
+  async register() {
+    this.logger.info({ module: 'tickets' }, 'tickets: registered (stub)');
   }
 
   async onEvent({ event, client, guildId, interaction }) {
@@ -21,7 +22,7 @@ export default class TicketsModule extends Module {
     try {
       await interaction.reply({
         content: '🎫 Система тикетов пока в разработке. Скоро!',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     } catch (err) {
       this.logger.error({ err, guildId }, 'tickets: reply failed');

@@ -7,6 +7,9 @@ import { bindChannelPicker, bindRolePicker, rolePickerHTML } from '../pickers.js
 import { MessageEditor, emptyMessageConfig } from '../message-editor.js';
 import { mergeLevelsConfig, bindNumSteppers, numStepper } from './helpers.js';
 import { buildPageHTML } from './ui.js';
+import { UI } from '/shared/ui-strings.js';
+
+const L = UI.levels;
 
 export default {
   container: null,
@@ -17,11 +20,11 @@ export default {
     const botId = store.get('activeBotId');
     const guildId = store.get('activeGuildId');
     if (!botId || !guildId) {
-      container.innerHTML = `<div class="empty-state"><i class="fa-solid fa-ranking-star"></i><strong>Выберите сервер</strong></div>`;
+      container.innerHTML = `<div class="empty-state"><i class="fa-solid fa-ranking-star"></i><strong>${UI.common.selectServer}</strong></div>`;
       return;
     }
 
-    container.innerHTML = '<div class="boot-screen"><i class="fa-solid fa-circle-notch fa-spin"></i><span>Загрузка...</span></div>';
+    container.innerHTML = `<div class="boot-screen"><i class="fa-solid fa-circle-notch fa-spin"></i><span>${UI.common.loading}</span></div>`;
 
     let channels = [], roles = [], storedCfg = { enabled: false, config: {} };
     try {
@@ -34,7 +37,7 @@ export default {
       roles = rls || [];
       storedCfg = cfg || { enabled: false, config: {} };
     } catch (err) {
-      container.innerHTML = `<div class="empty-state"><i class="fa-solid fa-triangle-exclamation"></i><strong>Ошибка загрузки</strong><span>${escapeHtml(err.message)}</span></div>`;
+      container.innerHTML = `<div class="empty-state"><i class="fa-solid fa-triangle-exclamation"></i><strong>${UI.common.errorLoad}</strong><span>${escapeHtml(err.message)}</span></div>`;
       return;
     }
 
@@ -50,7 +53,7 @@ export default {
     if (this.state?.editor) this.state.editor.destroy();
     this.state = null;
     this.container = null;
-    document.querySelectorAll('.picker-popup, .time-dropdown').forEach((p) => p.remove());
+    document.querySelectorAll('.picker-popup, .time-dropdown, .tokens-dropdown').forEach((p) => p.remove());
   },
 
   _setup(root, state) {
@@ -92,11 +95,9 @@ export default {
     /* ── Формула ── */
     const formulaHint = page.querySelector('[data-formula-hint]');
     const updateFormulaHint = () => {
-      const map = {
-        classic: 'XP(n) = 5n² + 50n + 100. Уровень 10 = 1100 XP, уровень 50 = 15000 XP.',
-        linear:  `XP(n) = ${cfg.linearBase} × n. Уровень 10 = ${cfg.linearBase * 10} XP.`,
-      };
-      formulaHint.textContent = map[cfg.formula] || map.classic;
+      formulaHint.textContent = cfg.formula === 'linear'
+        ? L.formulaHint.linear(cfg.linearBase)
+        : L.formulaHint.classic;
     };
     updateFormulaHint();
     page.querySelectorAll('[data-formula-seg] .seg-btn').forEach((btn) => {
@@ -117,11 +118,10 @@ export default {
       inactToggle.setAttribute('aria-checked', String(cfg.inactivity.enabled));
       inactBlock.classList.toggle('is-on', cfg.inactivity.enabled);
       inactWarning.classList.toggle('show', cfg.inactivity.enabled);
-      inactWarningText.textContent =
-        `После ${cfg.inactivity.days} дн. неактивности пользователь ежедневно теряет ${cfg.inactivity.penaltyXp} XP. ` +
-        (cfg.inactivity.removeRolesOnDecrease && cfg.rewards.enabled
-          ? 'Роли, выданные модулем и не соответствующие новому уровню, будут сняты.'
-          : 'Уже выданные роли сохраняются.');
+      const remove = cfg.inactivity.removeRolesOnDecrease && cfg.rewards.enabled;
+      inactWarningText.textContent = L.inactivityWarning(
+        cfg.inactivity.days, cfg.inactivity.penaltyXp, remove,
+      );
     };
     inactToggle.addEventListener('click', () => {
       cfg.inactivity.enabled = !cfg.inactivity.enabled;
@@ -161,7 +161,7 @@ export default {
     const renderTitles = () => {
       cfg.titles.sort((a, b) => (a.minLevel | 0) - (b.minLevel | 0));
       if (!cfg.titles.length) {
-        titleTable.innerHTML = '<div class="reward-empty">Званий пока нет. Добавьте первое.</div>';
+        titleTable.innerHTML = `<div class="reward-empty">${L.titlesEmpty}</div>`;
         return;
       }
       titleTable.innerHTML = cfg.titles.map((t, i) => `
@@ -170,8 +170,8 @@ export default {
             ${numStepper({ value: t.minLevel, min: 1, max: cfg.maxLevel, data: 'data-title-level' })}
           </div>
           <input type="text" class="input" data-title-name maxlength="40"
-                 placeholder="Название звания" value="${escapeHtml(t.name || '')}">
-          <button type="button" class="reward-remove" data-remove-title="${i}" title="Удалить звание">
+                 placeholder="${L.titleNamePlaceholder}" value="${escapeHtml(t.name || '')}">
+          <button type="button" class="reward-remove" data-remove-title="${i}" title="${L.titleDeleteLabel}">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
@@ -212,15 +212,13 @@ export default {
     const applyRewardsState = () => {
       rewardsToggle.classList.toggle('on', cfg.rewards.enabled);
       rewardsToggle.setAttribute('aria-checked', String(cfg.rewards.enabled));
-      rewardsToggle.title = cfg.rewards.enabled ? 'Отключить награды' : 'Включить награды';
+      rewardsToggle.title = cfg.rewards.enabled ? L.rewardsDisable : L.rewardsEnable;
       rewardsPanel.classList.toggle('disabled', !cfg.rewards.enabled);
       rewardsNote.hidden = cfg.rewards.enabled;
       removeRolesRow.classList.toggle('is-disabled', !cfg.rewards.enabled);
       removeRolesToggle.disabled = !cfg.rewards.enabled;
       removeRolesToggle.setAttribute('aria-disabled', String(!cfg.rewards.enabled));
-      removeRolesNote.textContent = cfg.rewards.enabled
-        ? 'Только автороли, выданные модулем и не соответствующие новому уровню'
-        : 'Недоступно: награды отключены';
+      removeRolesNote.textContent = cfg.rewards.enabled ? L.inactivityRemoveRolesOn : L.inactivityRemoveRolesOff;
       updateInactivityUI();
     };
     rewardsToggle.addEventListener('click', () => {
@@ -239,7 +237,7 @@ export default {
 
     const renderRewards = () => {
       if (!cfg.rewards.entries.length) {
-        rewardsTable.innerHTML = '<div class="reward-empty">Пока нет наград. Добавьте первую.</div>';
+        rewardsTable.innerHTML = `<div class="reward-empty">${L.rewardsEmpty}</div>`;
         return;
       }
       rewardsTable.innerHTML = cfg.rewards.entries.map((r, i) => `
@@ -252,7 +250,7 @@ export default {
           <div class="reward-role">
             ${rolePickerHTML({ id: `reward_${i}`, value: r.roleId || '', roles: availableFor(i) })}
           </div>
-          <button type="button" class="reward-remove" data-remove-reward="${i}" title="Удалить награду">
+          <button type="button" class="reward-remove" data-remove-reward="${i}" title="${L.rewardsDeleteLabel}">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
@@ -292,7 +290,7 @@ export default {
     const exclChChips = page.querySelector('[data-excl-channels]');
     const renderExclCh = () => {
       if (!cfg.excludedChannels.length) {
-        exclChChips.innerHTML = '<div class="chip-empty">Нет исключённых каналов</div>';
+        exclChChips.innerHTML = `<div class="chip-empty">${L.exclChannelsEmpty}</div>`;
         return;
       }
       exclChChips.innerHTML = cfg.excludedChannels.map((id) => {
@@ -317,7 +315,6 @@ export default {
       id: 'excl_channel_picker',
       channels,
       multiSelect: true,
-      // Список пересобирается при каждом открытии — уже выбранные исключаются
       filterList: (all) => all.filter((c) => !cfg.excludedChannels.includes(c.id)),
       onSelect: (ch) => {
         if (!ch) return;
@@ -332,7 +329,7 @@ export default {
     const exclRoleChips = page.querySelector('[data-excl-roles]');
     const renderExclRoles = () => {
       if (!cfg.excludedRoles.length) {
-        exclRoleChips.innerHTML = '<div class="chip-empty">Нет исключённых ролей</div>';
+        exclRoleChips.innerHTML = `<div class="chip-empty">${L.exclRolesEmpty}</div>`;
         return;
       }
       exclRoleChips.innerHTML = cfg.excludedRoles.map((id) => {
@@ -372,7 +369,11 @@ export default {
     const editorContainer = page.querySelector('[data-editor-container]');
     const initial = cfg.messages.levelUp || emptyMessageConfig();
     const editor = new MessageEditor(editorContainer, initial, {
-      bot: state.bot, roles, context: 'levels', guildId: state.guildId,
+      bot: state.bot, roles,
+      context: 'levels',
+      presetKey: 'levels.levelUp',
+      guildId: state.guildId,
+      botId: state.botId,
     });
     editor.onChange = (m) => { cfg.messages.levelUp = m; };
     editor.mount();
@@ -381,25 +382,21 @@ export default {
     /* ── Тест ── */
     page.querySelector('[data-test-message]').addEventListener('click', async (e) => {
       const btn = e.currentTarget;
-      if (!cfg.announceChannelId) return toast('Сначала выберите канал', 'warn');
+      if (!cfg.announceChannelId) return toast(L.needChannel, 'warn');
       cfg.messages.levelUp = editor.getConfig();
       const orig = btn.innerHTML;
       btn.disabled = true;
-      btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Отправка...';
+      btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${UI.common.sending}`;
       try {
         await api.post('/api/levels/test', {
           botId: state.botId, guildId: state.guildId,
           channelId: cfg.announceChannelId,
           messageConfig: cfg.messages.levelUp,
         });
-        toast('Тестовое сообщение отправлено', 'success');
+        toast(L.testSent, 'success');
       } catch (err) {
-        const map = {
-          no_channel: 'Выберите канал', no_message: 'Настройте сообщение',
-          empty_message: 'Сообщение пустое', invalid_channel: 'Канал не найден',
-          bot_offline: 'Бот офлайн', send_failed: 'Не удалось отправить',
-        };
-        toast(map[err.data?.error] || ('Ошибка: ' + (err.data?.details || err.message)), 'error');
+        const map = { ...UI.errors };
+        toast(map[err.data?.error] || (UI.common.error + ': ' + (err.data?.details || err.message)), 'error');
       } finally {
         btn.disabled = false;
         btn.innerHTML = orig;
@@ -434,31 +431,32 @@ export default {
 
       cfg.messages.levelUp = editor.getConfig();
 
-      if (!cfg.announceChannelId) return toast('Выберите канал объявлений', 'warn');
+      if (!cfg.announceChannelId) return toast(L.needChannel, 'warn');
       const anyEvent =
         cfg.enabledEvents.message || cfg.enabledEvents.command ||
         cfg.enabledEvents.voice || cfg.dailyEnabled;
-      if (!anyEvent) return toast('Включите хотя бы одно событие', 'warn');
+      if (!anyEvent) return toast(L.needEvent, 'warn');
       if (cfg.rewards.enabled && cfg.rewards.entries.some((r) => !r.roleId || !r.level)) {
-        return toast('Заполните все награды или отключите их', 'warn');
+        return toast(L.needRewards, 'warn');
       }
       cfg.titles = cfg.titles.filter((t) => t.name && t.name.trim());
-      if (!cfg.titles.length) return toast('Добавьте хотя бы одно звание', 'warn');
+      if (!cfg.titles.length) return toast(L.needTitles, 'warn');
 
       const orig = btn.innerHTML;
       btn.disabled = true;
-      btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Сохранение...';
+      btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${UI.common.saving}`;
       try {
         await api.put('/api/modules/levels/config', {
           botId: state.botId, guildId: state.guildId, config: cfg,
         });
-        toast('Настройки сохранены', 'success');
+        toast(L.saved, 'success');
         try {
           const mods = await api.get(`/api/modules?botId=${state.botId}&guildId=${state.guildId}`);
           store.set('modulesEnabledCount', mods.filter((m) => m.enabled).length);
         } catch {}
       } catch (err) {
-        toast('Ошибка сохранения: ' + (err.data?.error || err.message), 'error');
+        const map = { invalid_channel: UI.errors.invalid_channel, validation_failed: UI.errors.validation_failed };
+        toast(map[err.data?.error] || (UI.common.errorSave + ': ' + (err.data?.error || err.message)), 'error');
       } finally {
         btn.disabled = false;
         btn.innerHTML = orig;
