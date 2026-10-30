@@ -78,9 +78,12 @@ export function guildsRouter() {
       let fetched = null;
       try {
         if (isReady) {
-          fetched = await inst.client.guilds.fetch({ guild: g.id, withCounts: true, force: true });
+          // force: false — берём из кеша, только memberCount догружаем.
+          // force: true здесь приводил к N последовательных запросов к API
+          // на каждый список гильдий и ловил rate-limit.
+          fetched = await inst.client.guilds.fetch({ guild: g.id, withCounts: true, force: false });
         }
-      } catch (err) { logger.warn({ err, guildId: g.id }, 'guilds: force-fetch failed'); }
+      } catch (err) { logger.warn({ err, guildId: g.id }, 'guilds: fetch failed'); }
       if (!fetched) fetched = g._live || null;
       fetchedMap.set(g.id, fetched);
 
@@ -154,7 +157,7 @@ export function guildsRouter() {
     res.json(enriched);
   });
 
-  /* ─── Удаление данных одной гильдии ─── */
+  /* ── Удаление данных гильдии ── */
   router.delete('/:guildId/data', async (req, res) => {
     const db = req.app.locals.db;
     const logger = req.app.locals.logger;
@@ -172,7 +175,6 @@ export function guildsRouter() {
     const guild = db.getGuild(botId, guildId);
     if (!guild) return res.status(404).json({ error: 'guild_not_found' });
 
-    // Проверка: owner гильдии или её админ
     const userId = String(req.user.id);
     let hasAccess = db.userHasGuildAccess(userId, guildId);
 
@@ -192,7 +194,6 @@ export function guildsRouter() {
     res.json({ ok: true, message: 'Данные гильдии удалены' });
   });
 
-  /* ─── roles, channels, permissions без изменений ─── */
   router.get('/roles', requireBotAccess, async (req, res) => {
     const inst = req.app.locals.botManager.get(req.bot.id);
     if (!inst?.client) return res.status(503).json({ error: 'bot_offline' });

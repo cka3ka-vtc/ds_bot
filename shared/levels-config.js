@@ -1,7 +1,4 @@
 // shared/levels-config.js
-// Единый источник дефолтов и нормализации конфига модуля «Уровни».
-// Импортируется и сервером, и клиентом — чтобы не было расхождений.
-
 import { DEFAULT_TITLES } from './titles.js';
 
 export function defaultLevelsConfig() {
@@ -58,7 +55,6 @@ export function mergeLevelsConfig(raw) {
 
   c.formula = raw.formula === 'linear' ? 'linear' : 'classic';
 
-  // Миграция старых daily-дефолтов
   const isOldDailyDefault =
     (raw.dailyXp === undefined || raw.dailyXp === 50) &&
     (raw.dailyEnabled === undefined || raw.dailyEnabled === false);
@@ -88,7 +84,17 @@ export function mergeLevelsConfig(raw) {
     };
   }
   if (raw.inactivity) c.inactivity = { ...c.inactivity, ...raw.inactivity };
-  if (raw.messages?.levelUp !== undefined) c.messages.levelUp = raw.messages.levelUp;
+
+  // Сообщения: каждое — независимый MessageEditor-конфиг.
+  //   levelUp      — при достижении нового уровня (announce channel)
+  //   rank         — ответ на /rank (карточка конкретного участника)
+  //   leaderboard  — ответ на /leaderboard
+  //   daily        — ответ на /daily
+  if (raw.messages && typeof raw.messages === 'object') {
+    for (const k of ['levelUp', 'rank', 'leaderboard', 'daily']) {
+      if (raw.messages[k] !== undefined) c.messages[k] = raw.messages[k];
+    }
+  }
   return c;
 }
 

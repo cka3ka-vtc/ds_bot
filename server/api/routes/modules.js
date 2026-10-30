@@ -36,13 +36,12 @@ export function modulesRouter() {
     fs.readFileSync(path.resolve('shared/modules.manifest.json'), 'utf8'),
   );
 
-  /* ─── GET /api/modules — список модулей с состоянием ─── */
+  /* ─── GET /api/modules ─── */
   router.get('/', (req, res) => {
     const { botId, guildId } = req.query;
     const db = req.app.locals.db;
     const logger = req.app.locals.logger;
 
-    // Инициализируем записи «включено = 0» для всех модулей, если их ещё нет
     const created = db.ensureModuleDefaults(botId, guildId, manifest.modules);
     if (created > 0) {
       logger.info(
@@ -62,12 +61,12 @@ export function modulesRouter() {
       color: m.color,
       category: m.category,
       version: m.version,
-      enabled: stateMap[m.key] === true, // ← строго из БД, без defaultEnabled
+      enabled: stateMap[m.key] === true,
       configSchema: m.configSchema,
     })));
   });
 
-  /* ─── POST /api/modules/:key/toggle — включить/выключить ─── */
+  /* ─── POST /api/modules/:key/toggle ─── */
   router.post('/:key/toggle', validateBody(moduleToggleBody), async (req, res) => {
     const { botId, guildId, enabled } = req.body;
     const { key } = req.params;
@@ -81,7 +80,6 @@ export function modulesRouter() {
 
     req.app.locals.logger.info({ botId, guildId, key, enabled: !!enabled }, 'module toggled');
 
-    // Если у модуля есть builtin-команды, сразу синхронизируем их с Discord
     const hasBuiltins = BUILTIN_COMMANDS.some((c) => c.moduleKey === key);
     if (hasBuiltins) {
       syncGuildCommands({
@@ -108,7 +106,6 @@ export function modulesRouter() {
     const { botId, guildId, config } = req.body;
     const { key } = req.params;
 
-    // Проверяем, что все channelId из конфига принадлежат этой гильдии
     const inst = req.app.locals.botManager.get(botId);
     if (inst?.client?.isReady?.()) {
       const guild = inst.client.guilds.cache.get(guildId);
@@ -134,7 +131,7 @@ export function modulesRouter() {
     res.json({ ok: true });
   });
 
-  /* ─── Тест сообщения «Приветствия» ─── */
+  /* ─── POST /api/modules/greetings/test ─── */
   router.post('/greetings/test', testMessageLimiter, validateBody(greetingsTestBody), async (req, res) => {
     const { botId, guildId, which, messageConfig } = req.body;
 
@@ -210,6 +207,130 @@ export function modulesRouter() {
     } catch (err) {
       req.app.locals.logger.warn({ err, botId, guildId, which }, 'greetings: test send failed');
       return res.status(500).json({ error: 'send_failed', details: err.message });
+    }
+  });
+
+  /* ═══════════════════════════════════════════════════════════
+     GET /api/modules/levels/debug
+
+     Диагностика: что сервер видит про модуль «Уровни» для пары
+     (botId, guildId). Помогает, если /daily говорит «отключён»,
+     хотя в UI включён.
+
+     Возвращает:
+     - модуль: enabled + config-keys (без самих сообщений — они большие)
+     - путь к БД (для ручной проверки)
+     - список ботов, которые знают про эту гильдию
+     - список встроенных команд, которые сейчас зарегистрированы
+       для этого бота в Discord (реальный ответ API)
+     ═══════════════════════════════════════════════════════════ */
+  router.get('/levels/debug', async (req, res) => {
+    try {
+      const { botId, guildId } = req.query;
+      const db = req.app.locals.db;
+      const botManager = req.app.locals.botManager;
+
+      // Состояние модуля в БД
+      const cfg = db.getModuleConfig(botId, guildId, 'levels');
+
+      // Путь к файлу БД (для ручной проверки через sqlite3)
+      const dbPath = `data/guilds/${guildId}/${botId}.sqlite`;
+
+      // Все боты, запущенные в botManager и знающие эту гильдию
+      const botsKnowingGuild = [];
+      for (const inst of botManager.all()) {
+        if (!inst?.client?.isReady()) {
+          botsKnowingGuild.push({
+            botId: inst.id, ready: false, inGuild: null, applicationId: null,
+          });
+          continue;
+        }
+        const hasGuild = !!inst.client.guilds.cache.get(guildId);
+        botsKnowingGuild.push({
+          botId: inst.id,
+          tag: inst.client.user?.tag || null,
+          ready: true,
+          inGuild: hasGuild,
+          applicationId: inst.client.application?.id || null,
+        });
+      }
+
+      // Что Discord реально знает про команды этого бота в этой гильдии
+      let registeredCommands = null;
+      let registeredCommandsError = null;
+      const inst = botManager.get(botId);
+      if (inst?.client?.isReady()) {
+        const guild = inst.client.guilds.cache.get(guildId);
+        if (guild) {
+          try {
+            const cmds = await guild.commands.fetch();
+            registeredCommands = [...cmds.values()].map((c) => c.name);
+          } catch (err) {
+            registeredCommandsError = err.message;
+          }
+        } else {
+          registeredCommandsError = 'guild_not_in_cache';
+        }
+      } else {
+        registeredCommandsError = 'bot_not_ready';
+      }
+
+      // Все модули: enabled или нет
+      const states = db.getModuleStates(botId, guildId);
+      const modules = states.map((s) => ({
+        key: s.module_key,
+        enabled: !!s.enabled,
+      }));
+
+      // Сводка
+      const diagnosis = [];
+      if (!cfg.enabled) {
+        diagnosis.push('⚠ В БД модуль levels ВЫКЛЮЧЕН для этой пары (botId, guildId).');
+        diagnosis.push('  Если в UI он включён — попробуйте переключить и сохранить ещё раз.');
+        diagnosis.push('  Или проверьте, не выбрана ли в UI другая гильдия/бот.');
+      } else {
+        diagnosis.push('✅ В БД модуль levels ВКЛЮЧЁН для этой пары (botId, guildId).');
+      }
+
+      if (Array.isArray(registeredCommands)) {
+        const hasDaily = registeredCommands.includes('daily');
+        const hasRank = registeredCommands.includes('rank');
+        const hasLb = registeredCommands.includes('leaderboard');
+        if (hasDaily && hasRank && hasLb) {
+          diagnosis.push('✅ В Discord зарегистрированы /daily, /rank, /leaderboard для этого бота.');
+        } else {
+          diagnosis.push(`⚠ В Discord зарегистрировано: ${registeredCommands.join(', ') || '—'}`);
+          diagnosis.push('  Если /daily отсутствует — выполните toggle модуля (выкл/вкл) или перезапустите бота.');
+        }
+      }
+
+      if (botsKnowingGuild.length > 1) {
+        diagnosis.push(`⚠ В боте ${botsKnowingGuild.length} инстансов. Если /daily зарегистрирован у нескольких — Discord может вызвать не того.`);
+        diagnosis.push('  Проверьте, для какого бота в UI включён модуль, и какой бот на самом деле отвечает.');
+      }
+
+      res.json({
+        botId,
+        guildId,
+        dbPath,
+        levelConfig: {
+          enabled: cfg.enabled,
+          configKeys: Object.keys(cfg.config || {}),
+          // НЕ возвращаем полные сообщения — они могут быть большими.
+          // Но показываем, какие табы заполнены (hasMessageContent):
+          filledTabs: ['levelUp', 'rank', 'leaderboard', 'daily'].filter(
+            (k) => cfg.config?.messages?.[k] && Object.keys(cfg.config.messages[k]).length,
+          ),
+        },
+        modules,
+        bots: botsKnowingGuild,
+        registeredCommands,
+        registeredCommandsError,
+        diagnosis,
+      });
+    } catch (err) {
+      req.app.locals.logger.error({ err }, 'levels/debug failed');
+      res.status(500).json({ error: 'internal_error', message: err.message });
     }
   });
 

@@ -19,19 +19,18 @@ export function initDb(dbPath, logger) {
   const g = (botId, guildId) => guildManager.get(botId, guildId);
 
   return {
-    // Сырое соединение — для health-check
     raw: main,
     main,
     guildManager,
     guild: g,
 
-    // ═══════ MAIN ═══════
+    // ─────── MAIN ───────
     ...usersRepo,
     ...botsRepo,
     ...guildsRepo,
     ...auditRepo,
 
-    // ═══════ GUILD — старые сигнатуры ═══════
+    // ─────── GUILD ───────
     ensureModuleDefaults: (botId, guildId, mods) => g(botId, guildId).ensureModuleDefaults(mods),
     getModuleConfig: (botId, guildId, key) => g(botId, guildId).getModuleConfig(key),
     setModuleEnabled: (botId, guildId, key, enabled) => g(botId, guildId).setModuleEnabled(key, enabled),
@@ -70,6 +69,7 @@ export function initDb(dbPath, logger) {
     updateCustomCommand: (botId, guildId, id, data) => g(botId, guildId).updateCustomCommand(id, data),
     deleteCustomCommand: (botId, guildId, id) => g(botId, guildId).deleteCustomCommand(id),
     getCustomCommand: (botId, guildId, id) => g(botId, guildId).getCustomCommand(id),
+    incrementCommandUsage: (botId, guildId, id) => g(botId, guildId).incrementCommandUsage(id),
 
     // events
     addEvent: ({ botId, guildId, userId, type, meta }) =>
@@ -97,7 +97,7 @@ export function initDb(dbPath, logger) {
     getGuildSettings: (botId, guildId) => g(botId, guildId).getGuildSettings(),
     setGuildSettings: (botId, guildId, s) => g(botId, guildId).setGuildSettings(s),
 
-    // audit — маршрутизация main/guild
+    // audit
     addAudit: ({ userId, botId, guildId, action, target, meta, ip }) => {
       if (botId && guildId) {
         g(botId, guildId).addAudit({ userId, action, target, meta, ip });
@@ -106,7 +106,7 @@ export function initDb(dbPath, logger) {
       }
     },
 
-    // ═══════ RETENTION (по всем файлам гильдий) ═══════
+    // retention
     purgeOldEvents: (days) => {
       if (!days || days <= 0) return 0;
       const cutoff = Math.floor(Date.now() / 1000) - days * 86400;

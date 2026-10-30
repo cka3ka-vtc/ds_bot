@@ -106,6 +106,29 @@ export const GUILD_MIGRATIONS = [
       `);
     },
   },
+  {
+    // Расширенные настройки пользовательских команд.
+    // Идемпотентна: на случай, если колонки уже есть (ручной эксперимент).
+    version: 2,
+    up(db) {
+      const cols = new Set(
+        db.prepare('PRAGMA table_info(custom_commands)').all().map((r) => r.name),
+      );
+      const add = (name, sql) => {
+        if (!cols.has(name)) db.exec(`ALTER TABLE custom_commands ADD COLUMN ${sql}`);
+      };
+      add('channels_mode',       "channels_mode TEXT NOT NULL DEFAULT 'all'");
+      add('channels',            "channels TEXT NOT NULL DEFAULT '[]'");
+      add('cooldown_seconds',    'cooldown_seconds INTEGER NOT NULL DEFAULT 0');
+      add('require_roles',       "require_roles TEXT NOT NULL DEFAULT '[]'");
+      add('exclude_roles',       "exclude_roles TEXT NOT NULL DEFAULT '[]'");
+      add('ephemeral',           'ephemeral INTEGER NOT NULL DEFAULT 0');
+      add('response_mode',       "response_mode TEXT NOT NULL DEFAULT 'text'");
+      add('response_embed_color',"response_embed_color TEXT DEFAULT '#5865F2'");
+      add('usage_count',         'usage_count INTEGER NOT NULL DEFAULT 0');
+      add('last_used_at',        'last_used_at INTEGER');
+    },
+  },
 ];
 
 export function runGuildMigrations(db, logger, guildId) {

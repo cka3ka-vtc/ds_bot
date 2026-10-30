@@ -8,6 +8,14 @@ export function bindFilters(view) {
   const container = view.container;
   if (!container) return;
 
+  // КРИТИЧНО: bindFilters вызывается при каждом _renderUI (пере-рендер
+  // всего контейнера). Старый mousedown-listener остаётся привязанным
+  // к document и ссылается на отвязанный DOM — утечка. Снимаем его.
+  if (view._outsideClick) {
+    document.removeEventListener('mousedown', view._outsideClick);
+    view._outsideClick = null;
+  }
+
   const filter = container.querySelector('#memRoleFilter');
   if (!filter) return;
 

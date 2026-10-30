@@ -48,12 +48,36 @@ export const addBotBody = z.object({
   token: z.string().min(20, 'Токен слишком короткий').max(200),
 });
 
+/* ---------- Пользовательские команды ---------- */
+
+const channelsModeEnum = z.enum(['all', 'whitelist', 'blacklist']);
+const responseModeEnum = z.enum(['text', 'embed']);
+
+const commandSettingsFields = {
+  channelsMode: channelsModeEnum.optional(),
+  channels: z.array(discordId).max(50).optional(),
+  cooldownSeconds: z.number().int().min(0).max(86400).optional(),
+  requireRoles: z.array(discordId).max(20).optional(),
+  excludeRoles: z.array(discordId).max(20).optional(),
+  ephemeral: z.boolean().optional(),
+  responseMode: responseModeEnum.optional(),
+  responseEmbedColor: hexColor.optional(),
+};
+
 export const commandCreateBody = z.object({
   botId: discordId,
   guildId: discordId,
   name: z.string().min(2).max(32),
   description: z.string().max(100).optional().default(''),
   response: z.string().max(2000).optional().default(''),
+  channelsMode: channelsModeEnum.optional().default('all'),
+  channels: z.array(discordId).max(50).optional().default([]),
+  cooldownSeconds: z.number().int().min(0).max(86400).optional().default(0),
+  requireRoles: z.array(discordId).max(20).optional().default([]),
+  excludeRoles: z.array(discordId).max(20).optional().default([]),
+  ephemeral: z.boolean().optional().default(false),
+  responseMode: responseModeEnum.optional().default('text'),
+  responseEmbedColor: hexColor.optional().default('#5865F2'),
 });
 
 export const commandUpdateBody = z.object({
@@ -63,6 +87,7 @@ export const commandUpdateBody = z.object({
   description: z.string().max(100).optional(),
   response: z.string().max(2000).optional(),
   enabled: z.boolean().optional(),
+  ...commandSettingsFields,
 });
 
 export const commandToggleBody = z.object({
@@ -71,6 +96,13 @@ export const commandToggleBody = z.object({
   enabled: z.boolean(),
 });
 
+export const commandTestBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  channelId: discordId,
+});
+
+/* ---------- Участники ---------- */
 export const memberUpdateBody = z.object({
   botId: discordId,
   guildId: discordId,
@@ -80,6 +112,7 @@ export const memberUpdateBody = z.object({
   roles: z.array(discordId).max(500).optional(),
 });
 
+/* ---------- Модерация ---------- */
 export const modActionCreateBody = z.object({
   botId: discordId,
   guildId: discordId,
@@ -89,6 +122,7 @@ export const modActionCreateBody = z.object({
   durationMinutes: z.number().int().min(1).max(60 * 24 * 365).nullable().optional(),
 });
 
+/* ---------- Модули ---------- */
 export const moduleToggleBody = z.object({
   botId: discordId,
   guildId: discordId,

@@ -1,12 +1,7 @@
 /* ============================================================
    Module settings · levels
-   num-stepper, XP-события, неактивность, награды, звания,
-   исключения. Адаптация под темы — через переменные.
    ============================================================ */
 
-/* ══════════════════════════════════════════════════════════
-   Number stepper — компактный, без обводок
-   ══════════════════════════════════════════════════════════ */
 .num-stepper {
   display: inline-flex;
   align-items: stretch;
@@ -72,8 +67,6 @@
   -webkit-appearance: none;
   margin: 0;
 }
-
-/* Никаких обводок ни в каком состоянии */
 .num-stepper-input,
 .num-stepper-input:hover,
 .num-stepper-input:focus,
@@ -97,7 +90,6 @@
   border-color: transparent !important;
   background: transparent !important;
 }
-
 .num-stepper-suffix {
   padding: 0 8px;
   display: flex;
@@ -112,11 +104,6 @@
   justify-content: center;
 }
 
-/* ══════════════════════════════════════════════════════════
-   XP events — 4 карточки (message / command / voice / daily)
-   Container query: карточка сама решает, как раскладывать
-   XP/кулдаун внутри.
-   ══════════════════════════════════════════════════════════ */
 .xp-events {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -168,11 +155,7 @@
 .xp-event-icon.purple { background: var(--purple-soft); color: var(--purple); }
 .xp-event-icon.pink   { background: var(--pink-soft);   color: var(--pink); }
 .xp-event-icon.green  { background: var(--green-soft);  color: var(--green); }
-
-.xp-event-title {
-  flex: 1;
-  min-width: 0;
-}
+.xp-event-title { flex: 1; min-width: 0; }
 .xp-event-title strong {
   display: block;
   font-size: 13px;
@@ -188,36 +171,11 @@
   line-height: 1.35;
   display: block;
 }
-.xp-event-title span code {
-  font-family: 'SF Mono', monospace;
-  font-size: 11px;
-  padding: 1px 5px;
-  background: var(--surface-3);
-  border-radius: 3px;
-  color: var(--text-soft);
-}
-
-/* ── По умолчанию — одна колонка (XP сверху, кулдаун снизу) ── */
-.xp-event-body {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  min-width: 0;
-}
-
-/* На широких карточках — две колонки */
+.xp-event-body { display: grid; grid-template-columns: 1fr; gap: 8px; min-width: 0; }
 @container xpcard (min-width: 340px) {
-  .xp-event-body {
-    grid-template-columns: 1fr 1fr;
-  }
+  .xp-event-body { grid-template-columns: 1fr 1fr; }
 }
-
-.xp-input {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
+.xp-input { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .xp-input label {
   font-size: 10.5px;
   font-weight: 600;
@@ -228,8 +186,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-/* Статичное значение вместо num-stepper (для фиксированного кулдауна) */
 .xp-static-value {
   display: flex;
   align-items: center;
@@ -246,15 +202,8 @@
   white-space: nowrap;
   overflow: hidden;
 }
-.xp-static-value i {
-  color: var(--muted);
-  font-size: 11px;
-  flex-shrink: 0;
-}
+.xp-static-value i { color: var(--muted); font-size: 11px; flex-shrink: 0; }
 
-/* ══════════════════════════════════════════════════════════
-   Снятие за неактивность
-   ══════════════════════════════════════════════════════════ */
 .inactivity {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -281,32 +230,15 @@
   min-width: 0;
 }
 .inactivity-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: var(--orange-soft);
-  color: var(--orange);
-  display: grid;
-  place-items: center;
-  font-size: 15px;
-  flex-shrink: 0;
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--orange-soft); color: var(--orange);
+  display: grid; place-items: center;
+  font-size: 15px; flex-shrink: 0;
   transition: background .2s, color .2s;
 }
-.inactivity.is-on .inactivity-icon {
-  background: var(--orange);
-  color: #fff;
-}
-.inactivity-title strong {
-  display: block;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-}
-.inactivity-title span {
-  font-size: 11.5px;
-  color: var(--muted);
-}
-
+.inactivity.is-on .inactivity-icon { background: var(--orange); color: #fff; }
+.inactivity-title strong { display: block; font-size: 13px; font-weight: 700; color: var(--text); }
+.inactivity-title span { font-size: 11.5px; color: var(--muted); }
 .inactivity-body {
   padding: 0 16px 16px;
   display: grid;
@@ -314,9 +246,7 @@
   gap: 10px;
   align-items: start;
 }
-@media (max-width: 900px) {
-  .inactivity-body { grid-template-columns: 1fr; }
-}
+@media (max-width: 900px) { .inactivity-body { grid-template-columns: 1fr; } }
 .inactivity-body > .form-field { margin-top: 0 !important; }
 .inactivity-body > .form-field + .form-field { margin-top: 0 !important; }
 .inactivity-body .form-field { gap: 6px; }
@@ -327,7 +257,6 @@
   color: var(--muted);
   font-weight: 600;
 }
-
 .inactivity-roles-row {
   grid-column: 1 / -1;
   display: flex;
@@ -348,25 +277,12 @@
   opacity: .55;
   pointer-events: none;
 }
-.inactivity-roles-row .toggle[disabled] {
-  cursor: not-allowed;
-  opacity: .7;
-}
+.inactivity-roles-row .toggle[disabled] { cursor: not-allowed; opacity: .7; }
 .inactivity-roles-info { flex: 1; min-width: 0; }
 .inactivity-roles-info strong {
-  display: block;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 2px;
+  display: block; font-size: 12.5px; font-weight: 700; color: var(--text); margin-bottom: 2px;
 }
-.inactivity-roles-info span {
-  display: block;
-  font-size: 11px;
-  color: var(--muted);
-  line-height: 1.4;
-}
-
+.inactivity-roles-info span { display: block; font-size: 11px; color: var(--muted); line-height: 1.4; }
 .inactivity-warning {
   display: none;
   margin: 0 16px 16px;
@@ -381,27 +297,10 @@
   gap: 8px;
 }
 .inactivity-warning.show { display: flex; }
-.inactivity-warning i {
-  font-size: 13px;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
+.inactivity-warning i { font-size: 13px; flex-shrink: 0; margin-top: 1px; }
 
-/* ══════════════════════════════════════════════════════════
-   Звания (titles)
-   ══════════════════════════════════════════════════════════ */
-.title-table {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-.title-row {
-  display: grid;
-  grid-template-columns: 130px 1fr 36px;
-  gap: 8px;
-  align-items: center;
-}
+.title-table { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.title-row { display: grid; grid-template-columns: 130px 1fr 36px; gap: 8px; align-items: center; }
 .title-row-level { min-width: 0; }
 .title-row .input { height: 40px; }
 
@@ -433,27 +332,11 @@
   color: var(--text-soft);
 }
 
-/* ══════════════════════════════════════════════════════════
-   Награды
-   ══════════════════════════════════════════════════════════ */
 .rewards-panel { transition: opacity .15s; }
-.rewards-panel.disabled {
-  opacity: .5;
-  pointer-events: none;
-}
+.rewards-panel.disabled { opacity: .5; pointer-events: none; }
 
-.reward-table {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-.reward-row {
-  display: grid;
-  grid-template-columns: 130px 1fr 36px;
-  gap: 8px;
-  align-items: center;
-}
+.reward-table { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.reward-row { display: grid; grid-template-columns: 130px 1fr 36px; gap: 8px; align-items: center; }
 .reward-empty {
   padding: 20px;
   text-align: center;
@@ -464,16 +347,10 @@
   border-radius: var(--r-md);
 }
 .reward-remove {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--r-sm);
-  display: grid;
-  place-items: center;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--muted);
-  cursor: pointer;
-  flex-shrink: 0;
+  width: 36px; height: 36px; border-radius: var(--r-sm);
+  display: grid; place-items: center;
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--muted); cursor: pointer; flex-shrink: 0;
   transition: background .15s, color .15s, border-color .15s, transform .1s;
 }
 .reward-remove:hover {
@@ -481,13 +358,8 @@
   color: var(--red);
   border-color: rgba(220, 38, 38, .35);
 }
-.reward-remove:active {
-  transform: scale(.92);
-}
-.reward-remove i {
-  font-size: 12px;
-  line-height: 1;
-}
+.reward-remove:active { transform: scale(.92); }
+.reward-remove i { font-size: 12px; line-height: 1; }
 
 .rewards-disabled-note {
   display: flex;
@@ -510,20 +382,11 @@
   margin-top: 1px;
 }
 
-/* ══════════════════════════════════════════════════════════
-   Исключения (channel / role picker + chips)
-   ══════════════════════════════════════════════════════════ */
-.exclusion-picker {
-  margin-bottom: 12px;
-}
+.exclusion-picker { margin-bottom: 12px; }
 .exclusion-picker .channel-picker,
-.exclusion-picker .role-picker {
-  width: 100%;
-}
+.exclusion-picker .role-picker { width: 100%; }
 .exclusion-picker .channel-input-wrap .input,
-.exclusion-picker .role-input-wrap .input {
-  background: var(--surface-2);
-}
+.exclusion-picker .role-input-wrap .input { background: var(--surface-2); }
 
 .chips {
   display: flex;
@@ -546,35 +409,21 @@
   font-size: 11.5px;
   font-weight: 600;
 }
-.chip i {
-  font-size: 10px;
-  opacity: .7;
-}
-.chip-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
+.chip i { font-size: 10px; opacity: .7; }
+.chip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .chip button {
-  width: 18px;
-  height: 18px;
-  border-radius: 3px;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-  font-size: 13px;
-  cursor: pointer;
-  background: transparent;
-  border: none;
+  width: 18px; height: 18px; border-radius: 3px;
+  display: grid; place-items: center;
+  color: var(--muted); font-size: 13px;
+  cursor: pointer; background: transparent; border: none;
 }
-.chip button:hover {
-  background: var(--red-soft);
-  color: var(--red);
-}
-.chip-empty {
+.chip button:hover { background: var(--red-soft); color: var(--red); }
+.chip-empty { color: var(--muted); font-size: 11.5px; font-style: italic; padding: 4px; }
+
+/* ── Табы редакторов сообщений ── */
+.gr-messages-tab-hint {
+  margin: 8px 0 12px;
+  font-size: 12px;
   color: var(--muted);
-  font-size: 11.5px;
-  font-style: italic;
-  padding: 4px;
+  line-height: 1.45;
 }

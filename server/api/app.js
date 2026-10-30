@@ -21,7 +21,7 @@ import { publicRouter } from './routes/public.js';
 import { levelsRouter } from './routes/levels.js';
 import { previewRouter } from './routes/preview.js';
 import { originCheck } from './middleware/origin-check.js';
-import { generalApiLimiter, authLimiter, addBotLimiter } from './middleware/rate-limit.js';
+import { generalApiLimiter, addBotLimiter } from './middleware/rate-limit.js';
 
 export function createApp({ db, botManager, registry, logger }) {
   const app = express();
@@ -95,7 +95,9 @@ export function createApp({ db, botManager, registry, logger }) {
     });
   });
 
-  app.use('/auth', authLimiter, authRouter());
+  // authLimiter снят с /auth: применяется точечно внутри authRouter()
+  // только к /auth/discord* — чтобы /auth/me не выкидывал пользователя при F5.
+  app.use('/auth', authRouter());
   app.use(originCheck());
 
   app.use('/api/guilds/debug', guildsDebugRouter());

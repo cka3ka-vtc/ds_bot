@@ -1,8 +1,4 @@
 // shared/message-presets.js
-// Готовые шаблоны сообщений для редактора модулей.
-// Возвращает массив { key, icon, label, description, build() }.
-// build() при каждом вызове создаёт НОВЫЙ объект (свежие id) — не мутируйте.
-
 import { UI } from './ui-strings.js';
 
 function uid() {
@@ -20,7 +16,6 @@ function baseConfig() {
   };
 }
 
-/** Проверяет, содержит ли конфиг осмысленные данные. */
 export function hasMessageContent(cfg) {
   if (!cfg) return false;
   if (cfg.title || cfg.subtitle || cfg.thumbnail) return true;
@@ -41,13 +36,11 @@ export function hasMessageContent(cfg) {
 
 const P = UI.msgEditor.presets;
 
-// ═══════════ Приветствия: вступление ═══════════
+/* ─────── greetings.join ─────── */
 const presetsGreetingsJoin = [
   {
-    key: 'classic',
-    icon: 'fa-align-left',
-    label: P.classic,
-    description: P.classicDesc,
+    key: 'classic', icon: 'fa-align-left',
+    label: P.classic, description: P.classicDesc,
     build: () => ({
       ...baseConfig(),
       displayMode: 'flat',
@@ -57,14 +50,11 @@ const presetsGreetingsJoin = [
     }),
   },
   {
-    key: 'welcome-card',
-    icon: 'fa-id-card',
-    label: P.welcomeCard,
-    description: P.welcomeCardDesc,
+    key: 'welcome-card', icon: 'fa-id-card',
+    label: P.welcomeCard, description: P.welcomeCardDesc,
     build: () => ({
       ...baseConfig(),
-      displayMode: 'embed-color',
-      accentColor: '#5865F2',
+      displayMode: 'embed-color', accentColor: '#5865F2',
       title: 'Добро пожаловать!',
       subtitle: '{user}, мы рады тебя видеть 🎉',
       thumbnail: '{avatarUrl}',
@@ -72,25 +62,18 @@ const presetsGreetingsJoin = [
         { id: uid(), type: 'separator', spacing: 1 },
         {
           id: uid(), type: 'sections', title: 'Что дальше?', listStyle: 'numeric',
-          items: [
-            'Прочитай правила в **#rules**',
-            'Загляни в **#announcements**',
-            'Задай вопрос в **#support**',
-          ],
+          items: ['Прочитай правила в **#rules**', 'Загляни в **#announcements**', 'Задай вопрос в **#support**'],
         },
         { id: uid(), type: 'footer', content: 'Ты — {count}-й участник {guild}' },
       ],
     }),
   },
   {
-    key: 'server',
-    icon: 'fa-server',
-    label: P.serverCard,
-    description: P.serverCardDesc,
+    key: 'server', icon: 'fa-server',
+    label: P.serverCard, description: P.serverCardDesc,
     build: () => ({
       ...baseConfig(),
-      displayMode: 'embed-color',
-      accentColor: '#16a34a',
+      displayMode: 'embed-color', accentColor: '#16a34a',
       title: '{guild}',
       subtitle: 'Привет, {user}! Рады тебя видеть.',
       thumbnail: '{guildIconUrl}',
@@ -102,44 +85,33 @@ const presetsGreetingsJoin = [
     }),
   },
   {
-    key: 'minimal',
-    icon: 'fa-minus',
-    label: P.minimal,
-    description: P.minimalDesc,
+    key: 'minimal', icon: 'fa-minus',
+    label: P.minimal, description: P.minimalDesc,
     build: () => ({
       ...baseConfig(),
       displayMode: 'flat',
-      blocks: [
-        { id: uid(), type: 'text', content: '**{displayName}** присоединился к серверу ✨' },
-      ],
+      blocks: [{ id: uid(), type: 'text', content: '**{displayName}** присоединился к серверу ✨' }],
     }),
   },
 ];
 
-// ═══════════ Приветствия: выход ═══════════
+/* ─────── greetings.leave ─────── */
 const presetsGreetingsLeave = [
   {
-    key: 'classic',
-    icon: 'fa-align-left',
-    label: P.classic,
-    description: P.leaveClassicDesc,
+    key: 'classic', icon: 'fa-align-left',
+    label: P.classic, description: P.leaveClassicDesc,
     build: () => ({
       ...baseConfig(),
       displayMode: 'flat',
-      blocks: [
-        { id: uid(), type: 'text', content: '😢 **{displayName}** покинул сервер. Будем скучать!' },
-      ],
+      blocks: [{ id: uid(), type: 'text', content: '😢 **{displayName}** покинул сервер. Будем скучать!' }],
     }),
   },
   {
-    key: 'farewell',
-    icon: 'fa-hand',
-    label: P.farewell,
-    description: P.farewellDesc,
+    key: 'farewell', icon: 'fa-hand',
+    label: P.farewell, description: P.farewellDesc,
     build: () => ({
       ...baseConfig(),
-      displayMode: 'embed-color',
-      accentColor: '#dc2626',
+      displayMode: 'embed-color', accentColor: '#dc2626',
       title: 'До встречи, {displayName}',
       subtitle: 'Нас покинул {username}',
       blocks: [
@@ -150,55 +122,41 @@ const presetsGreetingsLeave = [
   },
 ];
 
-// ═══════════ Уровни: повышение ═══════════
+/* ─────── levels.levelUp ─────── */
 const presetsLevelsLevelUp = [
   {
-    key: 'classic',
-    icon: 'fa-align-left',
-    label: P.classic,
-    description: P.levelClassicDesc,
+    key: 'classic', icon: 'fa-align-left',
+    label: P.classic, description: P.levelClassicDesc,
     build: () => ({
       ...baseConfig(),
       displayMode: 'flat',
-      blocks: [
-        { id: uid(), type: 'text', content: '🎉 Поздравляем, {user}!\nТы достиг **{level}** уровня!' },
-      ],
+      blocks: [{ id: uid(), type: 'text', content: '🎉 Поздравляем, {user}!\nТы достиг **{level}** уровня!' }],
     }),
   },
   {
-    key: 'progress',
-    icon: 'fa-chart-simple',
-    label: P.progress,
-    description: P.progressDesc,
+    key: 'progress', icon: 'fa-chart-simple',
+    label: P.progress, description: P.progressDesc,
     build: () => ({
       ...baseConfig(),
-      displayMode: 'embed-color',
-      accentColor: '#f59e0b',
+      displayMode: 'embed-color', accentColor: '#f59e0b',
       title: 'Новый уровень: {level}',
       subtitle: 'Продолжай в том же духе, {displayName}!',
       blocks: [
         { id: uid(), type: 'separator', spacing: 1 },
         {
           id: uid(), type: 'sections', title: 'Прогресс', listStyle: 'dot',
-          items: [
-            'Текущий XP: **{xp}**',
-            'До следующего: **{xpToNext}**',
-            'Прогресс: **{progressPercent}%**',
-          ],
+          items: ['Текущий XP: **{xp}**', 'До следующего: **{xpToNext}**', 'Прогресс: **{progressPercent}%**'],
         },
         { id: uid(), type: 'footer', content: 'Ты на **{position}** месте в топе' },
       ],
     }),
   },
   {
-    key: 'reward',
-    icon: 'fa-award',
-    label: P.reward,
-    description: P.rewardDesc,
+    key: 'reward', icon: 'fa-award',
+    label: P.reward, description: P.rewardDesc,
     build: () => ({
       ...baseConfig(),
-      displayMode: 'embed-color',
-      accentColor: '#8b5cf6',
+      displayMode: 'embed-color', accentColor: '#8b5cf6',
       title: '🏆 {level} уровень!',
       subtitle: '{user}, ты получил звание **{title}**',
       blocks: [
@@ -209,14 +167,11 @@ const presetsLevelsLevelUp = [
     }),
   },
   {
-    key: 'hero',
-    icon: 'fa-id-card',
-    label: P.hero,
-    description: P.heroDesc,
+    key: 'hero', icon: 'fa-id-card',
+    label: P.hero, description: P.heroDesc,
     build: () => ({
       ...baseConfig(),
-      displayMode: 'embed-color',
-      accentColor: '#5865F2',
+      displayMode: 'embed-color', accentColor: '#5865F2',
       title: '⭐ Уровень {level}',
       subtitle: 'Так держать, {displayName}!',
       thumbnail: '{avatarUrl}',
@@ -224,27 +179,140 @@ const presetsLevelsLevelUp = [
         { id: uid(), type: 'separator', spacing: 2 },
         {
           id: uid(), type: 'sections', title: 'Статистика', listStyle: 'numeric',
-          items: [
-            'Звание: **{title}**',
-            'Всего XP: **{xp}**',
-            'До следующего: **{xpToNext}** XP',
-            'Место в топе: **#{position}**',
-          ],
+          items: ['Звание: **{title}**', 'Всего XP: **{xp}**', 'До следующего: **{xpToNext}** XP', 'Место в топе: **#{position}**'],
         },
         { id: uid(), type: 'footer', content: 'Продолжай общаться на {guild} 💪' },
       ],
     }),
   },
   {
-    key: 'minimal',
-    icon: 'fa-minus',
-    label: P.minimal,
-    description: P.levelMinimalDesc,
+    key: 'minimal', icon: 'fa-minus',
+    label: P.minimal, description: P.levelMinimalDesc,
+    build: () => ({
+      ...baseConfig(),
+      displayMode: 'flat',
+      blocks: [{ id: uid(), type: 'text', content: '⬆️ **{user}** — **{level}** уровень!' }],
+    }),
+  },
+];
+
+/* ─────── levels.rank ─────── */
+const presetsLevelsRank = [
+  {
+    key: 'classic', icon: 'fa-align-left',
+    label: 'Карточка текстом',
+    description: 'Простая текстовая карточка участника',
     build: () => ({
       ...baseConfig(),
       displayMode: 'flat',
       blocks: [
-        { id: uid(), type: 'text', content: '⬆️ **{user}** — **{level}** уровень!' },
+        {
+          id: uid(), type: 'text',
+          content:
+            '⭐ **{displayName}** — уровень **{level}**\n' +
+            'Звание: **{title}**\n' +
+            'XP: **{xp}** / {nextLevelXp}\n' +
+            'До следующего: **{xpToNext}** XP\n' +
+            'Место в топе: **#{position}**',
+        },
+      ],
+    }),
+  },
+  {
+    key: 'hero-card', icon: 'fa-id-card',
+    label: 'Карточка героя',
+    description: 'Embed с аватаром, званием и полной статистикой',
+    build: () => ({
+      ...baseConfig(),
+      displayMode: 'embed-color', accentColor: '#5865F2',
+      title: '{displayName}',
+      subtitle: 'Звание: **{title}**',
+      thumbnail: '{avatarUrl}',
+      blocks: [
+        { id: uid(), type: 'separator', spacing: 1 },
+        {
+          id: uid(), type: 'sections', title: 'Статистика', listStyle: 'dot',
+          items: [
+            'Уровень: **{level}**',
+            'Всего XP: **{xp}** / {nextLevelXp}',
+            'До следующего: **{xpToNext}** XP',
+            'Место в топе: **#{position}**',
+          ],
+        },
+        { id: uid(), type: 'footer', content: 'Прогресс уровня: **{progressPercent}%**' },
+      ],
+    }),
+  },
+  {
+    key: 'compact', icon: 'fa-minus',
+    label: 'Компактная',
+    description: 'Одна строка с уровнем и местом',
+    build: () => ({
+      ...baseConfig(),
+      displayMode: 'flat',
+      blocks: [{ id: uid(), type: 'text', content: '**{displayName}** · Ур. **{level}** · #{position} в топе' }],
+    }),
+  },
+];
+
+/* ─────── levels.leaderboard ─────── */
+const presetsLevelsLeaderboard = [
+  {
+    key: 'classic', icon: 'fa-align-left',
+    label: 'Топ с медалями',
+    description: 'Embed со списком и заголовком',
+    build: () => ({
+      ...baseConfig(),
+      displayMode: 'embed-color', accentColor: '#f59e0b',
+      title: '🏆 Топ по уровням',
+      subtitle: 'Лучшие участники **{guild}**',
+      blocks: [
+        { id: uid(), type: 'separator', spacing: 1 },
+        { id: uid(), type: 'text', content: '{topUsers}' },
+        { id: uid(), type: 'footer', content: 'Всего в топе: **{topCount}**' },
+      ],
+    }),
+  },
+  {
+    key: 'minimal', icon: 'fa-minus',
+    label: 'Минимализм',
+    description: 'Просто список без обвязки',
+    build: () => ({
+      ...baseConfig(),
+      displayMode: 'flat',
+      blocks: [{ id: uid(), type: 'text', content: '**Топ {guild}**\n\n{topUsers}' }],
+    }),
+  },
+];
+
+/* ─────── levels.daily ─────── */
+const presetsLevelsDaily = [
+  {
+    key: 'classic', icon: 'fa-align-left',
+    label: 'Классика',
+    description: 'Короткое сообщение о награде',
+    build: () => ({
+      ...baseConfig(),
+      displayMode: 'flat',
+      blocks: [{ id: uid(), type: 'text', content: '🎁 {user} получил **{xpGained} XP**!\nТеперь у него **{newXp} XP** (уровень {newLevel})' }],
+    }),
+  },
+  {
+    key: 'progress', icon: 'fa-chart-simple',
+    label: 'С прогрессом',
+    description: 'Embed с подробностями и таймером',
+    build: () => ({
+      ...baseConfig(),
+      displayMode: 'embed-color', accentColor: '#16a34a',
+      title: '🎁 Ежедневная награда',
+      subtitle: '{displayName}, ты получил **{xpGained} XP**',
+      blocks: [
+        { id: uid(), type: 'separator', spacing: 1 },
+        {
+          id: uid(), type: 'sections', title: 'Итого', listStyle: 'dot',
+          items: ['Всего XP: **{newXp}**', 'Уровень: **{newLevel}**'],
+        },
+        { id: uid(), type: 'footer', content: 'Следующая награда {nextDailyAt}' },
       ],
     }),
   },
@@ -254,6 +322,9 @@ export const MESSAGE_PRESETS = {
   'greetings.join': presetsGreetingsJoin,
   'greetings.leave': presetsGreetingsLeave,
   'levels.levelUp': presetsLevelsLevelUp,
+  'levels.rank': presetsLevelsRank,
+  'levels.leaderboard': presetsLevelsLeaderboard,
+  'levels.daily': presetsLevelsDaily,
 };
 
 export function getPresetsFor(presetKey) {

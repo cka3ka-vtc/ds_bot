@@ -6,6 +6,7 @@ import { getNonBotMemberCount } from '../core/guildCounts.js';
 import { xpForLevel, getLevelFromXp, progressOf } from '../core/formulas.js';
 import { DEFAULT_TITLES, getTitleForLevel } from '../../shared/titles.js';
 import { mergeLevelsConfig } from '../../shared/levels-config.js';
+import { hasMessageContent } from '../../shared/message-presets.js';
 import { configCache } from '../core/config-cache.js';
 import {
   startVoice, stopVoice, getActiveSessions, touchAward,
@@ -26,10 +27,7 @@ export default class LevelsModule extends Module {
     this._tickInterval = setInterval(() => this._voiceTick().catch(() => {}), 60_000);
     this._inactivityInterval = setInterval(() => this._inactivityTick().catch(() => {}), 60 * 60_000);
     this._cleanupInterval = setInterval(() => this._cleanup(), 10 * 60_000);
-
-    // Восстанавливаем voice-сессии после рестарта бота
     this._restoreVoiceSessions().catch(() => {});
-
     this.logger.info({ module: 'levels' }, 'levels: registered');
   }
 
@@ -40,7 +38,6 @@ export default class LevelsModule extends Module {
     this._cooldowns.clear();
   }
 
-  /** При рестарте подхватываем тех, кто уже в голосовом канале. */
   async _restoreVoiceSessions() {
     for (const inst of this.botManager.all()) {
       if (!inst?.client?.isReady()) continue;
@@ -58,9 +55,20 @@ export default class LevelsModule extends Module {
     }
   }
 
-  /* ─── Slash-команды ─── */
-  async handleCommand(interaction) {
-    const guildId = interaction.guildId;
+  /* ═══════════════════════════════════════════════════════════
+     Slash-команды
+
+     ВАЖНО: НЕТ проверки `enabled` в handleCommand.
+     Если команда пришла — она зарегистрирована syncGuildCommands
+     для этой пары (botId, guildId), значит модуль был включён
+     на момент регистрации. Если сейчас в БД enabled=false — это
+     рассинхрон (только что отключили, sync не успел, или
+     пользователь вызвал команду чужого бота). Отвечаем пользователю
+     в любом случае, а расхождение пишем в лог.
+     ═══════════════════════════════════════════════════════════ */
+
+  async handleCommand(interaction, opts = {}) {
+    const guildId = opts.guildId || interaction.guildId;
     if (!guildId) {
       return interaction.reply({
         content: '⚠ Команда доступна только на сервере',
@@ -68,50 +76,118 @@ export default class LevelsModule extends Module {
       }).catch(() => {});
     }
 
-    const botId = interaction.client.user.id;
-    const { enabled, config: rawConfig } = await this.getConfig(botId, guildId);
-    if (!enabled) {
-      return interaction.reply({
-        content: '⚠ Модуль «Уровни» отключён на этом сервере',
-        flags: MessageFlags.Ephemeral,
-      }).catch(() => {});
+    const botId = opts.botId || interaction.client.user.id;
+
+    // ── Диагностический лог ──
+    let cfgResult = { enabled: false, config: {} };
+    try {
+      cfgResult = await this.getConfig(botId, guildId);
+    } catch (err) {
+      this.logger.error({ err, botId, guildId }, 'levels.handleCommand: getConfig failed');
     }
 
-    const config = mergeLevelsConfig(rawConfig);
-    const ctx = { botId, guildId, config };
+    this.logger.info({
+      cmd: interaction.commandName,
+      // Откуда пришли идентификаторы:
+      optsBotId: opts.botId || null,
+      clientBotId: interaction.client.user.id,
+      optsGuildId: opts.guildId || null,
+      interactionGuildId: interaction.guildId,
+      // Итоговые:
+      botId,
+      guildId,
+      // Состояние модуля в БД:
+      enabled: cfgResult.enabled,
+      configKeys: Object.keys(cfgResult.config || {}),
+      // Кто вызвал:
+      userId: interaction.user?.id,
+      applicationId: interaction.applicationId || null,
+    }, 'levels.handleCommand: received');
 
-    // Всегда defer, чтобы уложиться в 3 секунды
+    if (!cfgResult.enabled) {
+      // Расхождение: команда пришла, но в БД модуль выключен.
+      // Причины: sync ещё не прошёл, выключили минуту назад,
+      // или interaction для другого бота. Обрабатываем — но громко логируем.
+      this.logger.warn({
+        botId, guildId, cmd: interaction.commandName,
+        hint: 'Если это ожидаемо (только что отключили) — игнорируйте. ' +
+              'Если нет — проверьте, что /' + interaction.commandName +
+              ' вызывает тот же бот, для которого включён модуль. ' +
+              'См. GET /api/modules/levels/debug?botId=...&guildId=...',
+      }, 'levels.handleCommand: DISABLED in DB but command received — proceeding');
+    }
+
+    const config = mergeLevelsConfig(cfgResult.config || {});
+    const ctx = { botId, guildId, config, interaction };
+
     try { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); } catch {}
 
     switch (interaction.commandName) {
-      case 'rank':        return this._cmdRank(interaction, ctx);
-      case 'leaderboard': return this._cmdLeaderboard(interaction, ctx);
-      case 'daily':       return this._cmdDaily(interaction, ctx);
+      case 'rank':        return this._cmdRank(ctx);
+      case 'leaderboard': return this._cmdLeaderboard(ctx);
+      case 'daily':       return this._cmdDaily(ctx);
       default:
         return interaction.editReply({ content: 'Неизвестная команда' }).catch(() => {});
     }
   }
 
-  async _cmdRank(interaction, { botId, guildId, config }) {
+  /* ───────────── /rank ───────────── */
+
+  async _cmdRank({ botId, guildId, config, interaction }) {
     try {
       const targetUser = interaction.options.getUser('user') || interaction.user;
       const member = interaction.guild.members.cache.get(targetUser.id)
         || await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-      if (!member) {
-        return interaction.editReply({ content: '❌ Пользователь не найден на сервере' }).catch(() => {});
-      }
+
       const data = this.db.getMemberData(botId, guildId, targetUser.id) || { xp: 0, level: 0 };
       const rank = this.db.getUserRank(botId, guildId, targetUser.id);
       const progress = progressOf(data.xp, data.level, config.formula, config);
       const title = getTitleForLevel(data.level, config.titles);
       const nextLevelTotal = xpForLevel(data.level + 1, config.formula, config);
+      const displayName = member?.displayName || targetUser.username;
+      const avatarUrl = targetUser.displayAvatarURL?.({ size: 128 }) || '';
+
+      if (hasMessageContent(config.messages?.rank)) {
+        const tokens = {
+          user: `<@${targetUser.id}>`,
+          mention: `<@${targetUser.id}>`,
+          username: targetUser.username,
+          displayName,
+          avatarUrl,
+          guild: interaction.guild.name,
+          guildIconUrl: interaction.guild.iconURL?.({ size: 128 }) || '',
+          section: 'levels',
+          level: data.level,
+          title,
+          xp: data.xp,
+          nextLevelXp: nextLevelTotal,
+          xpToNext: progress.toNext,
+          progress: `${progress.current} / ${progress.total}`,
+          progressPercent: progress.percent,
+          position: rank,
+          rank,
+        };
+        if (/\{count\}/.test(JSON.stringify(config.messages.rank))) {
+          try { tokens.count = await getNonBotMemberCount(interaction.guild); }
+          catch { tokens.count = interaction.guild.memberCount || 0; }
+        }
+        const components = buildComponentsFromConfig(config.messages.rank, tokens);
+        if (components?.length) {
+          return interaction.editReply({
+            flags: FLAG_COMPONENTS_V2,
+            components,
+            allowedMentions: { parse: ['users'] },
+          }).catch(() => {});
+        }
+      }
+
+      if (!member) {
+        return interaction.editReply({ content: '❌ Пользователь не найден на сервере' }).catch(() => {});
+      }
 
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
-        .setAuthor({
-          name: member.displayName || member.user.username,
-          iconURL: member.user.displayAvatarURL({ size: 128 }),
-        })
+        .setAuthor({ name: displayName, iconURL: avatarUrl })
         .setTitle(title ? `${title} · Уровень ${data.level}` : `Уровень ${data.level}`)
         .addFields(
           { name: 'Опыт', value: `**${data.xp.toLocaleString('ru-RU')}** / ${nextLevelTotal.toLocaleString('ru-RU')} XP`, inline: true },
@@ -127,24 +203,57 @@ export default class LevelsModule extends Module {
     }
   }
 
-  async _cmdLeaderboard(interaction, { botId, guildId, config }) {
+  /* ───────────── /leaderboard ───────────── */
+
+  async _cmdLeaderboard({ botId, guildId, config, interaction }) {
     try {
       const rows = this.db.getLeaderboard(botId, guildId, 10, 0);
+      const total = this.db.countLeaderboard(botId, guildId);
+      const guild = interaction.guild;
+
+      const medals = ['🥇', '🥈', '🥉'];
+      const topUsers = rows.length
+        ? rows.map((r, i) => {
+            const prefix = medals[i] || `**${i + 1}.**`;
+            const t = getTitleForLevel(r.level, config.titles);
+            return `${prefix} <@${r.user_id}> — **${r.xp.toLocaleString('ru-RU')} XP** · Ур. ${r.level}${t ? ` · ${t}` : ''}`;
+          }).join('\n')
+        : '—';
+
+      if (hasMessageContent(config.messages?.leaderboard)) {
+        const tokens = {
+          guild: guild.name,
+          count: total,
+          topCount: total,
+          topUsers,
+          avatarUrl: '',
+          guildIconUrl: guild.iconURL?.({ size: 128 }) || '',
+          section: 'levels',
+        };
+        const components = buildComponentsFromConfig(config.messages.leaderboard, tokens);
+        if (components?.length) {
+          return interaction.editReply({
+            flags: FLAG_COMPONENTS_V2,
+            components,
+            allowedMentions: { parse: ['users'] },
+          }).catch(() => {});
+        }
+      }
+
       if (!rows.length) {
         return interaction.editReply({ content: '📊 Пока нет активных участников' }).catch(() => {});
       }
-      const medals = ['🥇', '🥈', '🥉'];
       const lines = rows.map((r, i) => {
         const prefix = medals[i] || `**${i + 1}.**`;
-        const title = getTitleForLevel(r.level, config.titles);
-        return `${prefix} <@${r.user_id}> — **${r.xp.toLocaleString('ru-RU')} XP** · Ур. ${r.level}${title ? ` · ${title}` : ''}`;
+        const t = getTitleForLevel(r.level, config.titles);
+        return `${prefix} <@${r.user_id}> — **${r.xp.toLocaleString('ru-RU')} XP** · Ур. ${r.level}${t ? ` · ${t}` : ''}`;
       });
-      const total = this.db.countLeaderboard(botId, guildId);
       const embed = new EmbedBuilder()
         .setColor(0xF59E0B)
         .setTitle('🏆 Топ по уровням')
         .setDescription(lines.join('\n'))
         .setFooter({ text: `Всего в топе: ${total}` });
+
       return interaction.editReply({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => {});
     } catch (err) {
       this.logger.warn({ err, userId: interaction.user.id }, 'levels /leaderboard failed');
@@ -152,28 +261,68 @@ export default class LevelsModule extends Module {
     }
   }
 
-  async _cmdDaily(interaction, { botId, guildId, config }) {
+  /* ───────────── /daily ───────────── */
+
+  async _cmdDaily({ botId, guildId, config, interaction }) {
     try {
+      // Единственная «мягкая» проверка: пользователь сам выключил
+      // ежедневную награду в настройках модуля. Это не «модуль отключён»,
+      // это конкретная фича.
       if (!config.dailyEnabled) {
         return interaction.editReply({ content: '⚠ Ежедневная награда отключена' }).catch(() => {});
       }
+
       const userId = interaction.user.id;
       const now = Math.floor(Date.now() / 1000);
       const lastDaily = this.db.getDailyCooldown(botId, guildId, userId);
       const nextAt = lastDaily + 86_400;
+
       if (lastDaily && now < nextAt) {
         const rem = nextAt - now;
         const h = Math.floor(rem / 3600);
         const m = Math.floor((rem % 3600) / 60);
         return interaction.editReply({ content: `⏳ Следующая награда через **${h} ч ${m} мин**` }).catch(() => {});
       }
+
       const member = interaction.member;
       if (!member) {
         return interaction.editReply({ content: '❌ Не удалось получить профиль участника' }).catch(() => {});
       }
+
       this.db.setDailyAt(botId, guildId, userId, now);
       await this._awardXp({ botId, guildId, member, config, amount: config.dailyXp });
+
       const after = this.db.getMemberData(botId, guildId, userId) || { xp: 0, level: 0 };
+
+      if (hasMessageContent(config.messages?.daily)) {
+        const tokens = {
+          user: `<@${userId}>`,
+          mention: `<@${userId}>`,
+          username: interaction.user.username,
+          displayName: member.displayName || interaction.user.username,
+          avatarUrl: interaction.user.displayAvatarURL?.({ size: 128 }) || '',
+          guild: interaction.guild.name,
+          guildIconUrl: interaction.guild.iconURL?.({ size: 128 }) || '',
+          section: 'levels',
+          xpGained: config.dailyXp,
+          newXp: after.xp,
+          newLevel: after.level,
+          nextDailyAt: `<t:${now + 86_400}:R>`,
+        };
+        if (/\{count\}/.test(JSON.stringify(config.messages.daily))) {
+          try { tokens.count = await getNonBotMemberCount(interaction.guild); }
+          catch { tokens.count = interaction.guild.memberCount || 0; }
+        }
+        const components = buildComponentsFromConfig(config.messages.daily, tokens);
+        if (components?.length) {
+          return interaction.editReply({
+            flags: FLAG_COMPONENTS_V2,
+            components,
+            allowedMentions: { parse: ['users'] },
+          }).catch(() => {});
+        }
+      }
+
       return interaction.editReply({
         content: `🎁 Ты получил **${config.dailyXp} XP**! Теперь у тебя **${after.xp.toLocaleString('ru-RU')} XP** (Уровень ${after.level})`,
       }).catch(() => {});
@@ -184,6 +333,7 @@ export default class LevelsModule extends Module {
   }
 
   /* ─── События ─── */
+
   async onEvent({ event, client, guildId, message, interaction, oldState, newState }) {
     if (!guildId) return;
     const botId = client.user.id;
@@ -231,10 +381,8 @@ export default class LevelsModule extends Module {
     const isMuted = newState.selfDeaf || newState.serverDeaf;
     const shouldTrack = isIn && !isAfk && !isMuted;
 
-    // Вошёл/перешёл в войс — начинаем трекинг
     if (shouldTrack) {
       startVoice(botId, guildId, member.id, newState.channelId);
-      // При переходе из другого канала — сбрасываем таймер, чтобы XP шёл с нового канала
       if (wasIn && oldState.channelId !== newState.channelId) {
         touchAward(botId, guildId, member.id);
       }
@@ -255,7 +403,6 @@ export default class LevelsModule extends Module {
         const guild = inst?.client?.guilds?.cache?.get(s.guildId);
         if (!guild) { stopVoice(s.botId, s.guildId, s.userId); continue; }
 
-        // Проверяем, что пользователь всё ещё в том же канале и не в AFK/mute
         const voiceState = guild.voiceStates.cache.get(s.userId);
         if (!voiceState?.channelId) { stopVoice(s.botId, s.guildId, s.userId); continue; }
         if (voiceState.channelId === guild.afkChannelId) { stopVoice(s.botId, s.guildId, s.userId); continue; }
@@ -266,7 +413,6 @@ export default class LevelsModule extends Module {
 
         const minGap = config.events.voice.cooldownMin * 60_000;
         const firstTick = s.lastAwardAt === 0;
-        // Первый тик: выдаём XP только после полного кулдауна с момента входа
         const shouldAward = firstTick
           ? Date.now() - s.startedAt >= minGap
           : Date.now() - s.lastAwardAt >= minGap;
@@ -304,26 +450,26 @@ export default class LevelsModule extends Module {
     const newXp = Math.min(oldXp + gained, maxXp);
     const newLevel = getLevelFromXp(newXp, config.formula, config, config.maxLevel);
 
-    // Роли выдаём ДО записи, чтобы пометить только успешно выданные
-    const desired = new Set();
+    const currentAuto = new Set(this._parseAutoRoles(data.auto_roles));
+    const granted = [];
     if (config.rewards.enabled) {
+      const desired = new Set();
       for (const r of config.rewards.entries) {
         if (Number(r.level) <= newLevel && r.roleId) desired.add(r.roleId);
       }
-    }
-    const currentAuto = new Set(this._parseAutoRoles(data.auto_roles));
-    const granted = [];
-    for (const roleId of desired) {
-      if (!currentAuto.has(roleId) && !member.roles.cache.has(roleId)) {
+      for (const roleId of desired) {
+        const memberHasIt = member.roles.cache.has(roleId);
+        const alreadyMarked = currentAuto.has(roleId);
+        if (memberHasIt && alreadyMarked) continue;
+        if (memberHasIt && !alreadyMarked) { currentAuto.add(roleId); continue; }
         try {
           await member.roles.add(roleId);
           granted.push(roleId);
+          currentAuto.add(roleId);
         } catch (err) {
           this.logger.warn({ err, roleId, userId: member.id }, 'levels: role grant failed');
         }
       }
-      // Отмечаем как «автороль» в любом случае — это след, что модуль пытался её выдать
-      currentAuto.add(roleId);
     }
 
     this.db.updateXp(botId, guildId, member.id, {
@@ -422,8 +568,6 @@ export default class LevelsModule extends Module {
                 config.rewards.entries.filter((r) => Number(r.level) <= newLevel).map((r) => r.roleId),
               );
               const toRemove = currentAuto.filter((id) => !allowed.has(id));
-
-              // Снимаем роли только у реально существующих участников
               const member = guild.members.cache.get(row.user_id);
               if (member) {
                 const removed = [];
@@ -437,14 +581,13 @@ export default class LevelsModule extends Module {
                 }
                 newAuto = currentAuto.filter((id) => allowed.has(id) || !removed.includes(id));
               }
-              // Если member не в кэше — не трогаем auto_roles, чтобы не потерять данные
             }
 
             this.db.applyPenalty(inst.id, guild.id, row.user_id, {
               xp: newXp, level: newLevel, autoRoles: newAuto,
             });
-            this.db.addLog({
-              botId: inst.id, guildId: guild.id, level: 'warn', module: 'levels',
+            this.db.addLog(inst.id, guild.id, {
+              level: 'warn', module: 'levels',
               message: `XP −${config.inactivity.penaltyXp} (${config.inactivity.days} дн. неактивности)`,
               meta: { userId: row.user_id, fromXp: oldXp, toXp: newXp },
             });
@@ -461,7 +604,6 @@ export default class LevelsModule extends Module {
     for (const [k, ts] of this._cooldowns) {
       if (now - ts > 24 * 3600_000) this._cooldowns.delete(k);
     }
-    // Инвалидируем кэш конфигов (модуль мог долго работать)
     configCache.cleanup();
   }
 

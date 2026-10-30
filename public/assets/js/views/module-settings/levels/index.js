@@ -8,8 +8,12 @@ import { MessageEditor, emptyMessageConfig } from '../message-editor.js';
 import { mergeLevelsConfig, bindNumSteppers, numStepper } from './helpers.js';
 import { buildPageHTML } from './ui.js';
 import { UI } from '/shared/ui-strings.js';
+import { LEVELS_MSG } from '/shared/command-editor-strings.js';
 
 const L = UI.levels;
+const M = LEVELS_MSG;
+
+const MSG_TABS = ['levelUp', 'rank', 'leaderboard', 'daily'];
 
 export default {
   container: null,
@@ -44,13 +48,21 @@ export default {
     const cfg = mergeLevelsConfig(storedCfg.config);
     const bot = (store.get('bots') || []).find((b) => b.id === botId) || { name: 'Bot', avatarUrl: null };
 
-    this.state = { botId, guildId, channels, roles, cfg, bot, editor: null };
+    this.state = {
+      botId, guildId, channels, roles, cfg, bot,
+      editors: {},
+      activeMsgTab: 'levelUp',
+    };
     container.innerHTML = buildPageHTML(cfg);
     this._setup(container, this.state);
   },
 
   destroy() {
-    if (this.state?.editor) this.state.editor.destroy();
+    if (this.state?.editors) {
+      for (const ed of Object.values(this.state.editors)) {
+        try { ed?.destroy?.(); } catch {}
+      }
+    }
     this.state = null;
     this.container = null;
     document.querySelectorAll('.picker-popup, .time-dropdown, .tokens-dropdown').forEach((p) => p.remove());
@@ -365,25 +377,61 @@ export default {
       },
     });
 
-    /* ── Редактор ── */
-    const editorContainer = page.querySelector('[data-editor-container]');
-    const initial = cfg.messages.levelUp || emptyMessageConfig();
-    const editor = new MessageEditor(editorContainer, initial, {
-      bot: state.bot, roles,
-      context: 'levels',
-      presetKey: 'levels.levelUp',
-      guildId: state.guildId,
-      botId: state.botId,
-    });
-    editor.onChange = (m) => { cfg.messages.levelUp = m; };
-    editor.mount();
-    state.editor = editor;
+    /* ── Редакторы сообщений: 4 таба ── */
 
-    /* ── Тест ── */
+    const editorContainer = page.querySelector('[data-editor-container]');
+    const tabHint = page.querySelector('[data-msg-tab-hint]');
+
+    const mountEditor = (tabKey) => {
+      const prev = state.editors[tabKey];
+      if (prev) { try { prev.destroy(); } catch {} }
+
+      editorContainer.innerHTML = '';
+      const initial = cfg.messages[tabKey] || emptyMessageConfig();
+      const presetKey = `levels.${tabKey}`;
+
+      const editor = new MessageEditor(editorContainer, initial, {
+        bot: state.bot,
+        roles,
+        context: `levels.${tabKey}`,
+        presetKey,
+        guildId: state.guildId,
+        botId: state.botId,
+      });
+      editor.onChange = (m) => { cfg.messages[tabKey] = m; };
+      editor.mount();
+      state.editors[tabKey] = editor;
+    };
+
+    const switchMsgTab = (tabKey) => {
+      if (!MSG_TABS.includes(tabKey)) return;
+      if (state.activeMsgTab === tabKey) return;
+
+      const cur = state.editors[state.activeMsgTab];
+      if (cur) cfg.messages[state.activeMsgTab] = cur.getConfig();
+
+      state.activeMsgTab = tabKey;
+      page.querySelectorAll('[data-msg-tab]').forEach((b) =>
+        b.classList.toggle('active', b.dataset.msgTab === tabKey));
+      if (tabHint) tabHint.textContent = M.tabs[tabKey]?.hint || '';
+      mountEditor(tabKey);
+    };
+
+    page.querySelectorAll('[data-msg-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => switchMsgTab(btn.dataset.msgTab));
+    });
+
+    mountEditor(state.activeMsgTab);
+
+    /* ── Тест текущего таба ── */
     page.querySelector('[data-test-message]').addEventListener('click', async (e) => {
       const btn = e.currentTarget;
-      if (!cfg.announceChannelId) return toast(L.needChannel, 'warn');
-      cfg.messages.levelUp = editor.getConfig();
+      if (!cfg.announceChannelId) return toast(M.testNeedChannel, 'warn');
+
+      const tab = state.activeMsgTab;
+      const editorForTest = state.editors[tab];
+      const cfgForTest = editorForTest ? editorForTest.getConfig() : (cfg.messages[tab] || emptyMessageConfig());
+
       const orig = btn.innerHTML;
       btn.disabled = true;
       btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${UI.common.sending}`;
@@ -391,9 +439,9 @@ export default {
         await api.post('/api/levels/test', {
           botId: state.botId, guildId: state.guildId,
           channelId: cfg.announceChannelId,
-          messageConfig: cfg.messages.levelUp,
+          messageConfig: cfgForTest,
         });
-        toast(L.testSent, 'success');
+        toast(M.testSent, 'success');
       } catch (err) {
         const map = { ...UI.errors };
         toast(map[err.data?.error] || (UI.common.error + ': ' + (err.data?.details || err.message)), 'error');
@@ -423,13 +471,15 @@ export default {
       if (maxInput) cfg.maxLevel = Math.max(1, parseInt(maxInput.value, 10) || 100);
       const boostInput = page.querySelector('[data-boost-multiplier] .num-stepper-input');
       if (boostInput) cfg.boostMultiplier = Math.max(1, parseFloat(boostInput.value) || 2);
-
       const daysInput = page.querySelector('[data-inactivity-days] .num-stepper-input');
       if (daysInput) cfg.inactivity.days = Math.max(1, parseInt(daysInput.value, 10) || 30);
       const penaltyInput = page.querySelector('[data-inactivity-penalty] .num-stepper-input');
       if (penaltyInput) cfg.inactivity.penaltyXp = Math.max(1, parseInt(penaltyInput.value, 10) || 50);
 
-      cfg.messages.levelUp = editor.getConfig();
+      for (const tabKey of MSG_TABS) {
+        const ed = state.editors[tabKey];
+        if (ed) cfg.messages[tabKey] = ed.getConfig();
+      }
 
       if (!cfg.announceChannelId) return toast(L.needChannel, 'warn');
       const anyEvent =

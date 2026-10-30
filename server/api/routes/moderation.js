@@ -1,3 +1,4 @@
+// server/api/routes/moderation.js
 import { Router } from 'express';
 import { requireAuth, requireBotAccess } from '../auth-middleware.js';
 import { validateBody, validateQuery } from '../validate.js';
@@ -26,21 +27,23 @@ export function moderationRouter() {
       const expiresAt = durationMinutes
         ? Math.floor(Date.now() / 1000) + durationMinutes * 60
         : null;
-      const id = req.app.locals.db.addModAction({
-        botId, guildId, userId, kind, reason,
-        moderatorId: req.user.id, expiresAt,
+
+      const id = req.app.locals.db.addModAction(botId, guildId, {
+        userId, kind, reason,
+        moderatorId: req.user.id,
+        expiresAt,
       });
       res.json({ id });
     },
   );
 
   router.delete('/actions/:id', requireBotAccess, (req, res) => {
-    // Защита: нельзя удалить чужую запись
-    const row = req.app.locals.db.getModAction(req.params.id);
-    if (!row || row.bot_id !== req.bot.id || row.guild_id !== req.guild.id) {
+    const { botId, guildId } = req.query;
+    const row = req.app.locals.db.getModAction(botId, guildId, req.params.id);
+    if (!row) {
       return res.status(404).json({ error: 'not_found' });
     }
-    req.app.locals.db.removeModAction(req.params.id);
+    req.app.locals.db.removeModAction(botId, guildId, req.params.id);
     res.json({ ok: true });
   });
 

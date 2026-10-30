@@ -28,14 +28,25 @@ export class BotManager {
     });
     await instance.start();
 
-    this.db.createBot({
-      id: instance.id,
-      owner_id: ownerId,
-      name: instance.name,
-      avatar_url: instance.avatarUrl,
-      token_encrypted: encrypt(token),
-      is_main: 0,
-    });
+    try {
+      this.db.createBot({
+        id: instance.id,
+        owner_id: ownerId,
+        name: instance.name,
+        avatar_url: instance.avatarUrl,
+        token_encrypted: encrypt(token),
+        is_main: 0,
+      });
+    } catch (err) {
+      // Откатываем запуск, чтобы не оставить «призрачного» бота:
+      // инстанс работает, но в this.bots и БД его нет → UI его не видит.
+      try { await instance.stop(); } catch {}
+      this.logger.error(
+        { err, botId: instance.id, ownerId },
+        'addUserBot: createBot failed, instance stopped',
+      );
+      throw err;
+    }
 
     this.bots.set(instance.id, instance);
     this.logger.info({ botId: instance.id, ownerId }, 'user bot added');
@@ -62,7 +73,7 @@ export class BotManager {
     this.bots.clear();
   }
 
-  // ── helpers ────────────────────────────────────────────────
+  // ── helpers ──────────────────────────────────────────────
   async _start({ id, token, isMain, name, avatarUrl }) {
     if (id && this.bots.has(id)) return this.bots.get(id);
     const instance = new BotInstance({
@@ -74,7 +85,6 @@ export class BotManager {
     return instance;
   }
 
-  /** Синхронизирует имя/аватар в БД, если Discord их изменил. */
   _syncProfile(instance) {
     try {
       const row = this.db.getBot(instance.id);

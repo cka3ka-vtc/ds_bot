@@ -3,10 +3,10 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { config } from '../../config.js';
+import { authLimiter } from '../middleware/rate-limit.js';
 
 const ADMIN_BIT = 0x8n;
 
-/** Безопасная проверка администраторских прав (учёт owner и BigInt). */
 function isAdminGuild(g) {
   if (!g || typeof g !== 'object') return false;
   if (g.owner === true) return true;
@@ -26,11 +26,11 @@ function clearOauthCookies(res) {
 export function authRouter() {
   const router = Router();
 
-  // ═══════════════════════════════════════════════════════════
-  // 1. ВХОД ПОЛЬЗОВАТЕЛЯ
-  // ═══════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────
+  // 1. ВХОД ПОЛЬЗОВАТЕЛЯ (OAuth — лимитируем)
+  // ─────────────────────────────────────────────────────────────
 
-  router.get('/discord', (req, res) => {
+  router.get('/discord', authLimiter, (req, res) => {
     const state = crypto.randomBytes(24).toString('hex');
     res.cookie('oauth_state', state, {
       httpOnly: true,
@@ -50,7 +50,7 @@ export function authRouter() {
     res.redirect(`https://discord.com/oauth2/authorize?${params}`);
   });
 
-  router.get('/discord/callback', async (req, res) => {
+  router.get('/discord/callback', authLimiter, async (req, res) => {
     try {
       const { code, state } = req.query;
       if (!code || state !== req.cookies.oauth_state) {
@@ -103,7 +103,6 @@ export function authRouter() {
         avatar: user.avatar || null,
       });
 
-      // Владелец сервера имеет все права, даже если permissions = "0"
       const adminGuilds = guilds
         .filter(isAdminGuild)
         .map((g) => ({ guildId: g.id, permissions: g.permissions || '0' }));
@@ -139,11 +138,11 @@ export function authRouter() {
     }
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // 2. ДОБАВЛЕНИЕ БОТА НА СЕРВЕР
-  // ═══════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────
+  // 2. ДОБАВЛЕНИЕ БОТА НА СЕРВЕР (OAuth — лимитируем)
+  // ─────────────────────────────────────────────────────────────
 
-  router.get('/discord/bot-invite', (req, res) => {
+  router.get('/discord/bot-invite', authLimiter, (req, res) => {
     const state = crypto.randomBytes(24).toString('hex');
     res.cookie('bot_oauth_state', state, {
       httpOnly: true,
@@ -167,7 +166,7 @@ export function authRouter() {
     res.redirect(`https://discord.com/oauth2/authorize?${params}`);
   });
 
-  router.get('/discord/bot-callback', async (req, res) => {
+  router.get('/discord/bot-callback', authLimiter, async (req, res) => {
     try {
       const { code, guild_id, state, error } = req.query;
 
@@ -198,7 +197,6 @@ export function authRouter() {
       const tokenData = await tokenRes.json();
 
       if (!tokenData.access_token) {
-        // НЕ логируем tokenData полностью — там могут быть токены
         req.app.locals.logger.warn(
           { status: tokenRes.status, error: tokenData.error || null },
           'bot oauth token exchange failed',
@@ -246,9 +244,9 @@ export function authRouter() {
     }
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // 3. СЕССИЯ
-  // ═══════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────
+  // 3. СЕССИЯ — БЕЗ ЛИМИТЕРА (вызывается на каждой загрузке страницы)
+  // ─────────────────────────────────────────────────────────────
 
   router.get('/me', (req, res) => {
     const token = req.cookies?.auth;

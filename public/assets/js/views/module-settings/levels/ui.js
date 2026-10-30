@@ -3,12 +3,15 @@ import { escapeHtml } from '../../../core/utils.js';
 import { channelPickerHTML, rolePickerHTML } from '../pickers.js';
 import { numStepper } from './helpers.js';
 import { UI } from '/shared/ui-strings.js';
+import { LEVELS_MSG } from '/shared/command-editor-strings.js';
 
 const L = UI.levels;
+const M = LEVELS_MSG;
 
 export function buildPageHTML(cfg) {
   const ev = cfg.enabledEvents;
   const evCfg = cfg.events;
+  const activeMsgTab = 'levelUp';
 
   return `
     <div class="module-page">
@@ -194,14 +197,24 @@ export function buildPageHTML(cfg) {
 
         <section class="gr-section">
           <div class="gr-section-head">
-            <div><h3>${L.messageTitle}</h3><p>${L.messageSubtitle}</p></div>
+            <div>
+              <h3>${M.sectionTitle}</h3>
+              <p>${M.sectionSubtitle}</p>
+            </div>
             <div class="section-head-right">
               <button type="button" class="btn btn-ghost btn-sm" data-test-message>
-                <i class="fa-solid fa-paper-plane"></i> ${L.testSend}
+                <i class="fa-solid fa-paper-plane"></i> ${M.testButton}
               </button>
             </div>
           </div>
           <div class="gr-section-body">
+            <div class="gr-tabs" data-msg-tabs>
+              <button type="button" class="gr-tab ${activeMsgTab === 'levelUp' ? 'active' : ''}" data-msg-tab="levelUp">${M.tabs.levelUp.title}</button>
+              <button type="button" class="gr-tab ${activeMsgTab === 'rank' ? 'active' : ''}" data-msg-tab="rank">${M.tabs.rank.title}</button>
+              <button type="button" class="gr-tab ${activeMsgTab === 'leaderboard' ? 'active' : ''}" data-msg-tab="leaderboard">${M.tabs.leaderboard.title}</button>
+              <button type="button" class="gr-tab ${activeMsgTab === 'daily' ? 'active' : ''}" data-msg-tab="daily">${M.tabs.daily.title}</button>
+            </div>
+            <p class="gr-messages-tab-hint" data-msg-tab-hint>${M.tabs.levelUp.hint}</p>
             <div class="gr-editor-container" data-editor-container></div>
           </div>
         </section>

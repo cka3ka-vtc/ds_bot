@@ -6,66 +6,12 @@ import { openModal } from '../../core/modal.js';
 import { rolePickerHTML, bindRolePicker, emojiPickerHTML, bindEmojiPicker, positionPopup } from './pickers.js';
 import { getPresetsFor, hasMessageContent } from '/shared/message-presets.js';
 import { UI } from '/shared/ui-strings.js';
+import { getTokensFor } from './message-editor-tokens.js';
 
 const LIMITS = UI.msgEditor.limits;
 const TYPE_LABELS = UI.msgEditor.types;
 const TIME_FORMAT_CODES = Object.entries(UI.msgEditor.timeFormats);
 const CATEGORY_LABELS = UI.msgEditor.categories;
-
-const TOKENS_BY_CONTEXT = {
-  greetings: {
-    categories: [
-      { label: CATEGORY_LABELS.user, items: [
-        ['user', UI.msgEditor.tokens.greetings.user],
-        ['username', UI.msgEditor.tokens.greetings.username],
-        ['displayName', UI.msgEditor.tokens.greetings.displayName],
-      ]},
-      { label: CATEGORY_LABELS.server, items: [
-        ['guild', UI.msgEditor.tokens.greetings.guild],
-        ['count', UI.msgEditor.tokens.greetings.count],
-      ]},
-    ],
-    preview: {
-      user: '@Иван', mention: '@Иван', username: 'ivan',
-      displayName: 'Иван', guild: 'Мой сервер', count: '1234',
-      avatarUrl: '', guildIconUrl: '',
-    },
-  },
-  levels: {
-    categories: [
-      { label: CATEGORY_LABELS.user, items: [
-        ['user', UI.msgEditor.tokens.levels.user],
-        ['displayName', UI.msgEditor.tokens.levels.displayName],
-      ]},
-      { label: CATEGORY_LABELS.levels, items: [
-        ['level', UI.msgEditor.tokens.levels.level],
-        ['oldLevel', UI.msgEditor.tokens.levels.oldLevel],
-        ['title', UI.msgEditor.tokens.levels.title],
-        ['xp', UI.msgEditor.tokens.levels.xp],
-        ['nextLevelXp', UI.msgEditor.tokens.levels.nextLevelXp],
-        ['xpToNext', UI.msgEditor.tokens.levels.xpToNext],
-        ['progress', UI.msgEditor.tokens.levels.progress],
-        ['progressPercent', UI.msgEditor.tokens.levels.progressPercent],
-        ['position', UI.msgEditor.tokens.levels.position],
-        ['rewardRole', UI.msgEditor.tokens.levels.rewardRole],
-      ]},
-      { label: CATEGORY_LABELS.server, items: [
-        ['guild', UI.msgEditor.tokens.levels.guild],
-        ['count', UI.msgEditor.tokens.levels.count],
-      ]},
-    ],
-    preview: {
-      user: '@Иван', mention: '@Иван', username: 'ivan', displayName: 'Иван',
-      guild: 'Мой сервер', count: '1234',
-      level: '10', oldLevel: '9', title: 'Активист',
-      xp: '1100', nextLevelXp: '1500', xpToNext: '400',
-      progress: '680 / 1100', progressPercent: '62',
-      position: '42', rank: '42',
-      rewardRole: '@Постоянный',
-      avatarUrl: '', guildIconUrl: '',
-    },
-  },
-};
 
 function uid() { return 'b_' + Math.random().toString(36).slice(2, 10); }
 function debounce(fn, ms = 200) { let t = null; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); }; }
@@ -111,7 +57,7 @@ export class MessageEditor {
     this._settingsCollapseKey = `msg_editor_settings_collapsed_${opts.guildId || 'x'}_${opts.context || 'default'}`;
     this._templatesCollapseKey = `msg_editor_templates_collapsed_${opts.guildId || 'x'}_${opts.context || 'default'}`;
 
-    this._ctx = TOKENS_BY_CONTEXT[opts.context] || TOKENS_BY_CONTEXT.greetings;
+    this._ctx = getTokensFor(opts.context);
     this._previewTokens = { ...this._ctx.preview };
     this._botAvatarUrl = opts.bot?.avatarUrl || '';
     this._presets = getPresetsFor(opts.presetKey || opts.context || '');
@@ -135,8 +81,6 @@ export class MessageEditor {
 
   getConfig() { return this.config; }
 
-  /* ─── Загрузка реальных токенов ─── */
-
   async _loadPreviewTokens() {
     const botId = this.opts.botId || store.get('activeBotId');
     const guildId = this.opts.guildId || store.get('activeGuildId');
@@ -150,8 +94,6 @@ export class MessageEditor {
       // silent — используем fallback
     }
   }
-
-  /* ─── Вспомогательные ─── */
 
   _loadCollapseState() { try { const raw = localStorage.getItem(this._collapseKey); return raw ? JSON.parse(raw) : {}; } catch { return {}; } }
   _saveCollapseState(s) { try { localStorage.setItem(this._collapseKey, JSON.stringify(s)); } catch {} }
@@ -171,8 +113,6 @@ export class MessageEditor {
   }
   _resizeAllTextareas() { this.container.querySelectorAll('textarea').forEach((t) => this._autoResize(t)); }
 
-  /* ─── Модальное подтверждение ─── */
-
   async _confirm({ title, text, ctaLabel }) {
     const result = await openModal({
       title,
@@ -182,8 +122,6 @@ export class MessageEditor {
     });
     return result === true;
   }
-
-  /* ─── Применение шаблона / очистка ─── */
 
   async _applyPreset(preset) {
     const P = UI.msgEditor.presets;
@@ -220,8 +158,6 @@ export class MessageEditor {
     this._bind();
     requestAnimationFrame(() => this._resizeAllTextareas());
   }
-
-  /* ─── Render ─── */
 
   _render() {
     const bot = this.opts.bot || { name: 'Bot', avatarUrl: null };
@@ -610,8 +546,6 @@ export class MessageEditor {
     return null;
   }
 
-  /* ─── Bind ─── */
-
   _bind() {
     this._abort?.abort();
     this._abort = new AbortController();
@@ -619,7 +553,6 @@ export class MessageEditor {
 
     const root = this.container;
 
-    /* Settings card collapse */
     const settingsCard = root.querySelector('[data-settings-card]');
     const settingsToggle = root.querySelector('[data-settings-toggle]');
     if (settingsCard && settingsToggle) {
@@ -643,7 +576,6 @@ export class MessageEditor {
       }, { signal });
     }
 
-    /* Templates card collapse + пресеты */
     const templatesCard = root.querySelector('[data-templates-card]');
     const templatesToggle = root.querySelector('[data-templates-toggle]');
     if (templatesCard && templatesToggle) {
@@ -675,7 +607,6 @@ export class MessageEditor {
     const clearBtn = root.querySelector('[data-clear-template]');
     if (clearBtn) clearBtn.addEventListener('click', () => this._clearConfig(), { signal });
 
-    /* Режим отображения */
     root.querySelectorAll('[data-mode-seg] .seg-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         root.querySelectorAll('[data-mode-seg] .seg-btn').forEach((b) => b.classList.toggle('active', b === btn));
@@ -686,7 +617,6 @@ export class MessageEditor {
       }, { signal });
     });
 
-    /* Цвет */
     const colorInput = root.querySelector('[data-accent-color]');
     if (colorInput) colorInput.addEventListener('input', () => {
       this.config.accentColor = colorInput.value;
@@ -694,7 +624,6 @@ export class MessageEditor {
       this._markDirty();
     }, { signal });
 
-    /* Title / subtitle / thumbnail */
     const bind = (sel, key) => {
       const el = root.querySelector(sel);
       if (!el) return;
@@ -708,7 +637,6 @@ export class MessageEditor {
     bind('[data-subtitle-input]', 'subtitle');
     bind('[data-thumbnail-input]', 'thumbnail');
 
-    /* Меню добавления блоков */
     const addMenu = root.querySelector('[data-add-menu]');
     if (addMenu) addMenu.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-add]');
@@ -720,7 +648,6 @@ export class MessageEditor {
       this._renderBlocks(); this._renderPreview(); this._updateCount(); this._markDirty();
     }, { signal });
 
-    /* Тулбар: форматирование и переменные */
     root.addEventListener('click', (e) => {
       const tokensBtn = e.target.closest('[data-tokens-btn]');
       if (tokensBtn && tokensBtn.closest('.editor-toolbar')) {
@@ -753,12 +680,10 @@ export class MessageEditor {
       if (target) this._handleFormat(fmtBtn, target);
     }, { signal });
 
-    /* Авто-ресайз textarea */
     root.addEventListener('input', (e) => {
       if (e.target.tagName === 'TEXTAREA') this._autoResize(e.target);
     }, { signal });
 
-    /* Блоки */
     const blocksEl = this._blocksEl;
     if (blocksEl) {
       blocksEl.addEventListener('click', (e) => this._handleBlockClick(e), { signal });
@@ -929,7 +854,10 @@ export class MessageEditor {
   }
 
   _showTimeMenu(anchor, target) {
-    document.querySelectorAll('.time-dropdown').forEach((d) => d.remove());
+    // Закрываем все открытые попапы (picker + time + tokens), иначе
+    // они накладываются друг на друга.
+    document.querySelectorAll('.time-dropdown, .tokens-dropdown, .picker-popup').forEach((d) => d.remove());
+
     const dd = document.createElement('div');
     dd.className = 'time-dropdown';
     dd.innerHTML = TIME_FORMAT_CODES.map(([code, label]) => `<button type="button" data-code="${code}">${label}</button>`).join('');
@@ -953,7 +881,9 @@ export class MessageEditor {
   }
 
   _showTokensMenu(anchor, target) {
-    document.querySelectorAll('.tokens-dropdown').forEach((d) => d.remove());
+    // Закрываем все открытые попапы.
+    document.querySelectorAll('.time-dropdown, .tokens-dropdown, .picker-popup').forEach((d) => d.remove());
+
     const dd = document.createElement('div');
     dd.className = 'tokens-dropdown';
 
@@ -1131,6 +1061,33 @@ export class MessageEditor {
     html = html.replace(/\{position\}/g, t.position ? wrapBold('#' + t.position) : '');
     html = html.replace(/\{rank\}/g, t.rank ? wrapBold('#' + t.rank) : '');
     html = html.replace(/\{rewardRole\}/g, t.rewardRole ? wrapMention(t.rewardRole) : '');
+
+    /* ── Дополнительные токены для leaderboard/daily ── */
+    html = html.replace(/\{topUsers\}/g, () => {
+      if (!t.topUsers) return '';
+      // topUsers содержит markdown с `<@id>`. Прогоняем через локальный escape
+      // и превращаем `<@id>` → span.dp-mention для предпросмотра.
+      return escapeHtml(String(t.topUsers))
+        .replace(/&lt;@&amp;(\d+)&gt;/g, '<span class="dp-mention role">@$1</span>')
+        .replace(/&lt;@(\d+)&gt;/g, '<span class="dp-mention">@$1</span>')
+        .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+        .replace(/\n/g, '<br>');
+    });
+    html = html.replace(/\{topCount\}/g, t.topCount != null ? String(t.topCount) : '');
+    html = html.replace(/\{xpGained\}/g, t.xpGained != null ? wrapBold(String(t.xpGained)) : '');
+    html = html.replace(/\{newXp\}/g, t.newXp != null ? wrapBold(String(t.newXp)) : '');
+    html = html.replace(/\{newLevel\}/g, t.newLevel != null ? wrapBold(String(t.newLevel)) : '');
+    html = html.replace(/\{nextDailyAt\}/g, () => {
+      if (!t.nextDailyAt) return '';
+      const m = String(t.nextDailyAt).match(/^<t:(\d+):(\w)>$/);
+      if (m) {
+        try {
+          return `<span class="dp-time-tag">${escapeHtml(formatDateByCode(new Date(parseInt(m[1], 10) * 1000), m[2]))}</span>`;
+        } catch {}
+      }
+      return escapeHtml(String(t.nextDailyAt));
+    });
+    html = html.replace(/\{streakDays\}/g, t.streakDays != null ? String(t.streakDays) : '');
 
     html = html.replace(/\{avatarUrl\}/g, '<span class="dp-mention">[avatar]</span>');
     html = html.replace(/\{guildIconUrl\}/g, '<span class="dp-mention">[icon]</span>');

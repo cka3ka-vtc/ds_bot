@@ -22,7 +22,6 @@ export default class GreetingsModule extends Module {
     if (!config?.channelId || !msgConfig) return;
 
     const channel = await client.channels.fetch(config.channelId).catch(() => null);
-    // Проверяем, что канал существует и принадлежит этой гильдии
     if (!channel?.isTextBased?.() || channel.guild.id !== guildId) {
       this.logger.warn(
         { guildId, channelId: config.channelId },
@@ -65,9 +64,7 @@ export default class GreetingsModule extends Module {
       return;
     }
 
-    this.db.addLog({
-      botId: client.user.id,
-      guildId,
+    this.db.addLog(client.user.id, guildId, {
       level: 'info',
       module: 'greetings',
       message: `${isJoin ? 'Приветствие' : 'Прощание'} для ${member.user.username}`,

@@ -1,10 +1,13 @@
 // server/modules/messages.js
-// Реализует обработку кнопок role-buttons из редактора сообщений.
-// custom_id имеет формат: role_<section>_<roleId>_<buttonId>
+// Обработка кнопок role-buttons из редактора сообщений.
+// custom_id: role_<section>_<roleId>_<buttonId>, где buttonId = "b_<random36>".
 
 import { Module } from './_base.js';
 
-const ROLE_BUTTON_RE = /^role_[a-z0-9]+_(\d+)_([a-z0-9]+)$/i;
+// section — [a-z0-9]+ (greetings / levels),
+// roleId  — [0-9]+ (Discord ID),
+// buttonId — [a-z0-9_]+ (b_xxxxxxxx)
+const ROLE_BUTTON_RE = /^role_[a-z0-9]+_(\d+)_([a-z0-9_]+)$/i;
 
 export default class MessagesModule extends Module {
   get key() { return 'messages'; }

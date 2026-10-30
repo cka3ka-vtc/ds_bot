@@ -19,7 +19,6 @@ export default class ModerationModule extends Module {
   }
 
   async register() {
-    // Чистим устаревшие ключи каждую минуту
     this._cleanupInterval = setInterval(() => this._cleanupSpamMap(), SPAM_MAP_TTL);
     this.logger.info({ module: 'moderation' }, 'moderation: registered');
   }
@@ -47,7 +46,10 @@ export default class ModerationModule extends Module {
     const { enabled, config } = await this.getConfig(botId, guildId);
     if (!enabled) return;
 
-    if (message.member?.permissions?.has('ManageMessages')) return;
+    // Защита от холодного кеша: если участника нет — не рискуем
+    // удалять его сообщения (мог быть админом/модератором).
+    if (!message.member) return;
+    if (message.member.permissions?.has?.('ManageMessages')) return;
 
     let reason = null;
 
@@ -86,8 +88,7 @@ export default class ModerationModule extends Module {
       return;
     }
 
-    this.db.addLog({
-      botId, guildId,
+    this.db.addLog(botId, guildId, {
       level: 'warn',
       module: 'moderation',
       message: `Удалено сообщение от ${message.author.username} (${reason})`,

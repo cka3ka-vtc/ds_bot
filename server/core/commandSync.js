@@ -1,6 +1,4 @@
 // server/core/commandSync.js
-// Синхронизация слэш-команд с Discord через guild.commands.set() (атомарно).
-
 import { BUILTIN_COMMANDS, BUILTIN_NAMES, toDiscordCommand } from '../../shared/builtin-commands.js';
 
 function sanitizeCommandName(name) {
@@ -16,7 +14,6 @@ function resolveGuildId(guildOrId) {
   return guildOrId.id || null;
 }
 
-/** Собирает полный желаемый список команд для гильдии: builtin + custom. */
 function buildDesiredCommands(db, botId, guildId) {
   const enabledModules = db.getEnabledModules(botId, guildId);
   const enabledSet = new Set(enabledModules);
@@ -27,14 +24,15 @@ function buildDesiredCommands(db, botId, guildId) {
 
   const customs = db
     .getCustomCommands(botId, guildId)
-    .filter((c) => c.enabled === 1 && c.type === 'custom' && !BUILTIN_NAMES.has(c.name))
+    .filter((c) => !!c.enabled)                          // ← универсально для boolean
+    .filter((c) => (c.type || 'custom') === 'custom')
+    .filter((c) => !BUILTIN_NAMES.has(c.name))
     .map((c) => ({
       name: sanitizeCommandName(c.name),
       description: (c.description || 'Пользовательская команда').slice(0, 100),
     }))
     .filter((c) => c.name.length >= 2);
 
-  // Дедупликация по имени (custom не может перезаписать builtin)
   const byName = new Map();
   for (const cmd of [...builtins, ...customs]) {
     if (!byName.has(cmd.name)) byName.set(cmd.name, cmd);
@@ -42,10 +40,6 @@ function buildDesiredCommands(db, botId, guildId) {
   return [...byName.values()];
 }
 
-/**
- * Полная синхронизация: set() заменит все команды гильдии на желаемый список.
- * Не трогает другие гильдии.
- */
 export async function syncGuildCommands({ db, botManager, logger }, botId, guildId) {
   const inst = botManager.get(botId);
   if (!inst?.client?.isReady()) return;
@@ -64,7 +58,6 @@ export async function syncGuildCommands({ db, botManager, logger }, botId, guild
   }
 }
 
-/** Совместимость: раньше вызывали ensureBuiltinCommands(guild, logger, client). */
 export async function ensureBuiltinCommands(guildOrId, logger, client) {
   const guildId = resolveGuildId(guildOrId);
   if (!guildId || !client?.application) return;
@@ -79,7 +72,6 @@ export async function ensureBuiltinCommands(guildOrId, logger, client) {
   }
 }
 
-/** Массовая синхронизация при старте. */
 export async function syncAllGuildCommands({ db, botManager, logger }) {
   for (const inst of botManager.all()) {
     if (!inst.client?.isReady()) continue;
