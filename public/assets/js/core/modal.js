@@ -10,6 +10,15 @@ function getFocusable(container) {
   ).filter((el) => el.offsetParent !== null || el === document.activeElement);
 }
 
+function focusFirst(container) {
+  const focusable = getFocusable(container);
+  if (focusable.length) {
+    try { focusable[0].focus({ preventScroll: true }); } catch {}
+    return true;
+  }
+  return false;
+}
+
 export function openModal({
   title,
   subtitle,
@@ -71,8 +80,9 @@ export function openModal({
     const close = (result = null) => {
       modal.remove();
       activeModal = null;
+      document.removeEventListener('keydown', onKey);
       if (previousFocus && previousFocus.focus) {
-        try { previousFocus.focus(); } catch {}
+        try { previousFocus.focus({ preventScroll: true }); } catch {}
       }
       previousFocus = null;
       resolve(result);
@@ -87,7 +97,7 @@ export function openModal({
       try {
         const result = await onSubmit(modal);
         close(result);
-      } catch (err) {
+      } catch {
         // ошибку покажет вызывающий через toast
       }
     });
@@ -115,13 +125,22 @@ export function openModal({
     };
     document.addEventListener('keydown', onKey);
 
-    // Сначала фокус на первый интерактивный элемент
-    requestAnimationFrame(() => {
-      const focusable = getFocusable(contentEl);
-      if (focusable.length) focusable[0].focus();
-    });
+    // Первичный фокус — сразу после добавления в DOM.
+    requestAnimationFrame(() => focusFirst(contentEl));
 
-    if (onOpen) onOpen(modal);
+    // Если onOpen асинхронный (загружает данные) — после него фокус
+    // проставится повторно (в модалках типа openMemberDetail до этого
+    // в body был спиннер, и фокус ушёл на кнопку закрытия).
+    if (onOpen) {
+      Promise.resolve()
+        .then(() => onOpen(modal))
+        .then(() => {
+          if (activeModal === modal) {
+            requestAnimationFrame(() => focusFirst(contentEl));
+          }
+        })
+        .catch(() => {});
+    }
   });
 }
 

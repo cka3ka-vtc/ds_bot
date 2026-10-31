@@ -107,8 +107,6 @@ export const GUILD_MIGRATIONS = [
     },
   },
   {
-    // Расширенные настройки пользовательских команд.
-    // Идемпотентна: на случай, если колонки уже есть (ручной эксперимент).
     version: 2,
     up(db) {
       const cols = new Set(
@@ -127,6 +125,135 @@ export const GUILD_MIGRATIONS = [
       add('response_embed_color',"response_embed_color TEXT DEFAULT '#5865F2'");
       add('usage_count',         'usage_count INTEGER NOT NULL DEFAULT 0');
       add('last_used_at',        'last_used_at INTEGER');
+    },
+  },
+  {
+    version: 3,
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS builtin_command_settings (
+          command_name TEXT PRIMARY KEY,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          description TEXT,
+          cooldown_seconds INTEGER NOT NULL DEFAULT 0,
+          channels_mode TEXT NOT NULL DEFAULT 'all',
+          channels TEXT NOT NULL DEFAULT '[]',
+          require_roles TEXT NOT NULL DEFAULT '[]',
+          exclude_roles TEXT NOT NULL DEFAULT '[]',
+          ephemeral INTEGER NOT NULL DEFAULT 1,
+          updated_at INTEGER DEFAULT (unixepoch())
+        );
+      `);
+
+      const cols = new Set(
+        db.prepare('PRAGMA table_info(custom_commands)').all().map((r) => r.name),
+      );
+      if (!cols.has('message_config')) {
+        db.exec("ALTER TABLE custom_commands ADD COLUMN message_config TEXT NOT NULL DEFAULT '{}'");
+      }
+    },
+  },
+  {
+    version: 4,
+    up(db) {
+      const cols = new Set(
+        db.prepare('PRAGMA table_info(members)').all().map((r) => r.name),
+      );
+      const add = (name, sql) => {
+        if (!cols.has(name)) db.exec(`ALTER TABLE members ADD COLUMN ${sql}`);
+      };
+      add('birthday_role_until',        'birthday_role_until INTEGER');
+      add('last_birthday_announced_at', 'last_birthday_announced_at INTEGER');
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_members_bday_public
+          ON members(birthday_public, birthday);
+        CREATE INDEX IF NOT EXISTS idx_members_bday_role_until
+          ON members(birthday_role_until);
+      `);
+    },
+  },
+  {
+    version: 5,
+    up(db) {
+      const cols = new Set(
+        db.prepare('PRAGMA table_info(members)').all().map((r) => r.name),
+      );
+      if (!cols.has('birthday_year')) {
+        db.exec('ALTER TABLE members ADD COLUMN birthday_year INTEGER');
+      }
+    },
+  },
+  {
+    // v6: метаданные последнего поздравления — для автоудаления при смене даты.
+    version: 6,
+    up(db) {
+      const cols = new Set(
+        db.prepare('PRAGMA table_info(members)').all().map((r) => r.name),
+      );
+      if (!cols.has('last_announce_channel_id')) {
+        db.exec('ALTER TABLE members ADD COLUMN last_announce_channel_id TEXT');
+      }
+      if (!cols.has('last_announce_message_id')) {
+        db.exec('ALTER TABLE members ADD COLUMN last_announce_message_id TEXT');
+      }
+      if (!cols.has('last_announce_created_at')) {
+        db.exec('ALTER TABLE members ADD COLUMN last_announce_created_at INTEGER');
+      }
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_members_last_announce
+          ON members(last_announce_created_at);
+      `);
+    },
+  },
+  {
+    // v7: оптимизация events через материализацию command_name / channel_id.
+    // Раньше getTopCommands / getTopChannels парсили meta через json_extract
+    // на каждой строке — это O(N) json-парсинга при N=100k+.
+    // Теперь: колонки + покрывающие индексы → group-by по индексу.
+    version: 7,
+    up(db) {
+      const cols = new Set(
+        db.prepare('PRAGMA table_info(events)').all().map((r) => r.name),
+      );
+
+      if (!cols.has('command_name')) {
+        db.exec('ALTER TABLE events ADD COLUMN command_name TEXT');
+      }
+      if (!cols.has('channel_id')) {
+        db.exec('ALTER TABLE events ADD COLUMN channel_id TEXT');
+      }
+
+      // Покрывающие индексы:
+      //   - type + created_at — фильтр;
+      //   - command_name / channel_id — группировка;
+      //   - user_id — для COUNT(DISTINCT user_id) в getTopChannels.
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_events_type_created_cmd
+          ON events(type, created_at, command_name);
+        CREATE INDEX IF NOT EXISTS idx_events_type_created_chan
+          ON events(type, created_at, channel_id, user_id);
+      `);
+
+      // Backfill существующих строк из meta. Одноразовая операция,
+      // при большом объёме может занять несколько секунд при первом запуске.
+      try {
+        db.exec(`
+          UPDATE events
+          SET command_name = json_extract(meta, '$.command')
+          WHERE meta IS NOT NULL
+            AND command_name IS NULL
+            AND json_extract(meta, '$.command') IS NOT NULL;
+
+          UPDATE events
+          SET channel_id = json_extract(meta, '$.channelId')
+          WHERE meta IS NOT NULL
+            AND channel_id IS NULL
+            AND json_extract(meta, '$.channelId') IS NOT NULL;
+        `);
+      } catch {
+        // json_extract может упасть на битом JSON — не блокируем миграцию.
+      }
     },
   },
 ];

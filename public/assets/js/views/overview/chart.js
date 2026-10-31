@@ -9,6 +9,12 @@ const MONTHS_FULL = [
   'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
 ];
 
+// Геометрия графика. Должна совпадать с CSS:
+//   .chart-col   { min-width: 26px }
+//   .chart       { gap: 5px }
+const CHART_COL_MIN = 26;
+const CHART_GAP = 5;
+
 function sum(arr) { return (arr || []).reduce((s, x) => s + (x.count || 0), 0); }
 
 export function hasAnyActivity(d) {
@@ -64,7 +70,9 @@ export function renderChartSection(d, filter) {
             <span><span class="dot pink"></span> ${UI.overview.chart.legendVoice}</span>
           </div>
         `}
-        <div class="chart" id="activityChart"></div>
+        <div class="chart-scroll">
+          <div class="chart" id="activityChart"></div>
+        </div>
       </div>
     </div>`;
 }
@@ -132,7 +140,19 @@ export function renderChart(view, container) {
   }).join('');
 
   requestAnimationFrame(() => {
-    chartEl.querySelectorAll('.chart-seg, .chart-bar').forEach((el) => { el.style.height = el.dataset.h; });
+    chartEl.querySelectorAll('.chart-seg, .chart-bar').forEach((el) => {
+      el.style.height = el.dataset.h;
+    });
+
+    // ─── Горизонтальный скролл ───
+    // Явно фиксируем min-width в пикселях, чтобы scroll гарантированно
+    // появлялся, когда контейнер уже, чем 14 × 26px + 13 × 5px = 429px.
+    // Если контейнер шире — CSS width: 100% растянет .chart на всю ширину.
+    const cols = chartEl.querySelectorAll('.chart-col').length;
+    if (cols > 0) {
+      const minW = cols * CHART_COL_MIN + (cols - 1) * CHART_GAP;
+      chartEl.style.minWidth = `${minW}px`;
+    }
   });
 
   if (!view._tooltipEl) {

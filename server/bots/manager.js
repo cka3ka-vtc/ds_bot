@@ -8,17 +8,40 @@ export class BotManager {
     this.logger = logger;
     this.eventBus = eventBus;
     this.bots = new Map();
+    this._starting = new Map(); // botId -> Promise<BotInstance>, защита от race
   }
 
+  /**
+   * Параллельное восстановление всех ботов. Для N ботов login идёт
+   * параллельно (ограничение Discord — 1000 идентификаций/сутки на приложение,
+   * реальные инсталлы — десятки, не сотни). Ускоряет старт в N раз.
+   */
   async restoreAll() {
     const bots = this.db.getAllBots();
-    for (const row of bots) {
-      try {
-        const token = decrypt(row.token_encrypted);
-        await this._start({ id: row.id, token, isMain: !!row.is_main, name: row.name, avatarUrl: row.avatar_url });
-      } catch (err) {
-        this.logger.error({ err, botId: row.id }, 'failed to restore bot');
-      }
+    if (!bots.length) return;
+
+    const results = await Promise.allSettled(bots.map((row) => this._restoreOne(row)));
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    if (failed > 0) {
+      this.logger.warn(
+        { total: bots.length, failed },
+        'bots: some instances failed to restore',
+      );
+    }
+  }
+
+  async _restoreOne(row) {
+    try {
+      const token = decrypt(row.token_encrypted);
+      await this._start({
+        id: row.id, token,
+        isMain: !!row.is_main,
+        name: row.name,
+        avatarUrl: row.avatar_url,
+      });
+    } catch (err) {
+      this.logger.error({ err, botId: row.id }, 'failed to restore bot');
+      throw err;
     }
   }
 
@@ -38,8 +61,6 @@ export class BotManager {
         is_main: 0,
       });
     } catch (err) {
-      // Откатываем запуск, чтобы не оставить «призрачного» бота:
-      // инстанс работает, но в this.bots и БД его нет → UI его не видит.
       try { await instance.stop(); } catch {}
       this.logger.error(
         { err, botId: instance.id, ownerId },
@@ -71,18 +92,35 @@ export class BotManager {
   async shutdown() {
     await Promise.allSettled(this.all().map(b => b.stop()));
     this.bots.clear();
+    this._starting.clear();
   }
 
-  // ── helpers ──────────────────────────────────────────────
+  /**
+   * Запуск с защитой от race. Если два параллельных вызова _start
+   * для одного botId — второй ждёт результат первого, не создаёт второй клиент.
+   */
   async _start({ id, token, isMain, name, avatarUrl }) {
     if (id && this.bots.has(id)) return this.bots.get(id);
-    const instance = new BotInstance({
-      id, token, isMain, name, avatarUrl, logger: this.logger, eventBus: this.eventBus,
-    });
-    await instance.start();
-    this.bots.set(instance.id, instance);
-    this._syncProfile(instance);
-    return instance;
+
+    const key = id || token.slice(0, 16); // fallback: токен как ключ до login
+    if (this._starting.has(key)) return this._starting.get(key);
+
+    const promise = (async () => {
+      const instance = new BotInstance({
+        id, token, isMain, name, avatarUrl, logger: this.logger, eventBus: this.eventBus,
+      });
+      await instance.start();
+      this.bots.set(instance.id, instance);
+      this._syncProfile(instance);
+      return instance;
+    })();
+
+    this._starting.set(key, promise);
+    try {
+      return await promise;
+    } finally {
+      this._starting.delete(key);
+    }
   }
 
   _syncProfile(instance) {

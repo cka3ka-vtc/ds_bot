@@ -1,5 +1,6 @@
 // server/core/commandSync.js
 import { BUILTIN_COMMANDS, BUILTIN_NAMES, toDiscordCommand } from '../../shared/builtin-commands.js';
+import { retryDiscord } from './retry.js';
 
 function sanitizeCommandName(name) {
   return String(name || '')
@@ -18,13 +19,28 @@ function buildDesiredCommands(db, botId, guildId) {
   const enabledModules = db.getEnabledModules(botId, guildId);
   const enabledSet = new Set(enabledModules);
 
+  let builtinSettings = {};
+  try { builtinSettings = db.getAllBuiltinSettings(botId, guildId) || {}; }
+  catch {}
+
   const builtins = BUILTIN_COMMANDS
     .filter((c) => enabledSet.has(c.moduleKey))
-    .map(toDiscordCommand);
+    .filter((c) => {
+      const s = builtinSettings[c.name];
+      return !s || s.enabled !== false;
+    })
+    .map((c) => {
+      const s = builtinSettings[c.name];
+      const desc = (s?.description && s.description.trim()) || c.description;
+      return {
+        ...toDiscordCommand(c),
+        description: desc.slice(0, 100),
+      };
+    });
 
   const customs = db
     .getCustomCommands(botId, guildId)
-    .filter((c) => !!c.enabled)                          // ← универсально для boolean
+    .filter((c) => !!c.enabled)
     .filter((c) => (c.type || 'custom') === 'custom')
     .filter((c) => !BUILTIN_NAMES.has(c.name))
     .map((c) => ({
@@ -51,11 +67,49 @@ export async function syncGuildCommands({ db, botManager, logger }, botId, guild
   const desired = buildDesiredCommands(db, botId, guildId);
 
   try {
-    await guild.commands.set(desired);
+    await retryDiscord(() => guild.commands.set(desired), {
+      maxAttempts: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 10_000,
+      label: 'guild.commands.set',
+      logger,
+      context: { bot_id: botId, guild_id: guildId },
+    });
     logger.info({ botId, guildId, count: desired.length }, 'slash commands synced');
   } catch (err) {
     logger.warn({ err, botId, guildId }, 'slash command sync failed');
   }
+}
+
+/* Debounced variant для UI-роутов (см. рефакторинг #7) */
+const SYNC_DEBOUNCE_MS = 1500;
+const pendingSyncs = new Map();
+
+export function scheduleGuildCommandsSync(ctx, botId, guildId) {
+  const key = `${botId}:${guildId}`;
+  const existing = pendingSyncs.get(key);
+  if (existing?.timer) clearTimeout(existing.timer);
+
+  const timer = setTimeout(() => {
+    pendingSyncs.delete(key);
+    syncGuildCommands(ctx, botId, guildId).catch((err) => {
+      ctx.logger?.warn({ err, botId, guildId }, 'scheduled command sync failed');
+    });
+  }, SYNC_DEBOUNCE_MS);
+
+  if (typeof timer.unref === 'function') timer.unref();
+  pendingSyncs.set(key, { timer, ctx, botId, guildId });
+}
+
+export async function flushPendingSyncs() {
+  const entries = [...pendingSyncs.values()];
+  pendingSyncs.clear();
+  if (!entries.length) return;
+
+  await Promise.allSettled(entries.map(({ timer, ctx, botId, guildId }) => {
+    clearTimeout(timer);
+    return syncGuildCommands(ctx, botId, guildId);
+  }));
 }
 
 export async function ensureBuiltinCommands(guildOrId, logger, client) {
@@ -65,7 +119,14 @@ export async function ensureBuiltinCommands(guildOrId, logger, client) {
   if (!guild) return;
   try {
     const desired = BUILTIN_COMMANDS.map(toDiscordCommand);
-    await guild.commands.set(desired);
+    await retryDiscord(() => guild.commands.set(desired), {
+      maxAttempts: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 10_000,
+      label: 'ensureBuiltinCommands',
+      logger,
+      context: { guild_id: guildId },
+    });
     logger?.info({ guildId, count: desired.length }, 'builtin commands ensured');
   } catch (err) {
     logger?.warn({ err, guildId }, 'failed to ensure builtin commands');

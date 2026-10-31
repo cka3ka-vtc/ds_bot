@@ -6,10 +6,12 @@ import { escapeHtml } from '../../core/utils.js';
 import { UI } from '/shared/ui-strings.js';
 import greetingsSettingsPage from '../module-settings/greetings.js';
 import levelsSettingsPage from '../module-settings/levels/index.js';
+import birthdaysSettingsPage from '../module-settings/birthdays.js';
 
 export const openableModules = {
   greetings: greetingsSettingsPage,
   levels: levelsSettingsPage,
+  birthdays: birthdaysSettingsPage,
 };
 
 export function renderModulesGrid(view, modules) {

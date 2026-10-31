@@ -1,6 +1,7 @@
 // server/api/auth-middleware.js
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
+import { userApiLimiter } from './middleware/rate-limit.js';
 
 const adminCache = new Map();
 const ADMIN_TTL = 2 * 60_000;
@@ -36,6 +37,12 @@ export function invalidateAdminCache(botId, guildId, userId) {
   adminCache.delete(`${botId}:${guildId}:${userId}`);
 }
 
+/**
+ * Проверка JWT-cookie. При успехе:
+ *   - req.user = { id, username, ... };
+ *   - пропускает через userApiLimiter (300 req/min per user_id),
+ *     чтобы 1 IP = N админов не били лимит друг другу.
+ */
 export function requireAuth(req, res, next) {
   const token = req.cookies?.auth;
   if (!token) return res.status(401).json({ error: 'unauthorized' });
@@ -45,10 +52,12 @@ export function requireAuth(req, res, next) {
     const user = req.app.locals.db.getUser(payload.sub);
     if (!user) return res.status(401).json({ error: 'unauthorized' });
     req.user = user;
-    next();
   } catch {
-    res.status(401).json({ error: 'unauthorized' });
+    return res.status(401).json({ error: 'unauthorized' });
   }
+
+  // Per-user rate limit — после того как req.user.id известен.
+  return userApiLimiter(req, res, next);
 }
 
 export function requireBotAccess(req, res, next) {

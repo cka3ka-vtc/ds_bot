@@ -55,17 +55,18 @@ export function mergeLevelsConfig(raw) {
 
   c.formula = raw.formula === 'linear' ? 'linear' : 'classic';
 
-  const isOldDailyDefault =
-    (raw.dailyXp === undefined || raw.dailyXp === 50) &&
-    (raw.dailyEnabled === undefined || raw.dailyEnabled === false);
-
-  if (isOldDailyDefault) {
-    c.dailyEnabled = true;
-    c.dailyXp = 150;
-  } else {
+  /* dailyEnabled:
+     Если поле явно задано — уважаем (в т.ч. false).
+     Если undefined — дефолт (включено), совместимость со старыми конфигами.
+     Раньше была эвристика «dailyXp===undefined || 50 && dailyEnabled===false»,
+     которая ПРИНУДИТЕЛЬНО включала daily даже если пользователь выключил —
+     из-за этого переключатель /daily в разделе «Команды» не сохранялся. */
+  if (raw.dailyEnabled !== undefined) {
     c.dailyEnabled = !!raw.dailyEnabled;
-    c.dailyXp = Math.max(1, parseInt(raw.dailyXp, 10) || 150);
+  } else {
+    c.dailyEnabled = true;
   }
+  c.dailyXp = Math.max(1, parseInt(raw.dailyXp, 10) || 150);
 
   if (Array.isArray(raw.titles) && raw.titles.length) {
     const normalized = raw.titles
@@ -86,10 +87,6 @@ export function mergeLevelsConfig(raw) {
   if (raw.inactivity) c.inactivity = { ...c.inactivity, ...raw.inactivity };
 
   // Сообщения: каждое — независимый MessageEditor-конфиг.
-  //   levelUp      — при достижении нового уровня (announce channel)
-  //   rank         — ответ на /rank (карточка конкретного участника)
-  //   leaderboard  — ответ на /leaderboard
-  //   daily        — ответ на /daily
   if (raw.messages && typeof raw.messages === 'object') {
     for (const k of ['levelUp', 'rank', 'leaderboard', 'daily']) {
       if (raw.messages[k] !== undefined) c.messages[k] = raw.messages[k];

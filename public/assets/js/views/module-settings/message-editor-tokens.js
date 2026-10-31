@@ -1,7 +1,4 @@
 // public/assets/js/views/module-settings/message-editor-tokens.js
-// Все наборы токенов для MessageEditor по контекстам.
-// Вынесено из message-editor.js — файл стал слишком большим.
-
 import { UI } from '/shared/ui-strings.js';
 
 const CATEGORY_LABELS = UI.msgEditor.categories;
@@ -141,7 +138,119 @@ export const TOKENS_BY_CONTEXT = {
       user: '@Иван', mention: '@Иван', username: 'ivan', displayName: 'Иван',
       guild: 'Мой сервер', count: '1234',
       xpGained: '150', newXp: '1250', newLevel: '10',
-      nextDailyAt: '<t:1735689600:R>',
+      nextDailyAt: '__preview_tomorrow__',
+      avatarUrl: '', guildIconUrl: '',
+    },
+  },
+
+  /* ─────── birthdays.announce ─────── */
+  'birthdays.announce': {
+    categories: [
+      { label: CATEGORY_LABELS.user, items: [
+        ['user', 'Упоминание именинника'],
+        ['username', 'Ник без @'],
+        ['displayName', 'Отображаемое имя'],
+      ]},
+      { label: 'День рождения', items: [
+        ['birthday', 'Дата без года (ДД.ММ)'],
+        ['birthdayFull', 'Полная дата (ДД.ММ или ДД.ММ.ГГГГ)'],
+        ['age', 'Исполняющийся возраст (пусто, если год не указан)'],
+        ['birthdaysCount', 'Сколько участников указали ДР на сервере'],
+      ]},
+      { label: CATEGORY_LABELS.server, items: [
+        ['guild', 'Имя сервера'],
+        ['count', 'Всего участников'],
+      ]},
+    ],
+    preview: {
+      user: '@Иван', mention: '@Иван', username: 'ivan', displayName: 'Иван',
+      guild: 'Мой сервер', count: '1234',
+      birthday: '15.06',
+      birthdayFull: '15.06.1995',
+      age: '30',
+      birthdaysCount: '42',
+      avatarUrl: '', guildIconUrl: '',
+    },
+  },
+
+  /* ─────── birthdays.cmdSet ─────── */
+  'birthdays.cmdSet': {
+    categories: [
+      { label: CATEGORY_LABELS.user, items: [
+        ['user', 'Упоминание'],
+        ['displayName', 'Отображаемое имя'],
+      ]},
+      { label: 'День рождения', items: [
+        ['birthday', 'Дата без года (ДД.ММ)'],
+        ['birthdayFull', 'Полная дата (ДД.ММ или ДД.ММ.ГГГГ)'],
+        ['age', 'Исполняющийся возраст'],
+        ['birthdaysCount', 'Сколько участников указали ДР'],
+      ]},
+      { label: CATEGORY_LABELS.server, items: [
+        ['guild', 'Имя сервера'],
+        ['count', 'Всего участников'],
+      ]},
+    ],
+    preview: {
+      user: '@Иван', mention: '@Иван', username: 'ivan', displayName: 'Иван',
+      guild: 'Мой сервер', count: '1234',
+      birthday: '15.06',
+      birthdayFull: '15.06.1995',
+      age: '30',
+      birthdaysCount: '42',
+      avatarUrl: '', guildIconUrl: '',
+    },
+  },
+
+  /* ─────── birthdays.cmdToggle ─────── */
+  'birthdays.cmdToggle': {
+    categories: [
+      { label: CATEGORY_LABELS.user, items: [
+        ['user', 'Упоминание'],
+        ['displayName', 'Отображаемое имя'],
+      ]},
+      { label: 'День рождения', items: [
+        ['birthday', 'Дата без года (ДД.ММ)'],
+        ['birthdayFull', 'Полная дата (ДД.ММ или ДД.ММ.ГГГГ)'],
+        ['age', 'Исполняющийся возраст'],
+        ['birthdaysCount', 'Сколько участников указали ДР'],
+        ['state', 'Текущее состояние: «включены» / «отключены»'],
+      ]},
+      { label: CATEGORY_LABELS.server, items: [
+        ['guild', 'Имя сервера'],
+        ['count', 'Всего участников'],
+      ]},
+    ],
+    preview: {
+      user: '@Иван', mention: '@Иван', username: 'ivan', displayName: 'Иван',
+      guild: 'Мой сервер', count: '1234',
+      birthday: '15.06',
+      birthdayFull: '15.06.1995',
+      age: '30',
+      birthdaysCount: '42',
+      state: 'включены',
+      avatarUrl: '', guildIconUrl: '',
+    },
+  },
+
+  /* ─────── birthdays.cmdList ─────── */
+  'birthdays.cmdList': {
+    categories: [
+      { label: CATEGORY_LABELS.server, items: [
+        ['guild', 'Имя сервера'],
+        ['count', 'Сколько в списке'],
+      ]},
+      { label: 'День рождения', items: [
+        ['topUsers', 'Готовый список ближайших ДР (markdown с медалями)'],
+        ['birthdaysCount', 'Сколько участников указали ДР'],
+      ]},
+    ],
+    preview: {
+      guild: 'Мой сервер', count: '3', birthdaysCount: '42',
+      topUsers:
+        '**1.** @user1 — **15.06.1995** (сегодня · 30 лет)\n' +
+        '**2.** @user2 — **22.06** (через 7 дн.)\n' +
+        '**3.** @user3 — **01.07.2001** (через 16 дн. · 24 лет)',
       avatarUrl: '', guildIconUrl: '',
     },
   },

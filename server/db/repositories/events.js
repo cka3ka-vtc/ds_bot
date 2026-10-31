@@ -3,14 +3,32 @@ const SQLITE_VARIABLE_CHUNK = 500;
 
 export function createEventsRepo(raw) {
   return {
+    /**
+     * Пишет событие. Дополнительно материализует command_name и channel_id
+     * из meta, чтобы getTopCommands / getTopChannels читали индексированные
+     * колонки вместо json_extract на каждой строке.
+     */
     addEvent(e) {
-      raw.prepare('INSERT INTO events (user_id, type, meta) VALUES (?, ?, ?)')
-        .run(e.userId || null, e.type, e.meta ? JSON.stringify(e.meta) : null);
+      const meta = e.meta || null;
+      const commandName = meta && typeof meta.command === 'string' ? meta.command : null;
+      const channelId = meta && typeof meta.channelId === 'string' ? meta.channelId : null;
+
+      raw.prepare(`
+        INSERT INTO events (user_id, type, meta, command_name, channel_id)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        e.userId || null,
+        e.type,
+        meta ? JSON.stringify(meta) : null,
+        commandName,
+        channelId,
+      );
     },
 
     countEvents(type, since = 0) {
-      return raw.prepare('SELECT COUNT(*) as c FROM events WHERE type = ? AND created_at >= ?')
-        .get(type, since).c;
+      return raw.prepare(
+        'SELECT COUNT(*) as c FROM events WHERE type = ? AND created_at >= ?',
+      ).get(type, since).c;
     },
 
     countUniqueUsers(since = 0) {
@@ -36,32 +54,105 @@ export function createEventsRepo(raw) {
 
     getTopCommands(since, limit = 5) {
       return raw.prepare(`
-        SELECT json_extract(meta, '$.command') as cmd, COUNT(*) as count
-        FROM events WHERE type = 'command' AND created_at >= ?
-        GROUP BY cmd ORDER BY count DESC LIMIT ?
+        SELECT command_name as cmd, COUNT(*) as count
+        FROM events
+        WHERE type = 'command'
+          AND created_at >= ?
+          AND command_name IS NOT NULL
+        GROUP BY command_name
+        ORDER BY count DESC
+        LIMIT ?
       `).all(since, limit);
     },
 
     getTopChannels(type, since, limit = 5) {
       return raw.prepare(`
-        SELECT json_extract(meta, '$.channelId') as channel_id,
+        SELECT channel_id,
                COUNT(DISTINCT user_id) as count
         FROM events
-        WHERE type = ? AND created_at >= ?
+        WHERE type = ?
+          AND created_at >= ?
           AND user_id IS NOT NULL
-          AND json_extract(meta, '$.channelId') IS NOT NULL
-        GROUP BY channel_id ORDER BY count DESC LIMIT ?
+          AND channel_id IS NOT NULL
+        GROUP BY channel_id
+        ORDER BY count DESC
+        LIMIT ?
       `).all(type, since, limit);
     },
 
-    getRecentActivity(limit = 5) {
-      return raw.prepare(`
-        SELECT 'mod' as source, kind as type, user_id, reason as message, created_at FROM mod_actions
-        UNION ALL
-        SELECT 'log' as source, module as type, NULL as user_id, message, created_at
-        FROM logs WHERE level IN ('info', 'warn')
-        ORDER BY created_at DESC LIMIT ?
-      `).all(limit);
+    /**
+     * Лента последних событий для дашборда.
+     *
+     * Раньше: UNION ALL трёх таблиц + ORDER BY + LIMIT — SQLite сортировал
+     * весь объединённый результат. При 100k+ событий — секунды.
+     *
+     * Теперь: три отдельных SELECT с LIMIT (каждый использует свой индекс
+     * по created_at DESC, читает ровно N строк), затем merge sort трёх
+     * уже отсортированных массивов в JS за O(limit).
+     *
+     * Индексы, которые используются:
+     *   mod_actions → idx_mod_actions(created_at DESC)
+     *   logs        → idx_logs_created(created_at DESC)
+     *   events      → idx_events_type_created(type, created_at DESC)
+     */
+    getRecentActivity(limit = 10) {
+      // Защита от слишком больших limit: даже с индексами три подзапроса
+      // при limit=10000 могут быть ощутимыми. UI всегда просит 5-30.
+      const perTable = Math.min(Math.max(1, limit), 100);
+
+      const mods = raw.prepare(`
+        SELECT 'mod' as source, kind as type, user_id,
+               reason as message, NULL as meta, created_at
+        FROM mod_actions
+        ORDER BY created_at DESC
+        LIMIT ?
+      `).all(perTable);
+
+      const logs = raw.prepare(`
+        SELECT 'log' as source, module as type, NULL as user_id,
+               message, NULL as meta, created_at
+        FROM logs
+        WHERE level IN ('info', 'warn')
+        ORDER BY created_at DESC
+        LIMIT ?
+      `).all(perTable);
+
+      const events = raw.prepare(`
+        SELECT 'event' as source, type, user_id,
+               NULL as message, meta, created_at
+        FROM events
+        WHERE type IN ('command', 'member_join', 'member_leave')
+        ORDER BY created_at DESC
+        LIMIT ?
+      `).all(perTable);
+
+      // Merge трёх отсортированных по убыванию created_at массивов.
+      const merged = [];
+      let i = 0, j = 0, k = 0;
+      while (merged.length < limit && (i < mods.length || j < logs.length || k < events.length)) {
+        const a = i < mods.length ? mods[i] : null;
+        const b = j < logs.length ? logs[j] : null;
+        const c = k < events.length ? events[k] : null;
+
+        let best = null;
+        if (a && (!best || a.created_at > best.created_at)) best = a;
+        if (b && (!best || b.created_at > best.created_at)) best = b;
+        if (c && (!best || c.created_at > best.created_at)) best = c;
+
+        if (best === a) i++;
+        else if (best === b) j++;
+        else if (best === c) k++;
+
+        merged.push(best);
+      }
+
+      // meta в events — JSON-строка; парсим для фронта.
+      return merged.map((r) => {
+        if (r.meta) {
+          try { r.meta = JSON.parse(r.meta); } catch { r.meta = null; }
+        }
+        return r;
+      });
     },
 
     getMemberEvents(type, since, limit = 500) {

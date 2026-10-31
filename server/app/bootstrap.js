@@ -6,7 +6,7 @@ import { eventBus } from '../core/eventBus.js';
 import { BotManager } from '../bots/manager.js';
 import { ModuleRegistry } from '../modules/registry.js';
 import { createApp } from '../api/app.js';
-import { syncAllGuildCommands } from '../core/commandSync.js';
+import { syncAllGuildCommands, flushPendingSyncs } from '../core/commandSync.js';
 import { ensureMainBot, syncGuildsOnStartup } from './startup.js';
 import { registerAllEvents } from './events/index.js';
 import { configCache } from '../core/config-cache.js';
@@ -24,7 +24,6 @@ export async function bootstrap() {
   const db = initDb(config.DATABASE_PATH, logger);
   logger.info({ main: config.DATABASE_PATH, guildsDir: './data/guilds/' }, 'boot: db initialized');
 
-  // Применяем миграции ко всем существующим БД гильдий
   await db.guildManager.applyAllMigrations();
 
   const botManager = new BotManager({ db, logger, eventBus });
@@ -33,7 +32,6 @@ export async function bootstrap() {
   registerAllEvents({ db, botManager, registry, logger });
   logger.info('boot: event handlers registered');
 
-  // ═══ Веб-сервер стартует первым ═══
   const app = createApp({ db, botManager, registry, logger });
 
   const server = await new Promise((resolve, reject) => {
@@ -57,7 +55,6 @@ export async function bootstrap() {
   logger.info(`🚀 Панель запущена: http://localhost:${config.PORT} (${config.HOST})`);
   logger.info('   Веб-сервер работает. Боты стартуют в фоне...');
 
-  // ═══ Боты и модули — в фоне ═══
   (async () => {
     try {
       await botManager.restoreAll();
@@ -81,7 +78,7 @@ export async function bootstrap() {
     logger.info('boot: background initialization complete');
   })();
 
-  // ═══ Фоновые задачи обслуживания ═══
+  /* Фоновые задачи обслуживания */
   const timers = [];
 
   timers.push(setInterval(() => configCache.cleanup(), 5 * 60_000));
@@ -99,18 +96,39 @@ export async function bootstrap() {
     }
   }, 24 * 60 * 60_000));
 
-  // ═══ Graceful shutdown ═══
+  /* Graceful shutdown */
   let shuttingDown = false;
   const stop = async (signal) => {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info({ signal }, 'shutting down...');
+
     timers.forEach((t) => clearInterval(t));
     server.close();
-    try { await registry.unregisterAll(); } catch (err) { logger.warn({ err }, 'registry shutdown failed'); }
-    try { await botManager.shutdown(); } catch (err) { logger.warn({ err }, 'botManager shutdown failed'); }
+
+    // 1) Debounced sync'и команд → Discord.
+    try { await flushPendingSyncs(); }
+    catch (err) { logger.warn({ err }, 'flushPendingSyncs failed'); }
+
+    // 2) XP-буфер → SQLite (иначе при рестарте теряется ≤3 сек активности).
+    try {
+      const levels = registry.get('levels');
+      if (levels?._flushXpBuffer) await levels._flushXpBuffer();
+    } catch (err) { logger.warn({ err }, 'levels._flushXpBuffer failed'); }
+
+    // 3) Боты → gateway стоп.
+    try { await botManager.shutdown(); }
+    catch (err) { logger.warn({ err }, 'botManager shutdown failed'); }
+
+    // 4) Модули → таймеры стоп (unregister внутри тоже делает финальный flush XP,
+    //    но на всякий случай — уже сделали выше).
+    try { await registry.unregisterAll(); }
+    catch (err) { logger.warn({ err }, 'registry shutdown failed'); }
+
+    // 5) БД.
     try { db.guildManager.closeAll(); } catch {}
     try { db.main.close(); } catch {}
+
     process.exit(0);
   };
   process.on('SIGINT', () => stop('SIGINT'));

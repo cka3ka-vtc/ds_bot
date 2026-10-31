@@ -388,6 +388,9 @@
 .exclusion-picker .channel-input-wrap .input,
 .exclusion-picker .role-input-wrap .input { background: var(--surface-2); }
 
+/* Отступ между chips и picker в блоках «Исключённые каналы» / «Исключённые роли» */
+.chips + .exclusion-picker { margin-top: 10px; }
+
 .chips {
   display: flex;
   flex-wrap: wrap;

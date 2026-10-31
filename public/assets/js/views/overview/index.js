@@ -1,18 +1,36 @@
 // public/assets/js/views/overview/index.js
 import { store } from '../../core/store.js';
 import { api } from '../../core/api.js';
-import { toast } from '../../core/toast.js';
 import { UI } from '/shared/ui-strings.js';
-import { renderKpiGrid, animateKpiCounters } from './kpi.js';
-import { renderChartSection, renderChart, hasAnyActivity } from './chart.js';
-import { renderTopCommands, renderTopChannels, renderRecentEvents } from './lists.js';
-import { openJoinedModal, openLeftModal, openActiveModal } from './userModals.js';
+import { renderChart, hasAnyActivity } from './chart.js';
+import { animateKpiCounters } from './kpi.js';
 
+import { renderLayout } from './layout.js';
+import {
+  renderEventsFilters,
+  renderEventsBody,
+  bindChartFilters,
+  bindChannelFilters,
+  bindEventFilters,
+} from './filters.js';
+import { setupMobileFilters } from './mobile-filters.js';
+import { bindRefresh, bindNavLinks, bindKpiCards } from './kpi-bind.js';
+
+/**
+ * Дашборд overview.
+ *  - render: fetch + _renderUI.
+ *  - _renderUI: собирает HTML через layout.js, вешает все обработчики.
+ *
+ *  Состояние фильтров хранится на объекте view и передаётся в layout/filters
+ *  при каждом перерисовывании. При изменении фильтров вызывается
+ *  частичный ре-рендер (только затронутая зона), без перезагрузки данных.
+ */
 export default {
   container: null,
   data: null,
   chartFilter: 'all',
   channelFilter: 'text',
+  eventFilter: 'all',
   _tooltipEl: null,
   _onScroll: null,
 
@@ -58,139 +76,30 @@ export default {
     window.addEventListener('scroll', this._onScroll, { passive: true });
   },
 
+  /**
+   * Полный ре-рендер страницы. Также вызывается из bindRefresh после
+   * повторного fetch'а. При смене фильтра — не перерисовываем всё,
+   * а точечно (см. bindChartFilters / bindChannelFilters / bindEventFilters).
+   */
   _renderUI() {
     const d = this.data;
     const hasActivity = hasAnyActivity(d);
-    const cf = this.channelFilter;
-    const hasChannelStats = (d.topChannels?.text?.length || 0) + (d.topChannels?.voice?.length || 0) > 0;
 
-    this.container.innerHTML = `
-      <div class="view-head">
-        <div class="view-title">
-          <h1>${UI.pages.overview.title}</h1>
-          <p>${UI.pages.overview.subtitle}</p>
-        </div>
-        <div class="view-actions">
-          <button class="btn btn-ghost" data-refresh>
-            <i class="fa-solid fa-rotate"></i> ${UI.overview.refresh}
-          </button>
-        </div>
-      </div>
-
-      ${renderKpiGrid(d)}
-
-      <div class="overview-grid">
-        ${renderChartSection(d, this.chartFilter)}
-        <div class="card">
-          <div class="card-head">
-            <div>
-              <div class="kpi-label-group">
-                <span class="card-title">${UI.overview.topCommands.title}</span>
-                <button class="kpi-hint" type="button"
-                        data-tooltip="${UI.overview.topCommands.hint}">?</button>
-              </div>
-              <span class="card-sub">${UI.overview.topCommands.subtitle}</span>
-            </div>
-          </div>
-          <div class="card-body" style="padding:12px;">
-            ${renderTopCommands(d.topCommands)}
-          </div>
-        </div>
-      </div>
-
-      <div class="overview-grid channels-events">
-        <div class="card">
-          <div class="card-head">
-            <div><span class="card-title">${UI.overview.recentEvents.title}</span></div>
-            <a href="#moderation" class="btn-link" data-nav="moderation">${UI.overview.recentEvents.all} <i class="fa-solid fa-arrow-right"></i></a>
-          </div>
-          <div class="card-body" style="padding:8px;">
-            ${renderRecentEvents(d.recentEvents)}
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-head">
-            <div>
-              <div class="kpi-label-group">
-                <span class="card-title">${UI.overview.topChannels.title}</span>
-                <button class="kpi-hint" type="button"
-                        data-tooltip="${UI.overview.topChannels.hint}">?</button>
-              </div>
-              <span class="card-sub">${UI.overview.topChannels.subtitle}</span>
-            </div>
-            ${hasChannelStats ? `
-              <div class="chart-filters" role="tablist">
-                <button class="chart-filter ${cf === 'text' ? 'active' : ''}" data-channel-filter="text">${UI.overview.topChannels.filterText}</button>
-                <button class="chart-filter ${cf === 'voice' ? 'active' : ''}" data-channel-filter="voice">${UI.overview.topChannels.filterVoice}</button>
-              </div>
-            ` : ''}
-          </div>
-          <div class="card-body" style="padding:12px;" id="topChannelsBody">
-            <div data-channel-list="text" ${cf !== 'text' ? 'hidden' : ''}>
-              ${renderTopChannels(d.topChannels.text, 'text')}
-            </div>
-            <div data-channel-list="voice" ${cf !== 'voice' ? 'hidden' : ''}>
-              ${renderTopChannels(d.topChannels.voice, 'voice')}
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    this.container.querySelector('[data-refresh]').addEventListener('click', async () => {
-      try {
-        this.data = await this._fetch(store.get('activeBotId'), store.get('activeGuildId'));
-        this._renderUI();
-        toast(UI.common.updated, 'success');
-      } catch {}
+    this.container.innerHTML = renderLayout(this, {
+      eventsFiltersHTML: renderEventsFilters(this),
+      eventsBodyHTML: renderEventsBody(this),
     });
 
-    this.container.querySelectorAll('[data-nav]').forEach((el) => {
-      el.addEventListener('click', (e) => { e.preventDefault(); location.hash = el.dataset.nav; });
-    });
+    // ─── Мобильные обёртки фильтров (после рендера HTML) ───
+    setupMobileFilters(this);
 
-    this.container.querySelectorAll('.chart-filter[data-filter]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        this.container.querySelectorAll('.chart-filter[data-filter]').forEach((b) => b.classList.remove('active'));
-        btn.classList.add('active');
-        this.chartFilter = btn.dataset.filter;
-        renderChart(this, this.container);
-      });
-    });
-
-    this.container.querySelectorAll('[data-channel-filter]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        this.container.querySelectorAll('[data-channel-filter]').forEach((b) => b.classList.remove('active'));
-        btn.classList.add('active');
-        this.channelFilter = btn.dataset.channelFilter;
-        this.container.querySelectorAll('[data-channel-list]').forEach((el) => {
-          el.hidden = el.dataset.channelList !== this.channelFilter;
-        });
-      });
-    });
-
-    this.container.querySelectorAll('[data-kpi-action], [data-kpi-nav]').forEach((card) => {
-      const action = card.dataset.kpiAction;
-      const nav = card.dataset.kpiNav;
-      const run = () => {
-        if (action === 'joined') openJoinedModal();
-        else if (action === 'left') openLeftModal();
-        else if (action === 'active') openActiveModal();
-        else if (nav) location.hash = nav;
-      };
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('.kpi-hint')) return;
-        run();
-      });
-      card.addEventListener('keydown', (e) => {
-        if (e.target !== card) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          run();
-        }
-      });
-    });
+    // ─── Привязки ───
+    bindRefresh(this);
+    bindNavLinks(this);
+    bindChartFilters(this);
+    bindChannelFilters(this);
+    bindEventFilters(this);
+    bindKpiCards(this);
 
     animateKpiCounters(this.container);
 

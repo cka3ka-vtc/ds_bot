@@ -2,6 +2,7 @@
 import { Module } from './_base.js';
 import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../core/componentsBuilder.js';
 import { getNonBotMemberCount } from '../core/guildCounts.js';
+import { retryDiscord } from '../core/retry.js';
 
 export default class GreetingsModule extends Module {
   get key() { return 'greetings'; }
@@ -30,7 +31,13 @@ export default class GreetingsModule extends Module {
       return;
     }
 
-    const nonBotCount = await getNonBotMemberCount(member.guild);
+    let nonBotCount = 0;
+    if (/\{count\}/.test(JSON.stringify(msgConfig))) {
+      nonBotCount = await getNonBotMemberCount(member.guild, {
+        force: true,
+        timeout: 2000,
+      }).catch(() => 0);
+    }
 
     const tokens = {
       user: `<@${member.id}>`,
@@ -54,11 +61,21 @@ export default class GreetingsModule extends Module {
     if (!components?.length) return;
 
     try {
-      await channel.send({
-        flags: FLAG_COMPONENTS_V2,
-        components,
-        allowedMentions: { parse: ['users'] },
-      });
+      await retryDiscord(
+        () => channel.send({
+          flags: FLAG_COMPONENTS_V2,
+          components,
+          allowedMentions: { parse: ['users'] },
+        }),
+        {
+          maxAttempts: 3,
+          baseDelayMs: 800,
+          maxDelayMs: 8000,
+          label: 'greetings.send',
+          logger: this.logger,
+          context: { bot_id: client.user.id, guild_id: guildId, user_id: member.id },
+        },
+      );
     } catch (err) {
       this.logger.warn({ err, guildId }, 'greetings: failed to send');
       return;

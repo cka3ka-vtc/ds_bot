@@ -1,3 +1,6 @@
+// public/assets/js/core/router.js
+import { closeModal } from './modal.js';
+
 export class Router {
   constructor({ views, defaultView = 'overview', container }) {
     this.views = views;
@@ -21,6 +24,10 @@ export class Router {
     const name = (location.hash.slice(1) || this.defaultView).split('?')[0];
     const view = this.views[name] || this.views[this.defaultView];
     if (!view) return;
+
+    // Закрываем открытые модалки — при навигации они не должны
+    // висеть поверх новой страницы.
+    closeModal();
 
     if (this.currentView?.destroy) {
       try { this.currentView.destroy(); } catch {}

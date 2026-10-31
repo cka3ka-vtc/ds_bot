@@ -42,6 +42,11 @@
   transform: translateY(-2px);
   border-color: transparent;
 }
+.switcher-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: transparent;
+}
 
 .switcher-glow {
   position: absolute;
@@ -69,7 +74,8 @@
   background: conic-gradient(from 0deg,
     #5865f2, #8b5cf6, #ec4899, #fbbf24, #22c55e, #06b6d4, #5865f2);
 }
-.switcher-btn:hover .switcher-glow {
+.switcher-btn:hover .switcher-glow,
+.switcher-btn:focus-visible .switcher-glow {
   opacity: 1;
   animation: switcherHueSpin 4s linear infinite;
 }
@@ -89,7 +95,8 @@
   transition: opacity .3s;
   z-index: 0;
 }
-.switcher-btn:hover .switcher-inner-glow {
+.switcher-btn:hover .switcher-inner-glow,
+.switcher-btn:focus-visible .switcher-inner-glow {
   opacity: 1;
   animation: switcherGlowPulse 2.4s ease-in-out infinite;
 }
@@ -136,8 +143,6 @@
 
 /* ============================================================
    Hint «Сменить сервер» — градиентный текст.
-   ВАЖНО: используется background-image (не shorthand background),
-   чтобы не сбрасывать background-clip: text на border-box.
    ============================================================ */
 .switcher-hint {
   position: absolute;
@@ -154,7 +159,6 @@
   opacity: 0;
   z-index: 3;
 
-  /* Light theme: тёмный акцентный градиент — читаем на светлом фоне */
   background-image: linear-gradient(135deg, #3f4ac4 0%, #6b4fe8 55%, #8b5cf6 100%);
   -webkit-background-clip: text;
   background-clip: text;
@@ -165,12 +169,12 @@
   transition: opacity .2s, letter-spacing .4s cubic-bezier(.22, 1, .36, 1);
 }
 
-.switcher-btn:hover .switcher-hint {
+.switcher-btn:hover .switcher-hint,
+.switcher-btn:focus-visible .switcher-hint {
   opacity: 1;
   letter-spacing: 2px;
 }
 
-/* Dark theme: светлый градиент — читаем на тёмном фоне */
 [data-theme="dark"] .switcher-hint {
   background-image: linear-gradient(135deg, #eef1ff 0%, #c9cdfb 45%, #a5b3ff 100%);
   -webkit-background-clip: text;
@@ -182,7 +186,10 @@
 
 .switcher-btn:hover .switcher-avatar,
 .switcher-btn:hover .switcher-info,
-.switcher-btn:hover > .fa-bars { opacity: 0; }
+.switcher-btn:hover > .fa-bars,
+.switcher-btn:focus-visible .switcher-avatar,
+.switcher-btn:focus-visible .switcher-info,
+.switcher-btn:focus-visible > .fa-bars { opacity: 0; }
 
 /* Nav */
 .sidebar-nav {
@@ -294,17 +301,22 @@
   position: relative; z-index: 2;
   transition: transform .55s cubic-bezier(.34, 1.56, .64, 1);
 }
-.logout-btn:hover {
+.logout-btn:hover,
+.logout-btn:focus-visible {
   color: #fff;
   border-color: transparent;
   box-shadow: 0 8px 22px rgba(220, 38, 38, .45), 0 0 0 3px var(--red-soft);
+  outline: none;
 }
-.logout-btn:hover::before {
+.logout-btn:hover::before,
+.logout-btn:focus-visible::before {
   opacity: 1;
   transform: scale(1) rotate(0deg);
 }
-.logout-btn:hover i { transform: scale(1.28); }
-.logout-btn:hover::after { animation: logoutRipple 1.5s ease-out infinite; }
+.logout-btn:hover i,
+.logout-btn:focus-visible i { transform: scale(1.28); }
+.logout-btn:hover::after,
+.logout-btn:focus-visible::after { animation: logoutRipple 1.5s ease-out infinite; }
 .logout-btn:active i { transform: scale(.92); transition-duration: .15s; }
 
 @keyframes logoutRipple {

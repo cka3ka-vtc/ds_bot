@@ -14,6 +14,7 @@ export function initMainConnection(dbPath, logger) {
   mainDb = new Database(dbPath);
   mainDb.pragma('journal_mode = WAL');
   mainDb.pragma('foreign_keys = ON');
+  mainDb.pragma('busy_timeout = 5000');
   runMainMigrations(mainDb, logger);
   return mainDb;
 }

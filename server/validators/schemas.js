@@ -78,6 +78,7 @@ export const commandCreateBody = z.object({
   ephemeral: z.boolean().optional().default(false),
   responseMode: responseModeEnum.optional().default('text'),
   responseEmbedColor: hexColor.optional().default('#5865F2'),
+  messageConfig: z.record(z.any()).optional(),
 });
 
 export const commandUpdateBody = z.object({
@@ -88,6 +89,7 @@ export const commandUpdateBody = z.object({
   response: z.string().max(2000).optional(),
   enabled: z.boolean().optional(),
   ...commandSettingsFields,
+  messageConfig: z.record(z.any()).optional(),
 });
 
 export const commandToggleBody = z.object({
@@ -100,6 +102,21 @@ export const commandTestBody = z.object({
   botId: discordId,
   guildId: discordId,
   channelId: discordId,
+});
+
+/* ---------- Встроенные команды ---------- */
+
+export const builtinCommandUpdateBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  enabled: z.boolean().optional(),
+  description: z.string().max(100).optional(),
+  cooldownSeconds: z.number().int().min(0).max(86400).optional(),
+  channelsMode: channelsModeEnum.optional(),
+  channels: z.array(discordId).max(50).optional(),
+  requireRoles: z.array(discordId).max(20).optional(),
+  excludeRoles: z.array(discordId).max(20).optional(),
+  ephemeral: z.boolean().optional(),
 });
 
 /* ---------- Участники ---------- */
@@ -178,11 +195,32 @@ export const greetingsTestBody = z.object({
   messageConfig: messageConfigSchema,
 });
 
+/**
+ * Тест levels.
+ * `which` — какой таб тестируется:
+ *   - levelUp → отправится Components V2 (как реальный анонс)
+ *   - rank/leaderboard/daily → отправится embed (как реальные команды)
+ */
 export const levelsTestBody = z.object({
   botId: discordId,
   guildId: discordId,
   channelId: discordId,
   messageConfig: messageConfigSchema,
+  which: z.enum(['levelUp', 'rank', 'leaderboard', 'daily']).optional().default('daily'),
+});
+
+/**
+ * Тест birthdays.
+ * `which` — какой таб тестируется:
+ *   - announce (анонс в канал) → Components V2 (как реальное поздравление)
+ *   - cmdSet / cmdToggle / cmdList → embed (как реальные команды)
+ */
+export const birthdaysTestBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  channelId: discordId,
+  messageConfig: messageConfigSchema,
+  which: z.enum(['announce', 'cmdSet', 'cmdToggle', 'cmdList']).optional().default('announce'),
 });
 
 /* -------- Публичные хелперы -------- */

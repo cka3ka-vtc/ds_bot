@@ -58,18 +58,18 @@
     {
       "key": "birthdays",
       "name": "Дни рождения",
-      "description": "Поздравления и роль именинника",
+      "description": "Поздравления и роль именинника на 24 часа",
       "icon": "fa-cake-candles",
       "color": "pink",
       "category": "engagement",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "defaultEnabled": false,
       "events": [],
       "configSchema": {
-        "channelId":      { "type": "text",     "label": "ID канала поздравлений" },
-        "sendTime":       { "type": "text",     "label": "Время (HH:MM)", "default": "09:00" },
-        "birthdayRoleId": { "type": "text",     "label": "ID роли именинника" },
-        "message":        { "type": "textarea", "label": "Текст поздравления" }
+        "announceChannelId": { "type": "text", "label": "Канал объявлений" },
+        "birthdayRoleId":    { "type": "text", "label": "Роль именинника" },
+        "sendTime":          { "type": "text", "label": "Время отправки (HH:MM)" },
+        "messages":          { "type": "json", "label": "Сообщения" }
       }
     },
     {

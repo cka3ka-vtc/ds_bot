@@ -4,6 +4,15 @@
 import { Router } from 'express';
 import { requireAuth, requireBotAccess } from '../auth-middleware.js';
 
+function daysUntilBirthday(ddmm) {
+  const [d, m] = ddmm.split('.').map(Number);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let next = new Date(today.getFullYear(), m - 1, d);
+  if (next < today) next = new Date(today.getFullYear() + 1, m - 1, d);
+  return Math.round((next.getTime() - today.getTime()) / 86_400_000);
+}
+
 export function statsRouter() {
   const router = Router();
   router.use(requireAuth);
@@ -23,7 +32,6 @@ export function statsRouter() {
     const guild = inst.client.guilds.cache.get(guildId);
     if (!guild) return res.status(404).json({ error: 'guild_not_found' });
 
-    // Используем общий кэш
     const { getNonBotMemberCount } = await import('../../core/guildCounts.js');
     const totalMembers = await getNonBotMemberCount(guild);
 
@@ -55,7 +63,33 @@ export function statsRouter() {
       voice: enrich(db.getTopChannels(botId, guildId, 'voice_join', since7d, 5)),
     };
 
-    const recentEvents = db.getRecentActivity(botId, guildId, 5);
+    const recentEvents = db.getRecentActivity(botId, guildId, 30);
+
+    const enabled = db.getEnabledModules(botId, guildId);
+    const enabledSet = new Set(enabled);
+    const modulesEnabled = {
+      levels: enabledSet.has('levels'),
+      birthdays: enabledSet.has('birthdays'),
+    };
+
+    // Дашборд показывает всех с ДР, включая отключивших (для пометки).
+    let upcomingBirthdays = [];
+    if (modulesEnabled.birthdays) {
+      const rows = db.getUpcomingBirthdays(botId, guildId, false);
+      upcomingBirthdays = rows
+        .map((r) => ({
+          userId: r.user_id,
+          username: r.username || null,
+          displayName: r.display_name || r.username || null,
+          avatarUrl: r.avatar_url || null,
+          birthday: r.birthday,
+          birthdayYear: r.birthday_year || null,
+          birthdayPublic: !!r.birthday_public,
+          daysLeft: daysUntilBirthday(r.birthday),
+        }))
+        .sort((a, b) => a.daysLeft - b.daysLeft)
+        .slice(0, 5);
+    }
 
     res.json({
       totalMembers,
@@ -67,6 +101,8 @@ export function statsRouter() {
       topChannels,
       recentEvents,
       updatedAt: now,
+      modulesEnabled,
+      upcomingBirthdays,
     });
   });
 

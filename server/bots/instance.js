@@ -1,5 +1,6 @@
 // server/bots/instance.js
 import { Client, GatewayIntentBits, Events } from 'discord.js';
+import { retryDiscord } from '../core/retry.js';
 
 export class BotInstance {
   constructor({ id, token, isMain, name, avatarUrl, logger, eventBus }) {
@@ -27,7 +28,16 @@ export class BotInstance {
       ],
     });
     this._wireEvents();
-    await this.client.login(this.token);
+
+    // client.login retry-ится только при 429 / network. Invalid token — не retry.
+    await retryDiscord(() => this.client.login(this.token), {
+      maxAttempts: 4,
+      baseDelayMs: 5000,
+      maxDelayMs: 30_000,
+      label: 'client.login',
+      logger: this.logger,
+      context: { bot_id: this.id || null, is_main: this.isMain },
+    });
 
     this.id = this.client.user.id;
     this.name = this.client.user.username;
@@ -53,10 +63,6 @@ export class BotInstance {
   }
 
   _wireEvents() {
-    // ВАЖНО: передаём сущность под явным именем (guild / member),
-    // иначе хендлеры в index.js и модулях получают undefined.
-    // Discord.js-поля (id, user, guild) — геттеры на прототипе,
-    // spread ({ ...member }) их не переносит.
     const emitGuild = (name) => (guild) => {
       this.eventBus.emit(name, {
         botId: this.id,

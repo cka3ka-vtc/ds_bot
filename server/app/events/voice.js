@@ -8,6 +8,7 @@ export function onVoice({ db, logger, payload }) {
   const member = newState.member || oldState.member;
   if (!member || !member.user || member.user.bot) return;
 
+  const userId = member.id;
   const wasInVoice = !!oldState.channelId;
   const isInVoice = !!newState.channelId;
 
@@ -15,12 +16,18 @@ export function onVoice({ db, logger, payload }) {
     const snap = snapshotOf(member);
     try {
       db.addEvent({
-        botId, guildId, userId: member.id, type: 'voice_join',
+        botId, guildId, userId, type: 'voice_join',
         meta: { channelId: newState.channelId, ...snap },
       });
     } catch (err) {
-      logger.warn({ err }, 'addEvent voice failed');
+      logger.warn({
+        err,
+        event: 'add_event_voice_failed',
+        bot_id: botId,
+        guild_id: guildId,
+        user_id: userId,
+      }, 'addEvent voice failed');
     }
-    saveProfileThrottled(db, logger, { botId, guildId, userId: member.id, ...snap });
+    saveProfileThrottled(db, logger, { botId, guildId, userId, ...snap });
   }
 }

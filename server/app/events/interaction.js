@@ -1,7 +1,9 @@
 // server/app/events/interaction.js
-import { EmbedBuilder } from 'discord.js';
-import { BUILTIN_NAMES } from '../../../shared/builtin-commands.js';
+import { EmbedBuilder, MessageFlags } from 'discord.js';
+import { BUILTIN_NAMES, getBuiltinCommand } from '../../../shared/builtin-commands.js';
 import { getNonBotMemberCount } from '../../core/guildCounts.js';
+import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../../core/componentsBuilder.js';
+import { v2ConfigToEmbed, embedHasContent } from '../../core/v2-to-embed.js';
 import { saveProfileThrottled, snapshotOf } from './helpers.js';
 
 const CMD_COOLDOWNS = new Map();
@@ -38,7 +40,9 @@ async function buildCustomCommandTokens(interaction) {
     mention: `<@${interaction.user.id}>`,
     username: interaction.user.username,
     displayName: interaction.member?.displayName || interaction.user.username,
+    avatarUrl: interaction.user.displayAvatarURL?.({ size: 128 }) || '',
     guild: interaction.guild.name,
+    guildIconUrl: interaction.guild.iconURL?.({ size: 128 }) || '',
     channel: `<#${interaction.channelId}>`,
     channelName: interaction.channel?.name || '',
     memberCount: interaction.guild.memberCount || 0,
@@ -47,7 +51,30 @@ async function buildCustomCommandTokens(interaction) {
     date: `<t:${now}:D>`,
     time: `<t:${now}:t>`,
     dateFull: `<t:${now}:F>`,
+    section: 'cmd',
   };
+}
+
+async function safeReply(interaction, content, opts = {}) {
+  try {
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content, flags: MessageFlags.Ephemeral, ...opts });
+    } else if (interaction.deferred && !interaction.replied) {
+      await interaction.editReply({ content, ...opts });
+    } else if (interaction.replied) {
+      await interaction.followUp({ content, flags: MessageFlags.Ephemeral, ...opts });
+    }
+  } catch {}
+}
+
+/**
+ * Какой модуль обслуживает builtin-команду.
+ *   levels      → rank, leaderboard, daily
+ *   birthdays   → birthday_set, birthday_toggle, birthdays
+ */
+function moduleForBuiltin(name) {
+  const meta = getBuiltinCommand(name);
+  return meta?.moduleKey || null;
 }
 
 export async function onInteraction({ db, registry, logger, payload }) {
@@ -56,9 +83,6 @@ export async function onInteraction({ db, registry, logger, payload }) {
   if (!interaction?.isChatInputCommand?.()) return;
   if (interaction.user?.bot) return;
 
-  // ── Диагностика на входе ──
-  // Если здесь payload.botId ≠ interaction.client.user.id — это баг в instance.js,
-  // но полезно видеть сразу. Если interaction.guildId ≠ payload.guildId — тоже.
   logger.info({
     event: 'interaction',
     cmd: interaction.commandName,
@@ -69,10 +93,68 @@ export async function onInteraction({ db, registry, logger, payload }) {
     applicationId: interaction.applicationId || null,
     userId: interaction.user?.id,
     isBuiltin: BUILTIN_NAMES.has(interaction.commandName),
+    replied: interaction.replied,
+    deferred: interaction.deferred,
   }, 'interaction: dispatch');
 
-  const snap = snapshotOf(interaction.member || interaction.user);
+  /* ═══════════════ 1. Builtin ═══════════════ */
+  if (BUILTIN_NAMES.has(interaction.commandName)) {
+    const moduleKey = moduleForBuiltin(interaction.commandName);
+    const mod = moduleKey ? registry.get(moduleKey) : null;
 
+    if (!mod || typeof mod.handleCommand !== 'function') {
+      logger.error(
+        {
+          cmd: interaction.commandName,
+          moduleKey,
+          hasModule: !!mod,
+          moduleHasHandle: !!mod?.handleCommand,
+        },
+        'interaction: module unavailable — check module load errors at startup',
+      );
+      await safeReply(interaction, '⚠ Команда временно недоступна');
+      return;
+    }
+
+    if (interaction.replied || interaction.deferred) {
+      logger.warn(
+        { cmd: interaction.commandName, replied: interaction.replied, deferred: interaction.deferred },
+        'interaction: builtin already acknowledged — skipping',
+      );
+      return;
+    }
+
+    try {
+      await mod.handleCommand(interaction, { botId, guildId });
+    } catch (err) {
+      logger.error({ err, command: interaction.commandName }, `${moduleKey}.handleCommand failed`);
+      await safeReply(interaction, '❌ Ошибка');
+    }
+
+    // Побочные эффекты — fire-and-forget.
+    setImmediate(() => {
+      try {
+        const snap = snapshotOf(interaction.member || interaction.user);
+        db.addEvent({
+          botId, guildId, userId: interaction.user.id, type: 'command',
+          meta: { command: interaction.commandName, ...snap },
+        });
+        saveProfileThrottled(db, logger, { botId, guildId, userId: interaction.user.id, ...snap });
+      } catch (err) {
+        logger.warn({ err }, 'addEvent (builtin) failed');
+      }
+
+      if (typeof mod.awardCommandXp === 'function') {
+        mod.awardCommandXp(interaction, { botId, guildId }).catch((err) => {
+          logger.warn({ err, cmd: interaction.commandName }, 'awardCommandXp failed');
+        });
+      }
+    });
+    return;
+  }
+
+  /* ═══════════════ 2. Custom ═══════════════ */
+  const snap = snapshotOf(interaction.member || interaction.user);
   try {
     db.addEvent({
       botId, guildId, userId: interaction.user.id, type: 'command',
@@ -81,45 +163,20 @@ export async function onInteraction({ db, registry, logger, payload }) {
   } catch (err) {
     logger.warn({ err }, 'addEvent command failed');
   }
-
   saveProfileThrottled(db, logger, { botId, guildId, userId: interaction.user.id, ...snap });
 
-  /* ─── 1. Builtin ─── */
-  if (BUILTIN_NAMES.has(interaction.commandName)) {
-    const levelsMod = registry.get('levels');
-    if (!levelsMod?.handleCommand) {
-      logger.error({ cmd: interaction.commandName }, 'interaction: levels module has no handleCommand');
-      try {
-        await interaction.reply({
-          content: '⚠ Команда временно недоступна',
-          ephemeral: true,
-        });
-      } catch {}
-      return;
-    }
-    try {
-      // botId/guildId передаём явно — НЕ полагаемся на interaction.client.user.id.
-      await levelsMod.handleCommand(interaction, { botId, guildId });
-    } catch (err) {
-      logger.error({ err, command: interaction.commandName }, 'levels.handleCommand failed');
-      try {
-        if (!interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: '❌ Ошибка', ephemeral: true });
-        }
-      } catch {}
-    }
-    return;
-  }
-
-  /* ─── 2. Custom ─── */
   const customs = db.getCustomCommands(botId, guildId);
   const cmd = customs.find(
     (c) => c.enabled && c.name.toLowerCase() === interaction.commandName,
   );
   if (!cmd) return;
 
-  const replyEphemeral = (msg) =>
-    interaction.reply({ content: msg, ephemeral: true }).catch(() => {});
+  if (interaction.replied || interaction.deferred) {
+    logger.warn({ cmd: interaction.commandName }, 'interaction: custom already acknowledged — skipping');
+    return;
+  }
+
+  const replyEphemeral = (msg) => safeReply(interaction, msg);
 
   const channelId = interaction.channelId;
   if (cmd.channelsMode === 'whitelist' && cmd.channels.length && !cmd.channels.includes(channelId)) {
@@ -144,14 +201,60 @@ export async function onInteraction({ db, registry, logger, payload }) {
   }
 
   const tokens = await buildCustomCommandTokens(interaction);
-  if (/\{count\}/.test(cmd.response || '')) {
+
+  const cfgObj = cmd.messageConfig || {};
+  const hasBlocks = cfgObj && typeof cfgObj === 'object' &&
+    (cfgObj.title || cfgObj.subtitle || (Array.isArray(cfgObj.blocks) && cfgObj.blocks.length));
+
+  if (/\{count\}/.test(JSON.stringify(hasBlocks ? cfgObj : (cmd.response || '')))) {
     try { tokens.count = await getNonBotMemberCount(interaction.guild); }
     catch { tokens.count = tokens.memberCount; }
+  } else {
+    tokens.count = tokens.memberCount;
   }
-  const resolvedResponse = resolveCommandTokens(cmd.response, tokens) || '✅ Команда выполнена';
+
+  const replyFlags = cmd.ephemeral ? MessageFlags.Ephemeral : undefined;
 
   try {
     if (interaction.deferred || interaction.replied) return;
+
+    if (hasBlocks) {
+      let components = null;
+      try {
+        components = buildComponentsFromConfig(cfgObj, tokens);
+      } catch (err) {
+        logger.warn({ err, cmd: cmd.name }, 'custom command: buildComponents failed');
+      }
+
+      if (components?.length) {
+        try {
+          await interaction.reply({
+            flags: replyFlags
+              ? (FLAG_COMPONENTS_V2 | replyFlags)
+              : FLAG_COMPONENTS_V2,
+            components,
+            allowedMentions: { parse: ['users'] },
+          });
+          try { db.incrementCommandUsage(botId, guildId, cmd.id); } catch {}
+          return;
+        } catch (err) {
+          logger.warn({ err, cmd: cmd.name }, 'custom command: V2 reply failed, fallback to embed');
+        }
+      }
+
+      const embed = v2ConfigToEmbed(cfgObj, tokens);
+      if (embedHasContent(embed)) {
+        await interaction.reply({
+          embeds: [embed],
+          ...(replyFlags ? { flags: replyFlags } : {}),
+          allowedMentions: { parse: ['users'] },
+        });
+        try { db.incrementCommandUsage(botId, guildId, cmd.id); } catch {}
+        return;
+      }
+    }
+
+    const resolvedResponse = resolveCommandTokens(cmd.response, tokens) || '✅ Команда выполнена';
 
     if (cmd.responseMode === 'embed') {
       const embed = new EmbedBuilder()
@@ -159,13 +262,13 @@ export async function onInteraction({ db, registry, logger, payload }) {
         .setDescription(resolvedResponse);
       await interaction.reply({
         embeds: [embed],
-        ephemeral: cmd.ephemeral,
+        ...(replyFlags ? { flags: replyFlags } : {}),
         allowedMentions: { parse: ['users'] },
       });
     } else {
       await interaction.reply({
         content: resolvedResponse,
-        ephemeral: cmd.ephemeral,
+        ...(replyFlags ? { flags: replyFlags } : {}),
         allowedMentions: { parse: ['users'] },
       });
     }
@@ -173,5 +276,6 @@ export async function onInteraction({ db, registry, logger, payload }) {
     try { db.incrementCommandUsage(botId, guildId, cmd.id); } catch {}
   } catch (err) {
     logger.warn({ err, command: interaction.commandName }, 'custom command reply failed');
+    await safeReply(interaction, '❌ Не удалось отправить ответ');
   }
 }

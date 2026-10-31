@@ -535,13 +535,45 @@ select:disabled {
   box-shadow: var(--shadow-lg);
   pointer-events: auto; max-width: 360px;
   animation: toastIn .3s ease backwards;
+  position: relative;
+  padding-right: 38px; /* место под кнопку закрытия */
 }
-.toast i { width: 20px; text-align: center; font-size: 14px; }
+.toast i { width: 20px; text-align: center; font-size: 14px; flex-shrink: 0; }
 .toast.success i { color: var(--green); }
 .toast.info    i { color: var(--blue); }
 .toast.warn    i { color: var(--orange); }
 .toast.error   i { color: var(--red); }
 .toast.leaving { animation: toastOut .25s ease forwards; }
+
+.toast-text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.toast-close {
+  position: absolute;
+  top: 50%; right: 8px;
+  transform: translateY(-50%);
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  display: grid; place-items: center;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  transition: background .15s, color .15s;
+}
+.toast-close:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.toast-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 @keyframes toastIn  { from { opacity: 0; transform: translateX(40px); } }
 @keyframes toastOut { to   { opacity: 0; transform: translateX(40px); } }
 

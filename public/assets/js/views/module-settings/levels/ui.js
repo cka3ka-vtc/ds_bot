@@ -8,10 +8,13 @@ import { LEVELS_MSG } from '/shared/command-editor-strings.js';
 const L = UI.levels;
 const M = LEVELS_MSG;
 
-export function buildPageHTML(cfg) {
+export function buildPageHTML(cfg, channels = []) {
   const ev = cfg.enabledEvents;
   const evCfg = cfg.events;
   const activeMsgTab = 'levelUp';
+
+  const textChannels = channels.filter((c) => c.type === 0);
+  const hasVoiceChannels = channels.some((c) => c.type === 2 || c.type === 13);
 
   return `
     <div class="module-page">
@@ -37,7 +40,7 @@ export function buildPageHTML(cfg) {
                   <div class="channel-status empty" data-channel-status data-tooltip="Канал не выбран">
                     <i class="fa-solid fa-circle-minus"></i>
                   </div>
-                  ${channelPickerHTML({ id: 'levels_channel' })}
+                  ${channelPickerHTML({ id: 'levels_channel', placeholder: 'Выберите текстовый канал...' })}
                 </div>
                 <span class="hint">${L.channelHint}</span>
               </div>
@@ -172,13 +175,13 @@ export function buildPageHTML(cfg) {
         <div class="gr-grid-2">
           <section class="gr-section">
             <div class="gr-section-head">
-              <div><h3>${L.exclChannelsTitle}</h3><p>${L.exclChannelsSubtitle}</p></div>
+              <div><h3>${L.exclChannelsTitle}</h3><p>${L.exclChannelsSubtitle}${hasVoiceChannels ? ' — можно добавлять и голосовые' : ''}</p></div>
             </div>
             <div class="gr-section-body">
+              <div class="chips" data-excl-channels></div>
               <div class="exclusion-picker">
                 ${channelPickerHTML({ id: 'excl_channel_picker', placeholder: L.exclChannelsAdd })}
               </div>
-              <div class="chips" data-excl-channels></div>
             </div>
           </section>
 
@@ -187,10 +190,10 @@ export function buildPageHTML(cfg) {
               <div><h3>${L.exclRolesTitle}</h3><p>${L.exclRolesSubtitle}</p></div>
             </div>
             <div class="gr-section-body">
+              <div class="chips" data-excl-roles></div>
               <div class="exclusion-picker">
                 ${rolePickerHTML({ id: 'excl_role_picker', roles: [], placeholder: L.exclRolesAdd })}
               </div>
-              <div class="chips" data-excl-roles></div>
             </div>
           </section>
         </div>

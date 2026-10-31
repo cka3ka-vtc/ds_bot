@@ -68,6 +68,24 @@ export function createApp({ db, botManager, registry, logger }) {
       req(req) { return { id: req.id, method: req.method, url: req.url }; },
       res(res) { return { statusCode: res.statusCode }; },
     },
+    /**
+     * customProps вызывается в момент завершения запроса (response event).
+     * К этому времени:
+     *   - requireAuth уже выставил req.user (для /api/*);
+     *   - botId/guildId извлечены из query/body;
+     *   - res.durationMs заполнен pino-http.
+     *
+     * Все поля — плоские (не вложенные объекты), чтобы их можно было
+     * агрегировать в Grafana/Loki по `{user_id="123"}`.
+     */
+    customProps: (req, res) => ({
+      user_id: req.user?.id || null,
+      bot_id: req.query?.botId || req.body?.botId || null,
+      guild_id: req.query?.guildId || req.body?.guildId || null,
+      duration_ms: typeof res.durationMs === 'number' ? res.durationMs : null,
+      route: req.route?.path ? `${req.method} ${req.route.path}` : null,
+      ip: req.ip || null,
+    }),
   }));
 
   app.use(express.json({ limit: '1mb' }));
@@ -95,8 +113,6 @@ export function createApp({ db, botManager, registry, logger }) {
     });
   });
 
-  // authLimiter снят с /auth: применяется точечно внутри authRouter()
-  // только к /auth/discord* — чтобы /auth/me не выкидывал пользователя при F5.
   app.use('/auth', authRouter());
   app.use(originCheck());
 
@@ -120,7 +136,14 @@ export function createApp({ db, botManager, registry, logger }) {
   app.use(express.static(path.resolve('public')));
   app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
   app.use((err, req, res, _next) => {
-    logger.error({ err, reqId: req.id }, 'request error');
+    logger.error({
+      err,
+      req_id: req.id,
+      user_id: req.user?.id || null,
+      bot_id: req.query?.botId || req.body?.botId || null,
+      guild_id: req.query?.guildId || req.body?.guildId || null,
+      route: req.route?.path ? `${req.method} ${req.route.path}` : `${req.method} ${req.path}`,
+    }, 'request error');
     res.status(500).json({ error: 'internal_error', requestId: req.id });
   });
 

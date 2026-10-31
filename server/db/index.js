@@ -24,13 +24,13 @@ export function initDb(dbPath, logger) {
     guildManager,
     guild: g,
 
-    // ─────── MAIN ───────
+    // ───── MAIN ─────
     ...usersRepo,
     ...botsRepo,
     ...guildsRepo,
     ...auditRepo,
 
-    // ─────── GUILD ───────
+    // ───── GUILD ─────
     ensureModuleDefaults: (botId, guildId, mods) => g(botId, guildId).ensureModuleDefaults(mods),
     getModuleConfig: (botId, guildId, key) => g(botId, guildId).getModuleConfig(key),
     setModuleEnabled: (botId, guildId, key, enabled) => g(botId, guildId).setModuleEnabled(key, enabled),
@@ -53,6 +53,26 @@ export function initDb(dbPath, logger) {
     getDailyCooldown: (botId, guildId, userId) => g(botId, guildId).getDailyCooldown(userId),
     setDailyAt: (botId, guildId, userId, ts) => g(botId, guildId).setDailyAt(userId, ts),
 
+    // birthdays
+    getBirthday: (botId, guildId, userId) => g(botId, guildId).getBirthday(userId),
+    setBirthday: (botId, guildId, userId, ddmm, year) => g(botId, guildId).setBirthday(userId, ddmm, year),
+    setBirthdayPublic: (botId, guildId, userId, pub) => g(botId, guildId).setBirthdayPublic(userId, pub),
+    getUpcomingBirthdays: (botId, guildId, publicOnly = true) =>
+      g(botId, guildId).getUpcomingBirthdays(publicOnly),
+    getTodayBirthdays: (botId, guildId, ddmm) => g(botId, guildId).getTodayBirthdays(ddmm),
+    countPublicBirthdays: (botId, guildId) => g(botId, guildId).countPublicBirthdays(),
+    getBirthdayRoleExpired: (botId, guildId, nowTs) => g(botId, guildId).getBirthdayRoleExpired(nowTs),
+    setBirthdayRoleUntil: (botId, guildId, userId, untilTs) => g(botId, guildId).setBirthdayRoleUntil(userId, untilTs),
+    clearBirthdayRoleUntil: (botId, guildId, userId) => g(botId, guildId).clearBirthdayRoleUntil(userId),
+    getLastBirthdayAnnounced: (botId, guildId, userId) => g(botId, guildId).getLastBirthdayAnnounced(userId),
+    setLastBirthdayAnnounced: (botId, guildId, userId, ts) => g(botId, guildId).setLastBirthdayAnnounced(userId, ts),
+    setBirthdayAnnounceMessage: (botId, guildId, userId, channelId, messageId, createdAt) =>
+      g(botId, guildId).setLastAnnounce(userId, channelId, messageId, createdAt),
+    clearBirthdayAnnounceMessage: (botId, guildId, userId) =>
+      g(botId, guildId).clearLastAnnounce(userId),
+    getOldBirthdayAnnouncements: (botId, guildId, beforeTs) =>
+      g(botId, guildId).getOldAnnouncements(beforeTs),
+
     // moderation
     getModActions: (botId, guildId, kind) => g(botId, guildId).getModActions(kind),
     addModAction: (botId, guildId, a) => g(botId, guildId).addModAction(a),
@@ -63,13 +83,18 @@ export function initDb(dbPath, logger) {
     countLogsByLevel: (botId, guildId, level, since) => g(botId, guildId).countLogsByLevel(level, since),
     getRecentAudit: (botId, guildId, limit) => g(botId, guildId).getRecentAudit(limit),
 
-    // commands
+    // commands — custom
     getCustomCommands: (botId, guildId) => g(botId, guildId).getCustomCommands(),
     createCustomCommand: (botId, guildId, c) => g(botId, guildId).createCustomCommand(c),
     updateCustomCommand: (botId, guildId, id, data) => g(botId, guildId).updateCustomCommand(id, data),
     deleteCustomCommand: (botId, guildId, id) => g(botId, guildId).deleteCustomCommand(id),
     getCustomCommand: (botId, guildId, id) => g(botId, guildId).getCustomCommand(id),
     incrementCommandUsage: (botId, guildId, id) => g(botId, guildId).incrementCommandUsage(id),
+
+    // commands — builtin settings
+    getBuiltinSettings: (botId, guildId, name) => g(botId, guildId).getBuiltinSettings(name),
+    getAllBuiltinSettings: (botId, guildId) => g(botId, guildId).getAllBuiltinSettings(),
+    upsertBuiltinSettings: (botId, guildId, name, data) => g(botId, guildId).upsertBuiltinSettings(name, data),
 
     // events
     addEvent: ({ botId, guildId, userId, type, meta }) =>
