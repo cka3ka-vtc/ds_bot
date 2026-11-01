@@ -1,0 +1,676 @@
+/* ============================================================
+   Module settings · moderation
+   ============================================================ */
+
+.gr-settings .filter-card .form-field + .form-field {
+  margin-top: 0;
+}
+
+/* ───────────── Карточки фильтров ───────────── */
+.filters-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.filter-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  transition: border-color .15s, box-shadow .15s, opacity .15s;
+}
+.filter-card:hover { border-color: var(--border-strong); }
+.filter-card.is-off { opacity: .7; }
+.filter-card.is-off .filter-icon { filter: grayscale(.4); }
+.filter-card.expanded {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.filter-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+.filter-card.expanded .filter-card-head {
+  border-bottom: 1px solid var(--border);
+}
+
+.filter-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.filter-icon.blue   { background: var(--blue-soft);   color: var(--blue); }
+.filter-icon.purple { background: var(--purple-soft); color: var(--purple); }
+.filter-icon.pink   { background: var(--pink-soft);   color: var(--pink); }
+.filter-icon.green  { background: var(--green-soft);  color: var(--green); }
+.filter-icon.orange { background: var(--orange-soft); color: var(--orange); }
+.filter-icon.red    { background: var(--red-soft);    color: var(--red); }
+
+.filter-meta { flex: 1; min-width: 0; }
+.filter-meta strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+  margin-bottom: 1px;
+}
+.filter-meta span {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.35;
+  display: block;
+}
+
+.filter-card-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ───────────── Вкладки ───────────── */
+.filter-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-3);
+  border-radius: var(--r-sm);
+  overflow-x: auto;
+  scrollbar-width: none;
+  width: fit-content;
+  max-width: 100%;
+}
+.filter-tabs::-webkit-scrollbar { display: none; }
+
+.filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.filter-tab i { font-size: 10px; opacity: .8; }
+.filter-tab:hover { color: var(--text); background: var(--surface); }
+.filter-tab.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+.filter-tab.active i { opacity: 1; }
+
+.filter-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ───────────── sub-section ───────────── */
+.sub-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.sub-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: .6px;
+}
+.sub-section-title i {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.sub-section-subtitle {
+  margin-top: -6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* ───────────── Параметры фильтра ───────────── */
+.filter-params {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.xp-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.xp-input label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-soft);
+  letter-spacing: .2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-card .num-stepper {
+  min-width: 150px;
+}
+.filter-card .num-stepper-input {
+  min-width: 60px;
+  font-size: 14px;
+  padding: 0 8px;
+}
+
+/* ───────────── Антирейд: подсекции ───────────── */
+.raid-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.raid-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.raid-subsection-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: .1px;
+}
+.raid-subsection-title i {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10.5px;
+  flex-shrink: 0;
+}
+
+.raid-subsection .hint {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.raid-dependent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+  margin-left: 4px;
+}
+
+/* ───────────── Action config ───────────── */
+.action-config {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 640px) {
+  .action-config { grid-template-columns: 1fr; }
+}
+.action-config [data-extra] { min-width: 0; }
+
+/* ───────────── Область ───────────── */
+.scope-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.scope-row .segmented-control {
+  width: 100%;
+  max-width: 360px;
+}
+
+/* ───────────── Moderation note ───────────── */
+.moderation-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+.moderation-note i {
+  color: var(--accent);
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.moderation-note--warn {
+  background: var(--orange-soft);
+}
+.moderation-note--warn i {
+  color: var(--orange);
+}
+
+/* ───────────── Reset блок ───────────── */
+.reset-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.reset-days-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 4px;
+}
+.reset-days-row > label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.reset-days-row [data-reset-days] {
+  flex: 0 0 auto;
+}
+
+/* ───────────── Toggle disabled ───────────── */
+.toggle:disabled,
+.toggle.is-disabled {
+  opacity: .4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ───────────── num-stepper disabled ───────────── */
+.num-stepper.is-disabled {
+  opacity: .45;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+.num-stepper.is-disabled .num-stepper-btn,
+.num-stepper.is-disabled .num-stepper-input {
+  cursor: not-allowed;
+  background: var(--surface-3);
+  color: var(--muted);
+}
+.num-stepper.is-disabled .num-stepper-btn:hover {
+  background: var(--surface);
+  color: var(--muted);
+}
+
+/* ───────────── Словарная панель ───────────── */
+.dict-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+.dict-head {
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  background: var(--surface-2);
+}
+.dict-head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.dict-head-left i {
+  color: var(--purple);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.dict-head-left strong {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.dict-head-left span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.dict-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.dict-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dict-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 640px) {
+  .dict-row { grid-template-columns: 1fr; }
+}
+.dict-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dict-field label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+.dict-field textarea {
+  min-height: 64px;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+/* ───────────── Словарь: 4 gr-toggle в сетке ───────────── */
+.dict-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.dict-options .gr-toggle {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  user-select: none;
+  transition: background .2s, border-color .2s;
+}
+.dict-options .gr-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.dict-options .gr-toggle-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-right: 44px;
+  min-width: 0;
+}
+.dict-options .gr-toggle strong {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+  transition: color .2s;
+}
+.dict-options .gr-toggle-content span {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.dict-options .gr-toggle-state {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: var(--muted);
+  pointer-events: none;
+  transition: background .2s, color .2s;
+}
+.dict-options .gr-toggle-state::before { content: 'Выкл'; }
+.dict-options .gr-toggle:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+.dict-options .gr-toggle:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.dict-options .gr-toggle.is-on,
+.dict-options .gr-toggle:has(input:checked) {
+  background: var(--green-soft);
+  border-color: rgba(22, 163, 74, .4);
+}
+.dict-options .gr-toggle.is-on:hover,
+.dict-options .gr-toggle:has(input:checked):hover {
+  border-color: var(--green);
+}
+.dict-options .gr-toggle.is-on .gr-toggle-state,
+.dict-options .gr-toggle:has(input:checked) .gr-toggle-state {
+  background: var(--green);
+  color: #fff;
+}
+.dict-options .gr-toggle.is-on .gr-toggle-state::before,
+.dict-options .gr-toggle:has(input:checked) .gr-toggle-state::before {
+  content: 'Вкл';
+}
+.dict-options .gr-toggle.is-on strong,
+.dict-options .gr-toggle:has(input:checked) strong {
+  color: var(--green);
+}
+
+/* ───────────── Карта нарушений ───────────── */
+.escalation-table {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.escalation-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 220px 34px;
+  gap: 10px;
+  align-items: center;
+}
+@media (max-width: 720px) {
+  .escalation-row {
+    grid-template-columns: 60px 1fr;
+  }
+  .escalation-row > [data-esc-duration],
+  .escalation-row > [data-esc-remove] {
+    grid-column: 2;
+  }
+}
+.escalation-row .num-stepper {
+  min-width: 200px;
+}
+.escalation-row .num-stepper-input {
+  min-width: 70px;
+  font-size: 14px;
+}
+
+.escalation-level {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  border-radius: var(--r-md);
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  color: var(--text-soft);
+}
+.escalation-level.low {
+  background: var(--blue-soft);
+  color: var(--blue);
+  border-color: rgba(59, 130, 246, .35);
+}
+.escalation-level.mid {
+  background: var(--orange-soft);
+  color: var(--orange);
+  border-color: rgba(245, 158, 11, .35);
+}
+.escalation-level.high {
+  background: var(--red-soft);
+  color: var(--red);
+  border-color: rgba(220, 38, 38, .35);
+}
+
+.escalation-remove {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s, color .15s, border-color .15s, transform .1s;
+}
+.escalation-remove:hover {
+  background: var(--red-soft);
+  color: var(--red);
+  border-color: rgba(220, 38, 38, .35);
+}
+.escalation-remove:active { transform: scale(.92); }
+.escalation-remove i { font-size: 12px; line-height: 1; }
+
+.escalation-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ───────────── Empty state (ЛС выключены) ───────────── */
+.filter-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 32px 20px;
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+}
+.filter-empty-state i {
+  font-size: 28px;
+  color: var(--border-strong);
+  margin-bottom: 4px;
+}
+.filter-empty-state strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.filter-empty-state span {
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 340px;
+  line-height: 1.5;
+}
+
+/* ───────────── Прочее ───────────── */
+.gr-perm-status {
+  margin-top: 12px;
+}
+
+.badge.pill {
+  border-radius: 999px;
+  padding: 1px 10px;
+  font-size: 11px;
+}
+
+/* ───────────── Проф-панель ───────────── */
+.prof-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.prof-mode-seg {
+  width: fit-content;
+}
+
+.dict-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.dict-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.dict-stats i { font-size: 10px; }
+.dict-stats b { color: var(--text); font-weight: 700; }
+.dict-stats .hint {
+  margin-left: auto;
+  font-style: italic;
+}

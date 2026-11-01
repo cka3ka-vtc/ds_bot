@@ -1,0 +1,28 @@
+// shared/strings/commands.js
+
+export const commands = {
+  new: 'Новая команда',
+  tabAll: 'Все', tabBuiltin: 'Встроенные', tabCustom: 'Пользовательские',
+  searchPlaceholder: 'Поиск команды...',
+  tableCommand: 'Команда', tableCategory: 'Категория', tableType: 'Тип', tableActions: 'Действия',
+  emptyTitle: 'Команды не найдены',
+  emptyHint: 'Попробуйте изменить фильтр или создать новую команду',
+  typeBuiltin: 'Встроенная', typeCustom: 'Custom', badgeBuiltin: 'Встроенная',
+  editorCreate: 'Новая команда', editorEdit: 'Редактирование команды',
+  editorSubtitleCreate: 'Слэш-команда сервера',
+  editorLabelName: 'Имя команды (без /)', editorLabelDesc: 'Описание', editorLabelResponse: 'Ответ',
+  editorPlaceholderName: 'hello', editorPlaceholderDesc: 'Краткое описание',
+  editorPlaceholderResponse: 'Привет, {user}!',
+  editorNameHint: 'Только буквы, цифры, _ и -',
+  editorNameFree: '✓ Имя свободно',
+  editorNameDuplicate: '⚠ Команда с таким именем уже существует',
+  editorNameReserved: '⚠ Это имя зарезервировано за встроенной командой',
+  editorNameSanitized: 'Символы будут удалены: → ',
+  editorNameInvalid: 'Имя: 2–32 символа (буквы, цифры, _ и -)',
+  create: 'Создать',
+  confirmDelete: 'Удалить команду?',
+  minNameLength: 'Минимум 2 символа',
+  created: 'Создано',
+  noCommandsEmptyTitle: 'Выберите сервер',
+  noCommandsEmptyHint: 'Сначала выберите сервер в сайдбаре',
+};

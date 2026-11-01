@@ -1,0 +1,141 @@
+/* ============================================================
+   Module settings · birthdays
+   Специфичные стили модуля «Дни рождения».
+   Общий каркас (gr-settings, gr-section, gr-tabs, module-page) —
+   в common.css и greetings.css.
+   ============================================================ */
+
+/* ─── Строка «Время отправки» ─── */
+.birthdays-time-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.birthdays-time-row input[type="time"].input {
+  max-width: 160px;
+  font-variant-numeric: tabular-nums;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: .5px;
+}
+.birthdays-time-row .hint {
+  margin-left: 0;
+  flex: 1;
+  min-width: 180px;
+}
+@media (max-width: 640px) {
+  .birthdays-time-row { gap: 8px; }
+  .birthdays-time-row input[type="time"].input { max-width: 100%; }
+}
+
+/* ─── Блок «Команды модуля» ─── */
+.birthdays-cmd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.birthdays-cmd-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  transition: border-color .18s, background .18s, box-shadow .18s;
+}
+.birthdays-cmd-item:hover {
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.birthdays-cmd-name {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.birthdays-cmd-name code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12.5px;
+  padding: 3px 9px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 5px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background .18s, color .18s;
+}
+.birthdays-cmd-item:hover .birthdays-cmd-name code {
+  background: var(--accent);
+  color: #fff;
+}
+
+.birthdays-cmd-desc {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.45;
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+}
+
+.birthdays-cmd-item .btn-link {
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .birthdays-cmd-item {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "name  link"
+      "desc  desc";
+    gap: 8px 12px;
+  }
+  .birthdays-cmd-name { grid-area: name; }
+  .birthdays-cmd-desc { grid-area: desc; }
+  .birthdays-cmd-item .btn-link { grid-area: link; }
+}
+
+/* ─── Улучшенный вид статуса канала (в этом модуле часто нужен) ─── */
+.birthdays-channel-hint-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.birthdays-channel-hint-row i {
+  color: var(--blue);
+  font-size: 12px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ─── Табы редактора сообщений — компактнее на узких экранах ─── */
+.module-page .gr-tabs {
+  flex-wrap: wrap;
+}
+@media (max-width: 640px) {
+  .module-page .gr-tabs {
+    width: 100%;
+  }
+  .module-page .gr-tab {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 7px 10px;
+    font-size: 11.5px;
+    text-align: center;
+    white-space: normal;
+    line-height: 1.25;
+  }
+}
