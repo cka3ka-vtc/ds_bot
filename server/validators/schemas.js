@@ -229,4 +229,10 @@ export const guildSettingsBody = z.object({
   guildId: discordId,
 });
 
+export const moderationTestBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  text: z.string().min(1).max(4000),
+});
+
 export { messageConfigSchema, messageBlockSchema, discordId, hexColor };

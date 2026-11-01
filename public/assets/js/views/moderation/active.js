@@ -1,6 +1,9 @@
 // public/assets/js/views/moderation/active.js
+// Активные наказания — единый вид через logEntry (компактная версия).
+
 import { escapeHtml } from '../../core/utils.js';
 import { UI } from '/shared/ui-strings.js';
+import { renderLogEntry } from '../../components/logEntry.js';
 
 export function renderActiveSections(actions) {
   const now = Math.floor(Date.now() / 1000);
@@ -16,36 +19,59 @@ export function renderActiveSections(actions) {
       <div class="card-head">
         <div><span class="card-title">${UI.moderation.active.title}</span></div>
       </div>
-      <div class="active-lists">
-        ${section(UI.moderation.active.mutes, mutes, 'purple', 'fa-microphone-slash')}
-        ${section(UI.moderation.active.bans, bans, 'red', 'fa-ban')}
-        ${section(UI.moderation.active.warns, warns, 'orange', 'fa-triangle-exclamation')}
+      <div class="card-body" style="padding:8px 12px;">
+        ${section(UI.moderation.active.mutes, mutes)}
+        ${section(UI.moderation.active.bans, bans)}
+        ${section(UI.moderation.active.warns, warns)}
       </div>
     </div>`;
 }
 
-function section(title, items, color, icon) {
-  const html = items.length
-    ? items.slice(0, 4).map((a) => {
-        const shortId = (a.userId || '').slice(-2).toUpperCase();
-        const expires = a.expiresAt
-          ? `· ${UI.moderation.active.until} ${new Date(a.expiresAt * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
-          : `· ${UI.moderation.active.forever}`;
-        return `<div class="active-list-item">
-          <div class="active-list-avatar" style="background:var(--${color});">${escapeHtml(shortId)}</div>
-          <div class="active-list-info">
-            <div class="active-list-name">&lt;@${escapeHtml(a.userId)}&gt;</div>
-            <div class="active-list-meta">${escapeHtml(a.reason || UI.moderation.active.noReason)} ${expires}</div>
-          </div>
-        </div>`;
-      }).join('')
-    : `<div class="active-list-empty">${UI.moderation.active.empty}</div>`;
+function section(title, items) {
+  const count = items.length;
+  if (!count) {
+    return `<div class="active-list-section">
+      <h4>
+        <span>${escapeHtml(title)}</span>
+        <span class="count">0</span>
+      </h4>
+      <div class="active-list-empty">${UI.moderation.active.empty}</div>
+    </div>`;
+  }
+
+  const entries = items.slice(0, 4).map((a) => {
+    const metaParts = [];
+    if (a.expiresAt) {
+      const dt = new Date(a.expiresAt * 1000).toLocaleTimeString('ru-RU', {
+        hour: '2-digit', minute: '2-digit',
+      });
+      metaParts.push(`${UI.moderation.active.until} ${dt}`);
+    } else {
+      metaParts.push(UI.moderation.active.forever);
+    }
+    if (!a.moderatorId) metaParts.push('автоматически');
+
+    return {
+      tone: a.kind,
+      label: UI.moderation.kinds[a.kind] || a.kind,
+      userId: a.userId,
+      username: a.username || null,
+      displayName: a.displayName || null,
+      avatarUrl: a.avatarUrl || null,
+      text: escapeHtml(a.reason || UI.moderation.active.noReason),
+      meta: metaParts.join(' · '),
+      timestamp: a.createdAt,
+    };
+  });
+
+  const preview = `<div class="log-list">${entries.map(renderLogEntry).join('')}</div>`;
 
   return `<div class="active-list-section">
     <h4>
-      <span><i class="fa-solid ${icon}" style="color:var(--${color});margin-right:6px;font-size:11px;"></i>${title}</span>
-      <span class="count">${items.length}</span>
+      <span>${escapeHtml(title)}</span>
+      <span class="count">${count}</span>
     </h4>
-    ${html}
+    ${preview}
+    ${count > 4 ? `<div class="active-list-more">+${count - 4} ещё</div>` : ''}
   </div>`;
 }

@@ -7,11 +7,13 @@ import { UI } from '/shared/ui-strings.js';
 import greetingsSettingsPage from '../module-settings/greetings.js';
 import levelsSettingsPage from '../module-settings/levels/index.js';
 import birthdaysSettingsPage from '../module-settings/birthdays.js';
+import moderationSettingsPage from '../module-settings/moderation.js';
 
 export const openableModules = {
   greetings: greetingsSettingsPage,
   levels: levelsSettingsPage,
   birthdays: birthdaysSettingsPage,
+  moderation: moderationSettingsPage,
 };
 
 export function renderModulesGrid(view, modules) {

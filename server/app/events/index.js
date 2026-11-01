@@ -9,6 +9,7 @@ import { onGuildCreate, onGuildDelete } from './guild.js';
 const FORWARDED_EVENTS = [
   'guildMemberAdd',
   'guildMemberRemove',
+  'guildMemberUpdate', 
   'messageCreate',
   'interactionCreate',
   'voiceStateUpdate',

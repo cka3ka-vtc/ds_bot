@@ -86,6 +86,20 @@ export class BotInstance {
     this.client.on(Events.GuildMemberAdd,    emitMember('guildMemberAdd'));
     this.client.on(Events.GuildMemberRemove, emitMember('guildMemberRemove'));
 
+    /**
+     * guildMemberUpdate — нужен для модуля «Дни рождения»:
+     * мгновенно снимает роль именинника, если её выдали в неправильный день.
+     */
+    this.client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
+      this.eventBus.emit('guildMemberUpdate', {
+        botId: this.id,
+        guildId: newMember.guild?.id ?? null,
+        client: this.client,
+        oldMember,
+        newMember,
+      });
+    });
+
     this.client.on(Events.MessageCreate, (message) => {
       if (message.author.bot) return;
       this.eventBus.emit('messageCreate', {

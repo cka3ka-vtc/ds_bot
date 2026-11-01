@@ -3,11 +3,6 @@ const SQLITE_VARIABLE_CHUNK = 500;
 
 export function createEventsRepo(raw) {
   return {
-    /**
-     * Пишет событие. Дополнительно материализует command_name и channel_id
-     * из meta, чтобы getTopCommands / getTopChannels читали индексированные
-     * колонки вместо json_extract на каждой строке.
-     */
     addEvent(e) {
       const meta = e.meta || null;
       const commandName = meta && typeof meta.command === 'string' ? meta.command : null;
@@ -82,51 +77,67 @@ export function createEventsRepo(raw) {
 
     /**
      * Лента последних событий для дашборда.
-     *
-     * Раньше: UNION ALL трёх таблиц + ORDER BY + LIMIT — SQLite сортировал
-     * весь объединённый результат. При 100k+ событий — секунды.
-     *
-     * Теперь: три отдельных SELECT с LIMIT (каждый использует свой индекс
-     * по created_at DESC, читает ровно N строк), затем merge sort трёх
-     * уже отсортированных массивов в JS за O(limit).
-     *
-     * Индексы, которые используются:
-     *   mod_actions → idx_mod_actions(created_at DESC)
-     *   logs        → idx_logs_created(created_at DESC)
-     *   events      → idx_events_type_created(type, created_at DESC)
+     * Все три источника JOIN'ятся с user_profiles — на клиент приходят
+     * готовые username / display_name / avatar_url.
      */
     getRecentActivity(limit = 10) {
-      // Защита от слишком больших limit: даже с индексами три подзапроса
-      // при limit=10000 могут быть ощутимыми. UI всегда просит 5-30.
       const perTable = Math.min(Math.max(1, limit), 100);
 
+      /* ─── mod_actions ─── */
       const mods = raw.prepare(`
-        SELECT 'mod' as source, kind as type, user_id,
-               reason as message, NULL as meta, created_at
-        FROM mod_actions
-        ORDER BY created_at DESC
+        SELECT 'mod' as source, ma.kind as type, ma.user_id,
+               ma.reason as message, NULL as meta, ma.created_at,
+               up.username     as user_username,
+               up.display_name as user_display_name,
+               up.avatar_url   as user_avatar_url
+        FROM mod_actions ma
+        LEFT JOIN user_profiles up ON up.user_id = ma.user_id
+        ORDER BY ma.created_at DESC
         LIMIT ?
       `).all(perTable);
 
+      /* ─── logs (модульные) ─── */
+      // user_id теперь есть в logs (миграция v8); fallback — meta.userId
+      // username/displayName/avatarUrl — JOIN user_profiles + fallback из meta
       const logs = raw.prepare(`
-        SELECT 'log' as source, module as type, NULL as user_id,
-               message, NULL as meta, created_at
-        FROM logs
-        WHERE level IN ('info', 'warn')
-        ORDER BY created_at DESC
+        SELECT 'log' as source, l.module as type,
+               COALESCE(l.user_id, json_extract(l.meta, '$.userId')) as user_id,
+               l.message, l.meta, l.created_at,
+               COALESCE(
+                 up.username,
+                 json_extract(l.meta, '$.username')
+               ) as user_username,
+               COALESCE(
+                 up.display_name,
+                 json_extract(l.meta, '$.displayName')
+               ) as user_display_name,
+               COALESCE(
+                 up.avatar_url,
+                 json_extract(l.meta, '$.avatarUrl')
+               ) as user_avatar_url
+        FROM logs l
+        LEFT JOIN user_profiles up
+          ON up.user_id = COALESCE(l.user_id, json_extract(l.meta, '$.userId'))
+        WHERE l.level IN ('info', 'warn')
+        ORDER BY l.created_at DESC
         LIMIT ?
       `).all(perTable);
 
+      /* ─── events ─── */
       const events = raw.prepare(`
-        SELECT 'event' as source, type, user_id,
-               NULL as message, meta, created_at
-        FROM events
-        WHERE type IN ('command', 'member_join', 'member_leave')
-        ORDER BY created_at DESC
+        SELECT 'event' as source, e.type, e.user_id,
+               NULL as message, e.meta, e.created_at,
+               COALESCE(up.username,     json_extract(e.meta, '$.username'))    as user_username,
+               COALESCE(up.display_name, json_extract(e.meta, '$.displayName')) as user_display_name,
+               COALESCE(up.avatar_url,   json_extract(e.meta, '$.avatarUrl'))   as user_avatar_url
+        FROM events e
+        LEFT JOIN user_profiles up ON up.user_id = e.user_id
+        WHERE e.type IN ('command', 'member_join', 'member_leave')
+        ORDER BY e.created_at DESC
         LIMIT ?
       `).all(perTable);
 
-      // Merge трёх отсортированных по убыванию created_at массивов.
+      /* ─── merge ─── */
       const merged = [];
       let i = 0, j = 0, k = 0;
       while (merged.length < limit && (i < mods.length || j < logs.length || k < events.length)) {
@@ -146,7 +157,6 @@ export function createEventsRepo(raw) {
         merged.push(best);
       }
 
-      // meta в events — JSON-строка; парсим для фронта.
       return merged.map((r) => {
         if (r.meta) {
           try { r.meta = JSON.parse(r.meta); } catch { r.meta = null; }

@@ -4,7 +4,7 @@ import { UI } from '/shared/ui-strings.js';
 const CATEGORY_LABELS = UI.msgEditor.categories;
 
 export const TOKENS_BY_CONTEXT = {
-  /* ─────── greetings ─────── */
+  /* ──────── greetings ──────── */
   greetings: {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
@@ -24,7 +24,7 @@ export const TOKENS_BY_CONTEXT = {
     },
   },
 
-  /* ─────── levels.levelUp ─────── */
+  /* ──────── levels.levelUp ──────── */
   'levels.levelUp': {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
@@ -60,7 +60,7 @@ export const TOKENS_BY_CONTEXT = {
     },
   },
 
-  /* ─────── levels.rank ─────── */
+  /* ──────── levels.rank ──────── */
   'levels.rank': {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
@@ -94,7 +94,7 @@ export const TOKENS_BY_CONTEXT = {
     },
   },
 
-  /* ─────── levels.leaderboard ─────── */
+  /* ──────── levels.leaderboard ──────── */
   'levels.leaderboard': {
     categories: [
       { label: CATEGORY_LABELS.server, items: [
@@ -116,7 +116,7 @@ export const TOKENS_BY_CONTEXT = {
     },
   },
 
-  /* ─────── levels.daily ─────── */
+  /* ──────── levels.daily ──────── */
   'levels.daily': {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
@@ -143,41 +143,12 @@ export const TOKENS_BY_CONTEXT = {
     },
   },
 
-  /* ─────── birthdays.announce ─────── */
+  /* ──────── birthdays.announce ──────── */
   'birthdays.announce': {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
         ['user', 'Упоминание именинника'],
         ['username', 'Ник без @'],
-        ['displayName', 'Отображаемое имя'],
-      ]},
-      { label: 'День рождения', items: [
-        ['birthday', 'Дата без года (ДД.ММ)'],
-        ['birthdayFull', 'Полная дата (ДД.ММ или ДД.ММ.ГГГГ)'],
-        ['age', 'Исполняющийся возраст (пусто, если год не указан)'],
-        ['birthdaysCount', 'Сколько участников указали ДР на сервере'],
-      ]},
-      { label: CATEGORY_LABELS.server, items: [
-        ['guild', 'Имя сервера'],
-        ['count', 'Всего участников'],
-      ]},
-    ],
-    preview: {
-      user: '@Иван', mention: '@Иван', username: 'ivan', displayName: 'Иван',
-      guild: 'Мой сервер', count: '1234',
-      birthday: '15.06',
-      birthdayFull: '15.06.1995',
-      age: '30',
-      birthdaysCount: '42',
-      avatarUrl: '', guildIconUrl: '',
-    },
-  },
-
-  /* ─────── birthdays.cmdSet ─────── */
-  'birthdays.cmdSet': {
-    categories: [
-      { label: CATEGORY_LABELS.user, items: [
-        ['user', 'Упоминание'],
         ['displayName', 'Отображаемое имя'],
       ]},
       { label: 'День рождения', items: [
@@ -194,15 +165,40 @@ export const TOKENS_BY_CONTEXT = {
     preview: {
       user: '@Иван', mention: '@Иван', username: 'ivan', displayName: 'Иван',
       guild: 'Мой сервер', count: '1234',
-      birthday: '15.06',
-      birthdayFull: '15.06.1995',
-      age: '30',
+      birthday: '15.06', birthdayFull: '15.06.1995', age: '30',
       birthdaysCount: '42',
       avatarUrl: '', guildIconUrl: '',
     },
   },
 
-  /* ─────── birthdays.cmdToggle ─────── */
+  /* ──────── birthdays.cmdSet ──────── */
+  'birthdays.cmdSet': {
+    categories: [
+      { label: CATEGORY_LABELS.user, items: [
+        ['user', 'Упоминание'],
+        ['displayName', 'Отображаемое имя'],
+      ]},
+      { label: 'День рождения', items: [
+        ['birthday', 'Дата без года'],
+        ['birthdayFull', 'Полная дата'],
+        ['age', 'Исполняющийся возраст'],
+        ['birthdaysCount', 'Сколько участников указали ДР'],
+      ]},
+      { label: CATEGORY_LABELS.server, items: [
+        ['guild', 'Имя сервера'],
+        ['count', 'Всего участников'],
+      ]},
+    ],
+    preview: {
+      user: '@Иван', mention: '@Иван', username: 'ivan', displayName: 'Иван',
+      guild: 'Мой сервер', count: '1234',
+      birthday: '15.06', birthdayFull: '15.06.1995', age: '30',
+      birthdaysCount: '42',
+      avatarUrl: '', guildIconUrl: '',
+    },
+  },
+
+  /* ──────── birthdays.cmdToggle ──────── */
   'birthdays.cmdToggle': {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
@@ -210,8 +206,8 @@ export const TOKENS_BY_CONTEXT = {
         ['displayName', 'Отображаемое имя'],
       ]},
       { label: 'День рождения', items: [
-        ['birthday', 'Дата без года (ДД.ММ)'],
-        ['birthdayFull', 'Полная дата (ДД.ММ или ДД.ММ.ГГГГ)'],
+        ['birthday', 'Дата без года'],
+        ['birthdayFull', 'Полная дата'],
         ['age', 'Исполняющийся возраст'],
         ['birthdaysCount', 'Сколько участников указали ДР'],
         ['state', 'Текущее состояние: «включены» / «отключены»'],
@@ -224,16 +220,13 @@ export const TOKENS_BY_CONTEXT = {
     preview: {
       user: '@Иван', mention: '@Иван', username: 'ivan', displayName: 'Иван',
       guild: 'Мой сервер', count: '1234',
-      birthday: '15.06',
-      birthdayFull: '15.06.1995',
-      age: '30',
-      birthdaysCount: '42',
-      state: 'включены',
+      birthday: '15.06', birthdayFull: '15.06.1995', age: '30',
+      birthdaysCount: '42', state: 'включены',
       avatarUrl: '', guildIconUrl: '',
     },
   },
 
-  /* ─────── birthdays.cmdList ─────── */
+  /* ──────── birthdays.cmdList ──────── */
   'birthdays.cmdList': {
     categories: [
       { label: CATEGORY_LABELS.server, items: [
@@ -251,6 +244,72 @@ export const TOKENS_BY_CONTEXT = {
         '**1.** @user1 — **15.06.1995** (сегодня · 30 лет)\n' +
         '**2.** @user2 — **22.06** (через 7 дн.)\n' +
         '**3.** @user3 — **01.07.2001** (через 16 дн. · 24 лет)',
+      avatarUrl: '', guildIconUrl: '',
+    },
+  },
+
+  /* ──────── moderation.dm ──────── */
+  // Личное сообщение нарушителю (per-filter).
+  // {violation} — номер нарушения по этому фильтру (НЕ XP-уровень).
+  'moderation.dm': {
+    categories: [
+      { label: CATEGORY_LABELS.user, items: [
+        ['user', 'Упоминание'],
+        ['username', 'Ник без @'],
+        ['displayName', 'Отображаемое имя'],
+      ]},
+      { label: 'Наказание', items: [
+        ['reason', 'Причина'],
+        ['action', 'Действие'],
+        ['filter', 'Имя фильтра'],
+        ['violation', 'Номер нарушения по этому фильтру'],
+        ['matched', 'Найденное слово / URL'],
+      ]},
+      { label: CATEGORY_LABELS.server, items: [
+        ['guild', 'Имя сервера'],
+      ]},
+    ],
+    preview: {
+      user: '@Иван', username: 'ivan', displayName: 'Иван',
+      reason: 'спам: 5 за 3 с', action: 'мут', filter: 'Антиспам',
+      violation: '3', matched: 'хуй',
+      guild: 'Мой сервер',
+      avatarUrl: '', guildIconUrl: '',
+    },
+  },
+
+  /* ──────── moderation.log ──────── */
+  // Сообщение в канал логов (per-filter).
+  'moderation.log': {
+    categories: [
+      { label: CATEGORY_LABELS.user, items: [
+        ['user', 'Упоминание'],
+        ['username', 'Ник'],
+        ['displayName', 'Имя'],
+        ['userId', 'ID пользователя'],
+      ]},
+      { label: 'Наказание', items: [
+        ['reason', 'Причина'],
+        ['action', 'Действие'],
+        ['filter', 'Имя фильтра'],
+        ['violation', 'Номер нарушения по этому фильтру'],
+      ]},
+      { label: 'Канал', items: [
+        ['channel', 'Упоминание канала'],
+        ['channelName', 'Имя канала'],
+        ['message', 'Текст сообщения'],
+      ]},
+      { label: CATEGORY_LABELS.server, items: [
+        ['guild', 'Имя сервера'],
+      ]},
+    ],
+    preview: {
+      user: '@Иван', username: 'ivan', displayName: 'Иван', userId: '123456',
+      reason: 'спам: 5 за 3 с', action: 'мут', filter: 'Антиспам',
+      violation: '3',
+      channel: '#general', channelName: 'general',
+      message: 'купите подписчиков',
+      guild: 'Мой сервер',
       avatarUrl: '', guildIconUrl: '',
     },
   },

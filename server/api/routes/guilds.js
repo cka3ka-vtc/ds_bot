@@ -16,7 +16,7 @@ const presenceCache = new Map();
 const PRESENCE_CACHE_TTL = 5 * 60_000;
 
 /**
- * Возвращает approximate_presence_count для гайлда.
+ * Возвращает approximate_presence_count для гильдии.
  *  - если в кэше свежо → возвращаем;
  *  - если протухло → REST fetch withCounts:true (force:true),
  *    который заодно патчит guild-объект в discord.js кэше;
@@ -115,7 +115,9 @@ export function guildsRouter() {
   const router = Router();
   router.use(requireAuth);
 
-  /* ═══════════════════ GET /api/guilds ═══════════════════ */
+  /* ═══════════════════════════════════════════════════════════════
+     GET /api/guilds
+     ═══════════════════════════════════════════════════════════════ */
   router.get('/', requireBotAccess, async (req, res) => {
     const db = req.app.locals.db;
     const logger = req.app.locals.logger;
@@ -255,7 +257,9 @@ export function guildsRouter() {
     res.json(enriched);
   });
 
-  /* ═══════════════════ DELETE /api/guilds/:guildId/data ═══════════════════ */
+  /* ═══════════════════════════════════════════════════════════════
+     DELETE /api/guilds/:guildId/data
+     ═══════════════════════════════════════════════════════════════ */
   router.delete('/:guildId/data', async (req, res) => {
     const db = req.app.locals.db;
     const logger = req.app.locals.logger;
@@ -295,7 +299,9 @@ export function guildsRouter() {
     res.json({ ok: true, message: 'Данные гильдии удалены' });
   });
 
-  /* ═══════════════════ GET /api/guilds/roles ═══════════════════ */
+  /* ═══════════════════════════════════════════════════════════════
+     GET /api/guilds/roles
+     ═══════════════════════════════════════════════════════════════ */
   router.get('/roles', requireBotAccess, async (req, res) => {
     const inst = req.app.locals.botManager.get(req.bot.id);
     if (!inst?.client) return res.status(503).json({ error: 'bot_offline' });
@@ -328,13 +334,25 @@ export function guildsRouter() {
     }
   });
 
-  /* ═══════════════════ GET /api/guilds/channels ═══════════════════ */
-  /**
-   * Список каналов.
-   * По умолчанию — только текстовые (type 0).
-   * `?includeVoice=1` — также голосовые (type 2) и stage (type 13).
-   * Используется в picker исключённых каналов модуля «Уровни».
-   */
+  /* ═══════════════════════════════════════════════════════════════
+     GET /api/guilds/channels
+     ═══════════════════════════════════════════════════════════════
+     По умолчанию — только текстовые (type 0).
+     `?includeVoice=1` — также голосовые (type 2) и stage (type 13),
+     у которых есть встроенный текстовый чат.
+
+     Используется в:
+       - picker каналов (автомодерация, приветствия, уровни);
+       - whitelist/blacklist каналов;
+       - канал логов.
+
+     Discord channel types:
+       0  — Text
+       2  — Voice (со встроенным текстовым чатом)
+       5  — Announcement (news)
+       13 — Stage (со встроенным текстовым чатом)
+       15 — Forum
+     */
   router.get('/channels', requireBotAccess, async (req, res) => {
     const inst = req.app.locals.botManager.get(req.bot.id);
     if (!inst?.client) return res.status(503).json({ error: 'bot_offline' });
@@ -343,8 +361,12 @@ export function guildsRouter() {
         || await inst.client.guilds.fetch(req.query.guildId);
       if (!guild) return res.status(404).json({ error: 'guild_not_found' });
 
-      const includeVoice = req.query.includeVoice === '1' || req.query.includeVoice === 'true';
-      const allowedTypes = includeVoice ? new Set([0, 2, 13]) : new Set([0]);
+      const includeVoice = req.query.includeVoice === '1'
+        || req.query.includeVoice === 'true';
+
+      const allowedTypes = includeVoice
+        ? new Set([0, 2, 5, 13, 15])   // text, voice, news, stage, forum
+        : new Set([0, 5, 15]);          // все текстовые типы
 
       const rulesId = guild.rulesChannelId || null;
 
@@ -367,7 +389,12 @@ export function guildsRouter() {
     }
   });
 
-  /* ═══════════════════ GET /api/guilds/channels/:channelId/permissions ═══════════════════ */
+  /* ═══════════════════════════════════════════════════════════════
+     GET /api/guilds/channels/:channelId/permissions
+     ═══════════════════════════════════════════════════════════════
+     Проверка прав бота в конкретном канале.
+     Работает и для голосовых каналов: send работают через текстовый чат.
+     */
   router.get('/channels/:channelId/permissions', requireBotAccess, async (req, res) => {
     const inst = req.app.locals.botManager.get(req.bot.id);
     if (!inst?.client) return res.status(503).json({ error: 'bot_offline' });
@@ -385,6 +412,7 @@ export function guildsRouter() {
 
       res.json({
         channelExists: true,
+        isVoice: channel.type === 2 || channel.type === 13,
         canViewChannel: p.has('ViewChannel'),
         canSend: p.has('SendMessage') || p.has('SendMessages'),
         canEmbed: p.has('EmbedLinks'),

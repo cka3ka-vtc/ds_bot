@@ -1,8 +1,9 @@
 // public/assets/js/views/overview/lists.js
-import { escapeHtml, fmtNum, timeAgo } from '../../core/utils.js';
+import { escapeHtml, fmtNum } from '../../core/utils.js';
 import { UI } from '/shared/ui-strings.js';
+import { renderLogEntry } from '../../components/logEntry.js';
 
-/* ─────────── Top commands ─────────── */
+/* ═══════════════ Top commands ═══════════════ */
 
 export function renderTopCommands(commands) {
   if (!commands || !commands.length) {
@@ -24,13 +25,13 @@ export function renderTopCommands(commands) {
   </div>`;
 }
 
-/* ─────────── Top channels ─────────── */
+/* ═══════════════ Top channels ═══════════════ */
 
 export function renderTopChannels(channels, filter = 'text') {
   if (!channels || !channels.length) {
     const isEmptyText = filter !== 'voice';
     return `<div class="empty-state" style="padding:28px 16px;">
-      <i class="fa-solid fa-${filter === 'voice' ? 'microphone' : 'hashtag'}"></i>
+      <i class="fa-solid ${filter === 'voice' ? 'microphone' : 'hashtag'}"></i>
       <strong>${isEmptyText ? UI.overview.topChannels.emptyTextTitle : UI.overview.topChannels.emptyVoiceTitle}</strong>
       <span>${isEmptyText ? UI.overview.topChannels.emptyTextHint : UI.overview.topChannels.emptyVoiceHint}</span>
     </div>`;
@@ -51,19 +52,7 @@ export function renderTopChannels(channels, filter = 'text') {
   </div>`;
 }
 
-/* ─────────── Recent events ─────────── */
-
-const SOURCE_COLORS = {
-  mod:   { warn: 'orange', mute: 'blue', ban: 'red', auto: 'purple' },
-  log:   { levels: 'green', birthdays: 'pink', greetings: 'green', moderation: 'red' },
-  event: { command: 'blue', member_join: 'green', member_leave: 'red' },
-};
-
-function pickColor(e) {
-  const map = SOURCE_COLORS[e.source];
-  if (!map) return 'blue';
-  return map[e.type] || 'blue';
-}
+/* ═══════════════ Recent events ═══════════════ */
 
 export function classifyEvent(e) {
   if (!e) return 'other';
@@ -88,37 +77,6 @@ export function filterEvents(events, filter) {
   return events.filter((e) => classifyEvent(e) === filter);
 }
 
-function renderEventBody(e) {
-  if (e.source === 'mod') {
-    const labels = { warn: 'предупреждение', mute: 'мут', ban: 'бан', auto: 'автодействие' };
-    const label = labels[e.type] || e.type;
-    const reason = e.message ? `: ${escapeHtml(e.message)}` : '';
-    return `<strong>&lt;@${escapeHtml(e.user_id || '?')}&gt;</strong> — ${label}${reason}`;
-  }
-
-  if (e.source === 'log') {
-    return escapeHtml(e.message || '');
-  }
-
-  if (e.source === 'event') {
-    const meta = e.meta || {};
-    const name = meta.displayName || meta.username || '?';
-
-    if (e.type === 'command') {
-      const cmd = meta.command ? `/${meta.command}` : '/?';
-      return `<strong>${escapeHtml(name)}</strong> использовал <code>${escapeHtml(cmd)}</code>`;
-    }
-    if (e.type === 'member_join') {
-      return `<strong>${escapeHtml(name)}</strong> присоединился к серверу`;
-    }
-    if (e.type === 'member_leave') {
-      return `<strong>${escapeHtml(name)}</strong> покинул сервер`;
-    }
-  }
-
-  return escapeHtml(e.message || '—');
-}
-
 export function renderRecentEventsBody(events, opts = {}) {
   const emptyTitle = opts.emptyTitle || 'Пока нет событий';
   const emptyHint = opts.emptyHint
@@ -127,27 +85,236 @@ export function renderRecentEventsBody(events, opts = {}) {
   if (!events || !events.length) {
     return `<div class="empty-state" style="padding:32px 16px;">
       <i class="fa-solid fa-clock-rotate-left"></i>
-      <strong>${emptyTitle}</strong>
-      <span>${emptyHint}</span>
+      <strong>${escapeHtml(emptyTitle)}</strong>
+      <span>${escapeHtml(emptyHint)}</span>
     </div>`;
   }
 
-  return `<div class="activity-list">
-    ${events.map((e) => {
-      const color = pickColor(e);
-      const text = renderEventBody(e);
-      return `<div class="activity-item">
-        <span class="activity-dot ${color}"></span>
-        <div class="activity-body">
-          <div class="activity-text">${text}</div>
-          <div class="activity-time">${timeAgo(e.created_at)}</div>
-        </div>
-      </div>`;
-    }).join('')}
-  </div>`;
+  const entries = events
+    .map((e) => eventToLogEntry(e))
+    .filter(Boolean);
+
+  if (!entries.length) {
+    return `<div class="empty-state" style="padding:32px 16px;">
+      <i class="fa-solid fa-clock-rotate-left"></i>
+      <strong>${escapeHtml(emptyTitle)}</strong>
+      <span>${escapeHtml(emptyHint)}</span>
+    </div>`;
+  }
+
+  return `<div class="log-list">${entries.map(renderLogEntry).join('')}</div>`;
 }
 
-/* ─────────── Upcoming birthdays panel ─────────── */
+/* ═══════════════ Хелперы ═══════════════ */
+
+/**
+ * Убирает username/displayName из начала строки, чтобы не было дублирования
+ * с шапкой лога.
+ */
+function stripUserPrefix(text, displayName, username) {
+  if (!text) return '';
+  let s = String(text);
+  const prefixes = [displayName, username].filter(Boolean);
+  for (const name of prefixes) {
+    if (s.startsWith(name + ' ')) return s.slice(name.length + 1);
+    if (s.startsWith('@' + name + ' ')) return s.slice(name.length + 2);
+  }
+  return s;
+}
+
+/**
+ * Извлекает номер уровня ТОЛЬКО из фраз со словом «уровень/level».
+ * Никогда не возвращает первое попавшееся число — оно может быть из ника,
+ * ID или другого контекста.
+ *
+ *   "maks6929 достиг 5 уровня"    → "5"    (число ПЕРЕД «уров»)
+ *   "достиг уровня 5"             → "5"    (число ПОСЛЕ «уров»)
+ *   "уровень 12"                  → "12"
+ *   "level 42"                    → "42"
+ *   "maks6929 достиг 6929 уровня" → "6929" (это и правда уровень, если так)
+ *   "maks6929 что-то сделал"      → null   (нет контекста «уров»)
+ */
+function extractLevelFromText(text) {
+  if (!text) return null;
+  const s = String(text);
+
+  // «5 уровня», «5 уровень», «5 lvl», «5 level»
+  let m = s.match(/(\d+)\s*(?:уров(?:ень|ня|не|ней|нем)?|lvl|level)\b/i);
+  if (m) return m[1];
+
+  // «уровень 5», «уровня 5», «lvl 5», «level 5», «уровень №5»
+  m = s.match(/(?:уров(?:ень|ня|не|ней|нем)?|lvl|level)\s*[:№#]?\s*(\d+)/i);
+  if (m) return m[1];
+
+  return null;
+}
+
+/**
+ * Преобразует сырое событие из БД в аргументы для renderLogEntry.
+ * Для всех источников (mod / log / event) достаёт userId, username,
+ * displayName, avatarUrl — из JOIN-полей или meta.
+ */
+function eventToLogEntry(e) {
+  if (!e) return null;
+
+  /* ── mod_actions ── */
+  if (e.source === 'mod') {
+    const tone = ['warn', 'mute', 'ban', 'auto'].includes(e.type) ? e.type : 'auto';
+    const labels = {
+      warn: 'Предупреждение',
+      mute: 'Мут',
+      ban:  'Бан',
+      auto: 'Автодействие',
+    };
+    const actionPhrases = {
+      warn: 'Получил предупреждение',
+      mute: 'Получил мут',
+      ban:  'Получил бан',
+      auto: 'Применено автоматически',
+    };
+
+    const phrase = actionPhrases[tone] || `Наказание: ${tone}`;
+    const reason = (e.message || '').trim();
+
+    return {
+      tone,
+      label: labels[tone],
+      userId: e.user_id || null,
+      username: e.user_username || null,
+      displayName: e.user_display_name || null,
+      avatarUrl: e.user_avatar_url || null,
+      text: reason ? `${phrase} по фильтру «${escapeHtml(reason)}»` : phrase,
+      timestamp: e.created_at,
+    };
+  }
+
+  /* ── logs (модульные) ── */
+  if (e.source === 'log') {
+    const module = e.type;
+    const meta = e.meta || {};
+
+    const username    = e.user_username    || meta.username    || null;
+    const displayName = e.user_display_name || meta.displayName || null;
+    const avatarUrl   = e.user_avatar_url   || meta.avatarUrl   || null;
+    const userId      = e.user_id || meta.userId || null;
+
+    // Старые логи приветствий — пропускаем (дублируют events.member_join/leave)
+    if (module === 'greetings') return null;
+
+    if (module === 'moderation') {
+      const reason = meta.reason || '';
+      const text = reason
+        ? `Сообщение удалено по фильтру «${escapeHtml(reason)}»`
+        : 'Сообщение удалено';
+      return {
+        tone: 'auto',
+        label: 'Модерация',
+        userId, username, displayName, avatarUrl,
+        text,
+        timestamp: e.created_at,
+      };
+    }
+
+    if (module === 'levels') {
+      // Приоритет — meta.level (пишется новыми логами).
+      // Fallback — точный regex по «уров»/«level», а НЕ первое число из message.
+      const metaLvl = meta.level != null ? String(meta.level) : null;
+      const lvl = metaLvl || extractLevelFromText(e.message);
+
+      const text = lvl
+        ? `Достигает ${escapeHtml(String(lvl))} уровня`
+        : 'Достигает нового уровня';
+
+      return {
+        tone: 'level',
+        label: 'Уровень',
+        userId, username, displayName, avatarUrl,
+        text,
+        timestamp: e.created_at,
+      };
+    }
+
+    if (module === 'birthdays') {
+      return {
+        tone: 'birthday',
+        label: 'День рождения',
+        userId, username, displayName, avatarUrl,
+        text: 'Празднует сегодня день рождения',
+        timestamp: e.created_at,
+      };
+    }
+
+    // Прочие модульные логи
+    const cleaned = stripUserPrefix(e.message, displayName, username);
+    return {
+      tone: 'info',
+      label: 'Событие',
+      userId, username, displayName, avatarUrl,
+      text: escapeHtml(cleaned || ''),
+      timestamp: e.created_at,
+    };
+  }
+
+  /* ── events ── */
+  if (e.source === 'event') {
+    const meta = e.meta || {};
+
+    const username    = e.user_username    || meta.username    || null;
+    const displayName = e.user_display_name || meta.displayName || null;
+    const avatarUrl   = e.user_avatar_url   || meta.avatarUrl   || null;
+    const userId      = e.user_id || meta.userId || null;
+
+    if (e.type === 'command') {
+      const cmd = meta.command ? `/${meta.command}` : '/?';
+      const channelId = meta.channelId;
+      const channelName = meta.channelName;
+
+      let channelPart = '';
+      if (channelName) {
+        channelPart = ` в канале <code>#${escapeHtml(channelName)}</code>`;
+      } else if (channelId) {
+        channelPart = ` в канале <code>&lt;#${escapeHtml(String(channelId))}&gt;</code>`;
+      }
+
+      return {
+        tone: 'command',
+        label: 'Команда',
+        userId, username, displayName, avatarUrl,
+        text: `Использовал команду <code>${escapeHtml(cmd)}</code>${channelPart}`,
+        timestamp: e.created_at,
+      };
+    }
+
+    if (e.type === 'member_join') {
+      return {
+        tone: 'join',
+        label: 'Вход',
+        userId, username, displayName, avatarUrl,
+        text: 'Присоединился к серверу',
+        timestamp: e.created_at,
+      };
+    }
+
+    if (e.type === 'member_leave') {
+      return {
+        tone: 'leave',
+        label: 'Выход',
+        userId, username, displayName, avatarUrl,
+        text: 'Покинул сервер',
+        timestamp: e.created_at,
+      };
+    }
+  }
+
+  return {
+    tone: 'info',
+    label: 'Событие',
+    text: escapeHtml(e.message || '—'),
+    timestamp: e.created_at,
+  };
+}
+
+/* ═══════════════ Upcoming birthdays ═══════════════ */
 
 function formatDaysLeft(n) {
   if (n === 0) return 'сегодня';

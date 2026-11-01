@@ -62,9 +62,9 @@
       "icon": "fa-cake-candles",
       "color": "pink",
       "category": "engagement",
-      "version": "2.0.0",
+      "version": "2.1.0",
       "defaultEnabled": false,
-      "events": [],
+      "events": ["guildMemberUpdate"],
       "configSchema": {
         "announceChannelId": { "type": "text", "label": "Канал объявлений" },
         "birthdayRoleId":    { "type": "text", "label": "Роль именинника" },
@@ -75,20 +75,22 @@
     {
       "key": "moderation",
       "name": "Автомодерация",
-      "description": "Фильтры, антиспам, антирейд",
+      "description": "Фильтры, карта нарушений и автоматические наказания",
       "icon": "fa-shield-halved",
       "color": "red",
       "category": "moderation",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "defaultEnabled": false,
       "events": ["messageCreate", "guildMemberAdd"],
       "configSchema": {
-        "filterProfanity": { "type": "boolean", "label": "Фильтр мата", "default": true },
-        "antiSpam":        { "type": "boolean", "label": "Антиспам", "default": true },
-        "antiRaid":        { "type": "boolean", "label": "Антирейд", "default": true },
-        "blockLinks":      { "type": "boolean", "label": "Блокировка ссылок", "default": false },
-        "filterCaps":      { "type": "boolean", "label": "Фильтр капса", "default": false },
-        "logChannelId":    { "type": "text",    "label": "ID канала логов" }
+        "logChannelId":             { "type": "text",    "label": "Канал логов" },
+        "defaultAction":            { "type": "text",    "label": "Действие по умолчанию" },
+        "filters":                  { "type": "json",    "label": "Настройки фильтров" },
+        "escalation":               { "type": "json",    "label": "Карта нарушений" },
+        "globalExcludedChannels":   { "type": "json",    "label": "Глобально исключённые каналы"},
+        "globalExcludedRoles":      { "type": "json",    "label": "Глобально исключённые роли" },
+        "templateDm":               { "type": "textarea","label": "Шаблон ЛС" },
+        "templateLog":              { "type": "textarea","label": "Шаблон лога" }
       }
     },
     {

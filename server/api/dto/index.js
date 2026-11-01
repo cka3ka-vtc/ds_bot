@@ -1,6 +1,5 @@
 // server/api/dto/index.js
 // Единые DTO-мапперы: snake_case из БД → camelCase на фронт.
-// Используются только там, где это нужно. Удалены неиспользуемые мапперы.
 
 export function botToDto(row) {
   return {
@@ -16,6 +15,9 @@ export function modActionToDto(row) {
     id: row.id,
     kind: row.kind,
     userId: row.user_id,
+    username: row.user_username || null,
+    displayName: row.user_display_name || null,
+    avatarUrl: row.user_avatar_url || null,
     moderatorId: row.moderator_id || null,
     reason: row.reason || '',
     expiresAt: row.expires_at || null,

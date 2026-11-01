@@ -78,13 +78,6 @@ export default class GreetingsModule extends Module {
       );
     } catch (err) {
       this.logger.warn({ err, guildId }, 'greetings: failed to send');
-      return;
     }
-
-    this.db.addLog(client.user.id, guildId, {
-      level: 'info',
-      module: 'greetings',
-      message: `${isJoin ? 'Приветствие' : 'Прощание'} для ${member.user.username}`,
-    });
   }
 }

@@ -1,14 +1,17 @@
 // public/assets/js/views/moderation/log.js
+// Журнал действий — единый компонент renderLogEntry.
+
 import { api } from '../../core/api.js';
 import { store } from '../../core/store.js';
 import { toast } from '../../core/toast.js';
 import { escapeHtml, WORD } from '../../core/utils.js';
 import { UI } from '/shared/ui-strings.js';
+import { renderLogEntry } from '../../components/logEntry.js';
 
 const KIND_LABELS = {
   warn: UI.moderation.kinds.warn,
   mute: UI.moderation.kinds.mute,
-  ban: UI.moderation.kinds.ban,
+  ban:  UI.moderation.kinds.ban,
   auto: UI.moderation.kinds.auto,
 };
 
@@ -29,7 +32,7 @@ export function renderLogList(view) {
   }
 
   const filtered = view.actions.filter((a) => {
-    const hay = ((a.userId || '') + ' ' + (a.reason || '')).toLowerCase();
+    const hay = ((a.userId || '') + ' ' + (a.username || '') + ' ' + (a.reason || '')).toLowerCase();
     if (q && !hay.includes(q)) return false;
     if (kind && a.kind !== kind) return false;
     return true;
@@ -38,29 +41,49 @@ export function renderLogList(view) {
   view.container.querySelector('#logCount').textContent = `${filtered.length} ${WORD.record(filtered.length)}`;
 
   if (!filtered.length) {
-    el.innerHTML = `<div class="empty-state"><i class="fa-solid fa-filter"></i><strong>${UI.moderation.log.notFoundTitle}</strong></div>`;
+    el.innerHTML = `<div class="empty-state">
+      <i class="fa-solid fa-filter"></i>
+      <strong>${UI.moderation.log.notFoundTitle}</strong>
+    </div>`;
     return;
   }
 
-  el.innerHTML = filtered.map((a) => {
-    const metaLabel = KIND_LABELS[a.kind] || a.kind;
-    const time = new Date(a.createdAt * 1000).toLocaleString('ru-RU');
-    const expires = a.expiresAt
-      ? `<span>· ${UI.moderation.log.expires} ${new Date(a.expiresAt * 1000).toLocaleString('ru-RU')}</span>`
-      : '';
-    return `<div class="mod-entry">
-      <div class="mod-entry-body">
-        <div class="mod-entry-title"><strong>&lt;@${escapeHtml(a.userId)}&gt;</strong> — ${metaLabel.toLowerCase()}</div>
-        <div class="mod-entry-meta">
-          <span>${escapeHtml(a.reason || UI.moderation.log.noReason)}</span>${expires}
-        </div>
-      </div>
-      <span class="mod-entry-time">${time}</span>
-      <button class="btn btn-icon btn-ghost" data-remove="${a.id}" title="${UI.moderation.log.removeLabel}" aria-label="${UI.moderation.log.removeLabel}" style="margin-left:8px;">
-        <i class="fa-solid fa-xmark"></i>
-      </button>
-    </div>`;
-  }).join('');
+  const entries = filtered.map((a) => {
+    const label = KIND_LABELS[a.kind] || a.kind;
+
+    // Мета-строка: срок + модератор
+    const metaParts = [];
+    if (a.expiresAt) {
+      const dt = new Date(a.expiresAt * 1000).toLocaleString('ru-RU');
+      metaParts.push(`${UI.moderation.log.expires} ${escapeHtml(dt)}`);
+    }
+    if (a.moderatorId) {
+      metaParts.push(`модератор: @${escapeHtml(String(a.moderatorId))}`);
+    } else {
+      metaParts.push('автоматически');
+    }
+
+    return {
+      tone: a.kind,
+      label,
+      userId: a.userId,
+      username: a.username || null,
+      displayName: a.displayName || null,
+      avatarUrl: a.avatarUrl || null,
+      text: escapeHtml(a.reason || UI.moderation.log.noReason),
+      meta: metaParts.join(' · '),
+      timestamp: a.createdAt,
+      actions: `<button type="button"
+                class="btn btn-icon btn-ghost log-remove-btn"
+                data-remove="${escapeHtml(a.id)}"
+                title="${UI.moderation.log.removeLabel}"
+                aria-label="${UI.moderation.log.removeLabel}">
+                <i class="fa-solid fa-xmark"></i>
+              </button>`,
+    };
+  });
+
+  el.innerHTML = `<div class="log-list">${entries.map(renderLogEntry).join('')}</div>`;
 
   el.querySelectorAll('[data-remove]').forEach((btn) => {
     btn.addEventListener('click', () => removeAction(view, btn.dataset.remove));

@@ -97,7 +97,7 @@ export async function onInteraction({ db, registry, logger, payload }) {
     deferred: interaction.deferred,
   }, 'interaction: dispatch');
 
-  /* ═══════════════ 1. Builtin ═══════════════ */
+  /* ═════════════ 1. Builtin ═════════════ */
   if (BUILTIN_NAMES.has(interaction.commandName)) {
     const moduleKey = moduleForBuiltin(interaction.commandName);
     const mod = moduleKey ? registry.get(moduleKey) : null;
@@ -131,13 +131,17 @@ export async function onInteraction({ db, registry, logger, payload }) {
       await safeReply(interaction, '❌ Ошибка');
     }
 
-    // Побочные эффекты — fire-and-forget.
     setImmediate(() => {
       try {
         const snap = snapshotOf(interaction.member || interaction.user);
         db.addEvent({
           botId, guildId, userId: interaction.user.id, type: 'command',
-          meta: { command: interaction.commandName, ...snap },
+          meta: {
+            command: interaction.commandName,
+            channelId: interaction.channelId,
+            channelName: interaction.channel?.name || null,
+            ...snap,
+          },
         });
         saveProfileThrottled(db, logger, { botId, guildId, userId: interaction.user.id, ...snap });
       } catch (err) {
@@ -153,12 +157,17 @@ export async function onInteraction({ db, registry, logger, payload }) {
     return;
   }
 
-  /* ═══════════════ 2. Custom ═══════════════ */
+  /* ═════════════ 2. Custom ═════════════ */
   const snap = snapshotOf(interaction.member || interaction.user);
   try {
     db.addEvent({
       botId, guildId, userId: interaction.user.id, type: 'command',
-      meta: { command: interaction.commandName, ...snap },
+      meta: {
+        command: interaction.commandName,
+        channelId: interaction.channelId,
+        channelName: interaction.channel?.name || null,
+        ...snap,
+      },
     });
   } catch (err) {
     logger.warn({ err }, 'addEvent command failed');

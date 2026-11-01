@@ -115,16 +115,16 @@ export const GUILD_MIGRATIONS = [
       const add = (name, sql) => {
         if (!cols.has(name)) db.exec(`ALTER TABLE custom_commands ADD COLUMN ${sql}`);
       };
-      add('channels_mode',       "channels_mode TEXT NOT NULL DEFAULT 'all'");
-      add('channels',            "channels TEXT NOT NULL DEFAULT '[]'");
-      add('cooldown_seconds',    'cooldown_seconds INTEGER NOT NULL DEFAULT 0');
-      add('require_roles',       "require_roles TEXT NOT NULL DEFAULT '[]'");
-      add('exclude_roles',       "exclude_roles TEXT NOT NULL DEFAULT '[]'");
-      add('ephemeral',           'ephemeral INTEGER NOT NULL DEFAULT 0');
-      add('response_mode',       "response_mode TEXT NOT NULL DEFAULT 'text'");
-      add('response_embed_color',"response_embed_color TEXT DEFAULT '#5865F2'");
-      add('usage_count',         'usage_count INTEGER NOT NULL DEFAULT 0');
-      add('last_used_at',        'last_used_at INTEGER');
+      add('channels_mode',        "channels_mode TEXT NOT NULL DEFAULT 'all'");
+      add('channels',             "channels TEXT NOT NULL DEFAULT '[]'");
+      add('cooldown_seconds',     'cooldown_seconds INTEGER NOT NULL DEFAULT 0');
+      add('require_roles',        "require_roles TEXT NOT NULL DEFAULT '[]'");
+      add('exclude_roles',        "exclude_roles TEXT NOT NULL DEFAULT '[]'");
+      add('ephemeral',            'ephemeral INTEGER NOT NULL DEFAULT 0');
+      add('response_mode',        "response_mode TEXT NOT NULL DEFAULT 'text'");
+      add('response_embed_color', "response_embed_color TEXT DEFAULT '#5865F2'");
+      add('usage_count',          'usage_count INTEGER NOT NULL DEFAULT 0');
+      add('last_used_at',         'last_used_at INTEGER');
     },
   },
   {
@@ -185,7 +185,6 @@ export const GUILD_MIGRATIONS = [
     },
   },
   {
-    // v6: метаданные последнего поздравления — для автоудаления при смене даты.
     version: 6,
     up(db) {
       const cols = new Set(
@@ -207,16 +206,11 @@ export const GUILD_MIGRATIONS = [
     },
   },
   {
-    // v7: оптимизация events через материализацию command_name / channel_id.
-    // Раньше getTopCommands / getTopChannels парсили meta через json_extract
-    // на каждой строке — это O(N) json-парсинга при N=100k+.
-    // Теперь: колонки + покрывающие индексы → group-by по индексу.
     version: 7,
     up(db) {
       const cols = new Set(
         db.prepare('PRAGMA table_info(events)').all().map((r) => r.name),
       );
-
       if (!cols.has('command_name')) {
         db.exec('ALTER TABLE events ADD COLUMN command_name TEXT');
       }
@@ -224,10 +218,6 @@ export const GUILD_MIGRATIONS = [
         db.exec('ALTER TABLE events ADD COLUMN channel_id TEXT');
       }
 
-      // Покрывающие индексы:
-      //   - type + created_at — фильтр;
-      //   - command_name / channel_id — группировка;
-      //   - user_id — для COUNT(DISTINCT user_id) в getTopChannels.
       db.exec(`
         CREATE INDEX IF NOT EXISTS idx_events_type_created_cmd
           ON events(type, created_at, command_name);
@@ -235,8 +225,6 @@ export const GUILD_MIGRATIONS = [
           ON events(type, created_at, channel_id, user_id);
       `);
 
-      // Backfill существующих строк из meta. Одноразовая операция,
-      // при большом объёме может занять несколько секунд при первом запуске.
       try {
         db.exec(`
           UPDATE events
@@ -253,6 +241,35 @@ export const GUILD_MIGRATIONS = [
         `);
       } catch {
         // json_extract может упасть на битом JSON — не блокируем миграцию.
+      }
+    },
+  },
+  {
+    // v8: user_id для logs — чтобы JOIN с user_profiles давал username/displayName/avatarUrl.
+    // Без этой колонки уровни/дни рождения/автомодерация показывались без юзера.
+    version: 8,
+    up(db) {
+      const cols = new Set(
+        db.prepare('PRAGMA table_info(logs)').all().map((r) => r.name),
+      );
+      if (!cols.has('user_id')) {
+        db.exec('ALTER TABLE logs ADD COLUMN user_id TEXT');
+        db.exec(
+          'CREATE INDEX IF NOT EXISTS idx_logs_user ON logs(user_id, created_at DESC)',
+        );
+      }
+
+      // Backfill: пробуем вытащить userId из meta у старых записей
+      try {
+        db.exec(`
+          UPDATE logs
+          SET user_id = json_extract(meta, '$.userId')
+          WHERE meta IS NOT NULL
+            AND user_id IS NULL
+            AND json_extract(meta, '$.userId') IS NOT NULL
+        `);
+      } catch {
+        // старый битый JSON — пропускаем
       }
     },
   },

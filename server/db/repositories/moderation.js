@@ -1,20 +1,26 @@
 // server/db/repositories/moderation.js
-// Репозиторий гильдийской БД (per-guild): модерирование, логи, аудит и настройки гильдии.
-// botId/guildId не передаются — БД уже привязана к конкретной гильдии.
+// Репозиторий гильдейской БД (per-guild): модерация, логи, аудит, настройки.
 
 export function createModerationRepo(raw) {
   return {
-    /* ═══════════ mod_actions ═══════════ */
+    /* ═══════════════ mod_actions ═══════════════ */
 
     getModActions(kind) {
-      if (kind) {
-        return raw.prepare(
-          'SELECT * FROM mod_actions WHERE kind = ? ORDER BY created_at DESC LIMIT 200',
-        ).all(kind);
-      }
-      return raw.prepare(
-        'SELECT * FROM mod_actions ORDER BY created_at DESC LIMIT 200',
-      ).all();
+      const sql = `
+        SELECT
+          ma.*,
+          up.username     AS user_username,
+          up.display_name AS user_display_name,
+          up.avatar_url   AS user_avatar_url
+        FROM mod_actions ma
+        LEFT JOIN user_profiles up ON up.user_id = ma.user_id
+        ${kind ? 'WHERE ma.kind = ?' : ''}
+        ORDER BY ma.created_at DESC
+        LIMIT 200
+      `;
+      return kind
+        ? raw.prepare(sql).all(kind)
+        : raw.prepare(sql).all();
     },
 
     addModAction(a) {
@@ -41,24 +47,46 @@ export function createModerationRepo(raw) {
       return raw.prepare('SELECT * FROM mod_actions WHERE id = ?').get(id);
     },
 
-    /* ═══════════ logs ═══════════ */
+    /* ═══════════════ logs ═══════════════ */
 
+    /**
+     * @param {object} entry
+     * @param {string} entry.level       — info | warn | error | debug
+     * @param {string} [entry.module]    — ключ модуля (levels, birthdays, moderation, ...)
+     * @param {string} entry.message
+     * @param {string} [entry.userId]    — Discord ID пользователя, к которому относится лог
+     * @param {object} [entry.meta]      — произвольные поля
+     */
     addLog(entry) {
+      const meta = entry.meta || null;
+      // userId можно передать явно или положить в meta.userId — берём первое доступное
+      const userId = entry.userId
+        || (meta && typeof meta.userId === 'string' ? meta.userId : null);
+
       raw.prepare(`
-        INSERT INTO logs (level, module, message, meta)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO logs (level, module, message, meta, user_id)
+        VALUES (?, ?, ?, ?, ?)
       `).run(
         entry.level,
         entry.module || null,
         entry.message,
-        entry.meta ? JSON.stringify(entry.meta) : null,
+        meta ? JSON.stringify(meta) : null,
+        userId,
       );
     },
 
     getLogs(limit = 100) {
-      return raw.prepare(
-        'SELECT * FROM logs ORDER BY created_at DESC LIMIT ?',
-      ).all(limit);
+      return raw.prepare(`
+        SELECT
+          l.*,
+          up.username     AS user_username,
+          up.display_name AS user_display_name,
+          up.avatar_url   AS user_avatar_url
+        FROM logs l
+        LEFT JOIN user_profiles up ON up.user_id = l.user_id
+        ORDER BY l.created_at DESC
+        LIMIT ?
+      `).all(limit);
     },
 
     countLogsByLevel(level, since = 0) {
@@ -67,7 +95,7 @@ export function createModerationRepo(raw) {
       ).get(level, since).c;
     },
 
-    /* ═══════════ panel_audit (per-guild) ═══════════ */
+    /* ═══════════════ panel_audit ═══════════════ */
 
     addAudit({ userId, action, target = null, meta = null, ip = null }) {
       try {
@@ -82,7 +110,7 @@ export function createModerationRepo(raw) {
           ip,
         );
       } catch {
-        // Аудит не должен ломать основной поток
+        // аудит не должен ломать основной поток
       }
     },
 
@@ -92,7 +120,7 @@ export function createModerationRepo(raw) {
       ).all(limit);
     },
 
-    /* ═══════════ guild_settings (singleton per guild) ═══════════ */
+    /* ═══════════════ guild_settings ═══════════════ */
 
     getGuildSettings() {
       const row = raw.prepare('SELECT * FROM guild_settings WHERE id = 1').get();
