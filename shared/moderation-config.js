@@ -96,7 +96,43 @@ export function filterDmDefault(key) {
   };
 }
 
+/**
+ * Шаблон лога для антирейда. События raid — не «нарушения сообщений»,
+ * а факты о волне/аккаунтах/raid mode. Доступны только токены:
+ *   {reason}  — название события
+ *   {message} — детали (вошедших, raid mode, возраст аккаунта, действие)
+ *   {filter}  — метка фильтра («Антирейд»)
+ *   {guild}   — имя сервера
+ */
+function raidLogDefault() {
+  return {
+    displayMode: 'embed-color',
+    accentColor: '#dc2626',
+    title: 'Антирейд',
+    subtitle: '',
+    thumbnail: '',
+    blocks: [
+      { id: 'raid_reason',  type: 'text',      content: '{reason}' },
+      { id: 'raid_sep',     type: 'separator', spacing: 1 },
+      { id: 'raid_message', type: 'text',      content: '{message}' },
+    ],
+  };
+}
+
+/**
+ * Дефолтный лог-шаблон для фильтра.
+ *
+ * Для канала используется {channelText} («#general»), а НЕ {channel} («<#id>»).
+ * Причина: <#id> на мобильном клиенте Discord часто показывает
+ * «нет доступа» — рендерится через локальный guild cache, которого у mobile
+ * может не быть. {channelText} — plain text, работает везде.
+ *
+ * Пользователь, которому нужна кликабельность, может вручную вставить
+ * {channel} в свой кастомный шаблон.
+ */
 export function filterLogDefault(key) {
+  if (key === 'raid') return raidLogDefault();
+
   const meta = FILTER_META[key];
   return {
     displayMode: 'embed-color',
@@ -110,12 +146,56 @@ export function filterLogDefault(key) {
       listStyle: 'dot',
       items: [
         'Пользователь: {user}',
-        'Канал: {channel}',
+        'Канал: {channelText}',
         'Причина: {reason}',
         'Действие: **{action}**',
         'Нарушение №**{violation}** по этому фильтру',
       ],
     }],
+  };
+}
+
+/**
+ * Одноразовая миграция старого дефолтного raid-шаблона
+ * (с «Нарушение №{violation} по этому фильтру») на новый.
+ */
+function migrateOldRaidDefault(key, templateLog) {
+  if (key !== 'raid') return null;
+  if (!templateLog || !Array.isArray(templateLog.blocks)) return null;
+
+  const hasOldMarker = JSON.stringify(templateLog.blocks)
+    .includes('Нарушение №**{violation}**');
+  return hasOldMarker ? raidLogDefault() : null;
+}
+
+/**
+ * Одноразовая миграция старого дефолтного лог-шаблона с `Канал: {channel}`
+ * (это вызывает «нет доступа» на mobile) на новый с `{channelText}`.
+ * Трогает только шаблоны, идентичные старому дефолту.
+ */
+function migrateOldLogChannelToken(templateLog) {
+  if (!templateLog || !Array.isArray(templateLog.blocks)) return null;
+
+  const marker = 'Канал: {channel}';
+  const json = JSON.stringify(templateLog);
+  if (!json.includes(marker)) return null;
+
+  const isDefaultLike = templateLog.blocks.length === 1
+    && templateLog.blocks[0].type === 'sections'
+    && Array.isArray(templateLog.blocks[0].items)
+    && templateLog.blocks[0].items.includes('Пользователь: {user}')
+    && templateLog.blocks[0].items.includes(marker);
+
+  if (!isDefaultLike) return null;
+
+  return {
+    ...templateLog,
+    blocks: templateLog.blocks.map((b) => ({
+      ...b,
+      items: Array.isArray(b.items)
+        ? b.items.map((it) => (it === marker ? 'Канал: {channelText}' : it))
+        : b.items,
+    })),
   };
 }
 
@@ -129,9 +209,9 @@ export function defaultMessageConfig() {
 }
 
 export function defaultEscalationRow(level) {
-  if (level === 1) return { action: 'warn', durationMin: 0,            roleId: '' };
-  if (level === 2) return { action: 'mute', durationMin: 10,           roleId: '' };
-  return             { action: 'ban',  durationMin: 7 * 24 * 60, roleId: '' };
+  if (level === 1) return { action: 'warn', durationMin: 0 };
+  if (level === 2) return { action: 'mute', durationMin: 10 };
+  return             { action: 'ban',  durationMin: 7 * 24 * 60 };
 }
 
 export function defaultFilterEscalation() {
@@ -148,7 +228,6 @@ export function defaultFilterConfig(key) {
     enabled: ['spam', 'profanity', 'caps', 'duplicates'].includes(key),
     action: 'warn',
     durationMin: 10,
-    roleId: '',
     channelsMode: 'all',
     channels: [],
     excludeRoles: [],
@@ -167,11 +246,8 @@ export function defaultFilterParams(key) {
 
     case 'profanity':
       return {
-        // Правила из Filter.txt: [{ pattern: string, whitelist: string[] }]
         regexRules: [],
-        // Свои слова мата (триггеры)
         customWords: [],
-        // Свои исключения (глобальный whitelist)
         customExceptions: [],
       };
 
@@ -225,7 +301,6 @@ function mergeEscRow(raw) {
   return {
     action,
     durationMin: Math.max(0, parseInt(r.durationMin, 10) || 0),
-    roleId: String(r.roleId || ''),
   };
 }
 
@@ -252,7 +327,6 @@ export function mergeFilterEscalation(raw) {
 function mergeProfanityParams(raw) {
   const r = raw && typeof raw === 'object' ? raw : {};
 
-  /* ── regexRules ── */
   const regexRules = [];
   if (Array.isArray(r.regexRules)) {
     for (const rule of r.regexRules) {
@@ -267,7 +341,6 @@ function mergeProfanityParams(raw) {
       if (regexRules.length >= 1000) break;
     }
   }
-  // миграция со старого { regexPatterns, whitelist }
   if (!regexRules.length && Array.isArray(r.regexPatterns)) {
     const sharedWl = Array.isArray(r.whitelist)
       ? r.whitelist.map((w) => String(w || '').trim()).filter(Boolean)
@@ -281,7 +354,6 @@ function mergeProfanityParams(raw) {
     }
   }
 
-  /* ── customWords ── */
   let customWords = [];
   if (Array.isArray(r.customWords)) {
     customWords = r.customWords.map((w) => String(w || '').trim()).filter(Boolean).slice(0, 500);
@@ -289,7 +361,6 @@ function mergeProfanityParams(raw) {
     customWords = r.custom.split(/[,\n]+/).map((w) => w.trim()).filter(Boolean).slice(0, 500);
   }
 
-  /* ── customExceptions ── */
   let customExceptions = [];
   if (Array.isArray(r.customExceptions)) {
     customExceptions = r.customExceptions.map((w) => String(w || '').trim()).filter(Boolean).slice(0, 500);
@@ -337,7 +408,7 @@ function mergeFilter(raw, key) {
   const d = defaultFilterConfig(key);
   const r = raw && typeof raw === 'object' ? raw : {};
   let action = r.action;
-  if (action === 'role' || action === 'kick' || action === 'warn_delete') action = 'warn';
+  if (action === 'kick' || action === 'warn_delete') action = 'warn';
   if (!ACTION_VALUES.has(action)) action = d.action;
 
   let params;
@@ -349,14 +420,18 @@ function mergeFilter(raw, key) {
     enabled:       typeof r.enabled === 'boolean' ? r.enabled : d.enabled,
     action,
     durationMin:   Math.max(1, parseInt(r.durationMin, 10) || d.durationMin),
-    roleId:        String(r.roleId || ''),
     channelsMode:  ['all', 'whitelist', 'blacklist'].includes(r.channelsMode) ? r.channelsMode : d.channelsMode,
     channels:      Array.isArray(r.channels) ? r.channels.map(String) : [],
     excludeRoles:  Array.isArray(r.excludeRoles) ? r.excludeRoles.map(String) : [],
     logChannelId:  String(r.logChannelId || ''),
     notifyDm:      typeof r.notifyDm === 'boolean' ? r.notifyDm : d.notifyDm,
     templateDm:    mergeMessageConfig(r.templateDm || d.templateDm),
-    templateLog:   mergeMessageConfig(r.templateLog || d.templateLog),
+    templateLog:   mergeMessageConfig(
+      migrateOldLogChannelToken(r.templateLog)
+        || migrateOldRaidDefault(key, r.templateLog)
+        || r.templateLog
+        || d.templateLog,
+    ),
     escalation:    mergeFilterEscalation(r.escalation),
     params,
   };

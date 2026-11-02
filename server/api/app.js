@@ -22,6 +22,10 @@ import { levelsRouter } from './routes/levels.js';
 import { previewRouter } from './routes/preview.js';
 import { originCheck } from './middleware/origin-check.js';
 import { generalApiLimiter, addBotLimiter } from './middleware/rate-limit.js';
+import { stickyRouter } from './routes/sticky.js';
+import { autodeleteRouter } from './routes/autodelete.js';
+import { scheduledRouter } from './routes/scheduled.js';
+import { messageTemplatesRouter } from './routes/message-templates.js';
 
 export function createApp({ db, botManager, registry, logger }) {
   const app = express();
@@ -125,8 +129,11 @@ export function createApp({ db, botManager, registry, logger }) {
   app.use('/api/commands', commandsRouter());
   app.use('/api/members', membersRouter());
   app.use('/api/guild-settings', settingsRouter());
-
+  app.use('/api/sticky', stickyRouter());
+  app.use('/api/autodelete', autodeleteRouter());
   app.use('/api/preview', previewRouter());
+  app.use('/api/scheduled', scheduledRouter());
+  app.use('/api/message-templates', messageTemplatesRouter());
 
   app.use('/api/stats/members', statsMembersRouter());
   app.use('/api/stats', statsRouter());

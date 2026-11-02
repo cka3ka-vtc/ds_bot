@@ -29,7 +29,6 @@ export class BotInstance {
     });
     this._wireEvents();
 
-    // client.login retry-ится только при 429 / network. Invalid token — не retry.
     await retryDiscord(() => this.client.login(this.token), {
       maxAttempts: 4,
       baseDelayMs: 5000,
@@ -86,10 +85,6 @@ export class BotInstance {
     this.client.on(Events.GuildMemberAdd,    emitMember('guildMemberAdd'));
     this.client.on(Events.GuildMemberRemove, emitMember('guildMemberRemove'));
 
-    /**
-     * guildMemberUpdate — нужен для модуля «Дни рождения»:
-     * мгновенно снимает роль именинника, если её выдали в неправильный день.
-     */
     this.client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
       this.eventBus.emit('guildMemberUpdate', {
         botId: this.id,
@@ -103,6 +98,15 @@ export class BotInstance {
     this.client.on(Events.MessageCreate, (message) => {
       if (message.author.bot) return;
       this.eventBus.emit('messageCreate', {
+        botId: this.id,
+        guildId: message.guild?.id,
+        client: this.client,
+        message,
+      });
+    });
+
+    this.client.on(Events.MessageDelete, (message) => {
+      this.eventBus.emit('messageDelete', {
         botId: this.id,
         guildId: message.guild?.id,
         client: this.client,

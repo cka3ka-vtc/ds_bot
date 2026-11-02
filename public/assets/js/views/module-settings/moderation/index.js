@@ -7,6 +7,7 @@ import { toast } from '../../../core/toast.js';
 import { escapeHtml } from '../../../core/utils.js';
 import { mergeModerationConfig } from '/shared/moderation-config.js';
 import { UI } from '/shared/ui-strings.js';
+import { renderModuleOffBanner, bindModuleOffBanner } from '../../../components/moduleBanner.js';
 
 import { buildPageHTML } from './ui.js';
 import { buildSetupContext } from './setup/_context.js';
@@ -79,7 +80,27 @@ export default {
     };
 
     container.innerHTML = buildPageHTML(this.state);
-    this._setup(container, this.state);
+
+    /* ─── Баннер «Модуль выключен» ─── */
+    if (!this.state.enabled) {
+      container.querySelector('.module-page')?.insertAdjacentHTML(
+        'afterbegin',
+        renderModuleOffBanner({
+          moduleKey: 'moderation',
+          moduleName: 'Автомодерация',
+          hint: 'Фильтры и наказания не будут применяться, пока модуль выключен.',
+        }),
+      );
+    }
+
+this._setup(container, this.state);
+
+bindModuleOffBanner({
+  container,
+  botId: this.state.botId,
+  guildId: this.state.guildId,
+  moduleKey: 'moderation',
+});
   },
 
   _setup(root, state) {

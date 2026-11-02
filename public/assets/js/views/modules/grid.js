@@ -8,12 +8,20 @@ import greetingsSettingsPage from '../module-settings/greetings.js';
 import levelsSettingsPage from '../module-settings/levels/index.js';
 import birthdaysSettingsPage from '../module-settings/birthdays.js';
 import moderationSettingsPage from '../module-settings/moderation.js';
+import stickySettingsPage from '../module-settings/sticky.js';
+import autodeleteSettingsPage from '../module-settings/autodelete.js';
+import scheduledSettingsPage from '../module-settings/scheduled.js';
+import messageTemplatesSettingsPage from '../module-settings/message-templates.js';
 
 export const openableModules = {
   greetings: greetingsSettingsPage,
   levels: levelsSettingsPage,
   birthdays: birthdaysSettingsPage,
   moderation: moderationSettingsPage,
+  sticky: stickySettingsPage,
+  autodelete: autodeleteSettingsPage,
+  scheduled: scheduledSettingsPage,
+  'message-templates': messageTemplatesSettingsPage,
 };
 
 export function renderModulesGrid(view, modules) {

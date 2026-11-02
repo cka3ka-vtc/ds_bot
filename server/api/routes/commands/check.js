@@ -1,21 +1,12 @@
 // server/api/routes/commands/check.js
 import { Router } from 'express';
+import { requireBotAccess } from '../../auth-middleware.js';
 import { validateCommandName } from './_shared.js';
 
-/**
- * GET /api/commands/check?botId=...&guildId=...&name=...&excludeId=...
- *
- * Проверка имени команды перед сохранением (для подсказок в редакторе):
- *   - валидный ли формат (буквы/цифры/_-);
- *   - не зарезервировано ли имя под встроенную команду;
- *   - нет ли дубликата среди кастомных (с учётом excludeId при редактировании).
- *
- * Не проверяет минимальную длину — это делает UI (2 символа).
- */
 export function createCheckRouter() {
   const router = Router();
 
-  router.get('/check', (req, res) => {
+  router.get('/check', requireBotAccess, (req, res) => {
     const { botId, guildId, name, excludeId } = req.query;
 
     const result = validateCommandName(

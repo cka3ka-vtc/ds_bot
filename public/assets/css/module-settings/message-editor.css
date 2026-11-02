@@ -665,11 +665,15 @@
 }
 
 .msg-templates-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.msg-templates-grid + .msg-templates-actions {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
-  display: flex;
-  justify-content: flex-end;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -748,4 +752,60 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ─── Кнопка {x} в полях блоков ─── */
+.block-act[data-tokens-for] {
+  flex-shrink: 0;
+}
+.block-act[data-tokens-for] i {
+  font-size: 11px;
+}
+
+/* ─── Плашка «нет переменных для поля» ─── */
+.tokens-empty {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.tokens-empty i {
+  color: var(--accent);
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.tokens-empty strong {
+  display: block;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.tokens-empty span {
+  color: var(--muted);
+}
+
+/* ─── Подсказка сверху списка токенов ─── */
+.tokens-hint {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 12px;
+  margin: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  font-weight: 500;
+}
+.tokens-hint i {
+  font-size: 11px;
+  margin-top: 1px;
+  flex-shrink: 0;
+  opacity: .9;
 }

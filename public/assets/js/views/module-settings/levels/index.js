@@ -7,6 +7,7 @@ import { mergeLevelsConfig, bindNumSteppers } from './helpers.js';
 import { buildPageHTML } from './ui.js';
 import { UI } from '/shared/ui-strings.js';
 import { LEVELS_MSG } from '/shared/command-editor-strings.js';
+import { renderModuleOffBanner, bindModuleOffBanner } from '../../../components/moduleBanner.js';
 
 import { buildSetupContext } from './setup/_context.js';
 import { setupMain } from './setup/main.js';
@@ -60,9 +61,31 @@ export default {
       botId, guildId, channels, roles, cfg, bot,
       editors: {},
       activeMsgTab: 'levelUp',
+      enabled: !!storedCfg.enabled,   // ← добавить
     };
+
     container.innerHTML = buildPageHTML(cfg, channels);
-    this._setup(container, this.state);
+
+    /* ─── Баннер «Модуль выключен» ─── */
+    if (!storedCfg.enabled) {
+      container.querySelector('.module-page')?.insertAdjacentHTML(
+        'afterbegin',
+        renderModuleOffBanner({
+          moduleKey: 'levels',
+          moduleName: 'Уровни',
+          hint: 'Система опыта, наград и званий не будет работать, пока модуль выключен.',
+        }),
+      );
+    }
+
+this._setup(container, this.state);
+
+bindModuleOffBanner({
+  container,
+  botId: this.state.botId,
+  guildId: this.state.guildId,
+  moduleKey: 'levels',
+});
   },
 
   _setup(root, state) {

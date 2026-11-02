@@ -8,6 +8,7 @@ import { MessageEditor, emptyMessageConfig } from './message-editor.js';
 import { mergeBirthdaysConfig } from '/shared/birthdays-config.js';
 import { UI } from '/shared/ui-strings.js';
 import { BIRTHDAYS_MSG } from '/shared/command-editor-strings.js';
+import { renderModuleOffBanner, bindModuleOffBanner } from '../../components/moduleBanner.js';
 
 const MSG_TABS = ['announce', 'cmdSet', 'cmdToggle', 'cmdList'];
 
@@ -261,10 +262,31 @@ export default {
       editors: {},
       activeMsgTab: 'announce',
       permissions: null,
+      enabled: !!storedCfg.enabled,   // ← добавить
     };
 
     container.innerHTML = buildPageHTML(cfg);
-    this._setup(container, this.state);
+
+    /* ─── Баннер «Модуль выключен» ─── */
+    if (!storedCfg.enabled) {
+      container.querySelector('.module-page')?.insertAdjacentHTML(
+        'afterbegin',
+        renderModuleOffBanner({
+        moduleKey: 'birthdays',
+        moduleName: 'Дни рождения',
+        hint: 'Поздравления и роли именинников не будут работать, пока модуль выключен.',
+    }),
+  );
+}
+
+this._setup(container, this.state);
+
+bindModuleOffBanner({
+  container,
+  botId: this.state.botId,
+  guildId: this.state.guildId,
+  moduleKey: 'birthdays',
+});
   },
 
   destroy() {

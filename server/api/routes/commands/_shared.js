@@ -4,9 +4,6 @@
 import { sanitizeCommandName } from '../../../core/commandSync.js';
 import { isReservedCommandName } from '../../../../shared/builtin-commands.js';
 
-/**
- * Контекст для syncGuildCommands: репозиторий БД, менеджер ботов, логгер.
- */
 export function ctx(req) {
   return {
     db: req.app.locals.db,
@@ -15,9 +12,6 @@ export function ctx(req) {
   };
 }
 
-/**
- * Пишет запись в аудит. botId/guildId берутся из query или body.
- */
 export function audit(req, action, target, meta) {
   req.app.locals.db.addAudit({
     userId: req.user.id,
@@ -29,30 +23,21 @@ export function audit(req, action, target, meta) {
 }
 
 /**
- * Единая проверка имени команды для check / create / update.
+ * Единая проверка имени команды.
  *
- * Возвращает:
- *   { ok: true,  sanitized }                       — имя прошло проверки;
- *   { ok: false, error, message }                  — при ошибке.
- *
- * Коды ошибок:
- *   'invalid_name'   — пустое имя после sanitize / короче minLength;
- *   'reserved_name'  — имя занято встроенной командой;
- *   'duplicate_name' — есть другая команда с таким именем.
- *
- * @param {object} db             — репозиторий req.app.locals.db
+ * @param {object} db
  * @param {string} botId
  * @param {string} guildId
  * @param {string} rawName
  * @param {object} [opts]
- * @param {string} [opts.excludeId]   — id, который игнорируем (при update)
- * @param {number} [opts.minLength=1] — минимальная длина (POST/PUT передают 2)
+ * @param {string} [opts.excludeId]
+ * @param {number} [opts.minLength=1]
  * @param {boolean} [opts.includeMessage=false]
- *                                    — добавлять человекочитаемое message
- *                                      (для POST/PUT, где 400/409 идут в UI)
+ * @param {Array} [opts.existingCommands] — предзагруженный список (избегает повторной
+ *   выборки при вызове из контекста, где он уже есть, например из custom.js update).
  */
 export function validateCommandName(db, botId, guildId, rawName, opts = {}) {
-  const { excludeId, minLength = 1, includeMessage = false } = opts;
+  const { excludeId, minLength = 1, includeMessage = false, existingCommands } = opts;
 
   const sanitized = sanitizeCommandName(rawName);
   if (!sanitized || sanitized.length < minLength) {
@@ -75,9 +60,10 @@ export function validateCommandName(db, botId, guildId, rawName, opts = {}) {
     };
   }
 
-  const existing = db
-    .getCustomCommands(botId, guildId)
-    .find((c) => c.name === sanitized && c.id !== excludeId);
+  const pool = Array.isArray(existingCommands)
+    ? existingCommands
+    : db.getCustomCommands(botId, guildId);
+  const existing = pool.find((c) => c.name === sanitized && c.id !== excludeId);
 
   if (existing) {
     return {

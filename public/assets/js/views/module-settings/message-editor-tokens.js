@@ -2,19 +2,34 @@
 import { UI } from '/shared/ui-strings.js';
 
 const CATEGORY_LABELS = UI.msgEditor.categories;
+const T = UI.msgEditor.tokens;
 
+/**
+ * Формат элементов: [id, description, kind?]
+ *
+ * kind:
+ *   'text'      — обычный текст, работает везде (кроме URL-полей);
+ *   'url'       — URL-значение, только для URL-полей (thumbnail/image/file/button.url);
+ *   'mention'   — упоминание вида @id / #id, НЕ рендерится в V2, кнопках, title, footer;
+ *   'timestamp' — Discord-тег времени, НЕ рендерится в V2, кнопках, title, footer;
+ *   'markdown'  — markdown-разметка и список @user, НЕ рендерится в кнопках.
+ *
+ * Если kind не указан — 'text'.
+ */
 export const TOKENS_BY_CONTEXT = {
-  /* ──────── greetings ──────── */
+  /* ───────── greetings ───────── */
   greetings: {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
-        ['user', UI.msgEditor.tokens.greetings.user],
-        ['username', UI.msgEditor.tokens.greetings.username],
-        ['displayName', UI.msgEditor.tokens.greetings.displayName],
+        ['user', T.greetings.user, 'mention'],
+        ['username', T.greetings.username],
+        ['displayName', T.greetings.displayName],
+        ['avatarUrl', T.greetings.avatarUrl, 'url'],
       ]},
       { label: CATEGORY_LABELS.server, items: [
-        ['guild', UI.msgEditor.tokens.greetings.guild],
-        ['count', UI.msgEditor.tokens.greetings.count],
+        ['guild', T.greetings.guild],
+        ['count', T.greetings.count],
+        ['guildIconUrl', T.greetings.guildIconUrl, 'url'],
       ]},
     ],
     preview: {
@@ -24,28 +39,30 @@ export const TOKENS_BY_CONTEXT = {
     },
   },
 
-  /* ──────── levels.levelUp ──────── */
+  /* ───────── levels.levelUp ───────── */
   'levels.levelUp': {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
-        ['user', UI.msgEditor.tokens.levels.user],
-        ['displayName', UI.msgEditor.tokens.levels.displayName],
+        ['user', T.levels.user, 'mention'],
+        ['displayName', T.levels.displayName],
+        ['avatarUrl', T.levels.avatarUrl, 'url'],
       ]},
       { label: CATEGORY_LABELS.levels, items: [
-        ['level', UI.msgEditor.tokens.levels.level],
-        ['oldLevel', UI.msgEditor.tokens.levels.oldLevel],
-        ['title', UI.msgEditor.tokens.levels.title],
-        ['xp', UI.msgEditor.tokens.levels.xp],
-        ['nextLevelXp', UI.msgEditor.tokens.levels.nextLevelXp],
-        ['xpToNext', UI.msgEditor.tokens.levels.xpToNext],
-        ['progress', UI.msgEditor.tokens.levels.progress],
-        ['progressPercent', UI.msgEditor.tokens.levels.progressPercent],
-        ['position', UI.msgEditor.tokens.levels.position],
-        ['rewardRole', UI.msgEditor.tokens.levels.rewardRole],
+        ['level', T.levels.level],
+        ['oldLevel', T.levels.oldLevel],
+        ['title', T.levels.title],
+        ['xp', T.levels.xp],
+        ['nextLevelXp', T.levels.nextLevelXp],
+        ['xpToNext', T.levels.xpToNext],
+        ['progress', T.levels.progress],
+        ['progressPercent', T.levels.progressPercent],
+        ['position', T.levels.position],
+        ['rewardRole', T.levels.rewardRole],
       ]},
       { label: CATEGORY_LABELS.server, items: [
-        ['guild', UI.msgEditor.tokens.levels.guild],
-        ['count', UI.msgEditor.tokens.levels.count],
+        ['guild', T.levels.guild],
+        ['count', T.levels.count],
+        ['guildIconUrl', T.levels.guildIconUrl, 'url'],
       ]},
     ],
     preview: {
@@ -60,27 +77,29 @@ export const TOKENS_BY_CONTEXT = {
     },
   },
 
-  /* ──────── levels.rank ──────── */
+  /* ───────── levels.rank ───────── */
   'levels.rank': {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
-        ['user', UI.msgEditor.tokens.levels.user],
-        ['username', UI.msgEditor.tokens.greetings.username],
-        ['displayName', UI.msgEditor.tokens.levels.displayName],
+        ['user', T.levels.user, 'mention'],
+        ['username', T.greetings.username],
+        ['displayName', T.levels.displayName],
+        ['avatarUrl', T.levels.avatarUrl, 'url'],
       ]},
       { label: CATEGORY_LABELS.levels, items: [
-        ['level', UI.msgEditor.tokens.levels.level],
-        ['title', UI.msgEditor.tokens.levels.title],
-        ['xp', UI.msgEditor.tokens.levels.xp],
-        ['nextLevelXp', UI.msgEditor.tokens.levels.nextLevelXp],
-        ['xpToNext', UI.msgEditor.tokens.levels.xpToNext],
-        ['progress', UI.msgEditor.tokens.levels.progress],
-        ['progressPercent', UI.msgEditor.tokens.levels.progressPercent],
-        ['position', UI.msgEditor.tokens.levels.position],
+        ['level', T.levels.level],
+        ['title', T.levels.title],
+        ['xp', T.levels.xp],
+        ['nextLevelXp', T.levels.nextLevelXp],
+        ['xpToNext', T.levels.xpToNext],
+        ['progress', T.levels.progress],
+        ['progressPercent', T.levels.progressPercent],
+        ['position', T.levels.position],
       ]},
       { label: CATEGORY_LABELS.server, items: [
-        ['guild', UI.msgEditor.tokens.levels.guild],
-        ['count', UI.msgEditor.tokens.levels.count],
+        ['guild', T.levels.guild],
+        ['count', T.levels.count],
+        ['guildIconUrl', T.levels.guildIconUrl, 'url'],
       ]},
     ],
     preview: {
@@ -94,16 +113,17 @@ export const TOKENS_BY_CONTEXT = {
     },
   },
 
-  /* ──────── levels.leaderboard ──────── */
+  /* ───────── levels.leaderboard ───────── */
   'levels.leaderboard': {
     categories: [
       { label: CATEGORY_LABELS.server, items: [
-        ['guild', UI.msgEditor.tokens.levels.guild],
-        ['count', UI.msgEditor.tokens.levels.count],
+        ['guild', T.levels.guild],
+        ['count', T.levels.count],
+        ['guildIconUrl', T.levels.guildIconUrl, 'url'],
       ]},
       { label: CATEGORY_LABELS.levels, items: [
-        ['topUsers', 'Готовый список участников с медалями (markdown)'],
-        ['topCount', 'Сколько участников в топе'],
+        ['topUsers', T.levels.topUsers, 'markdown'],
+        ['topCount', T.levels.topCount],
       ]},
     ],
     preview: {
@@ -116,22 +136,24 @@ export const TOKENS_BY_CONTEXT = {
     },
   },
 
-  /* ──────── levels.daily ──────── */
+  /* ───────── levels.daily ───────── */
   'levels.daily': {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
-        ['user', UI.msgEditor.tokens.levels.user],
-        ['displayName', UI.msgEditor.tokens.levels.displayName],
+        ['user', T.levels.user, 'mention'],
+        ['displayName', T.levels.displayName],
+        ['avatarUrl', T.levels.avatarUrl, 'url'],
       ]},
       { label: CATEGORY_LABELS.levels, items: [
         ['xpGained', 'Сколько XP получено сегодня'],
         ['newXp', 'Новый накопленный XP'],
         ['newLevel', 'Новый уровень'],
-        ['nextDailyAt', 'Когда снова можно будет получить'],
+        ['nextDailyAt', T.levels.nextDailyAt, 'timestamp'],
       ]},
       { label: CATEGORY_LABELS.server, items: [
-        ['guild', UI.msgEditor.tokens.levels.guild],
-        ['count', UI.msgEditor.tokens.levels.count],
+        ['guild', T.levels.guild],
+        ['count', T.levels.count],
+        ['guildIconUrl', T.levels.guildIconUrl, 'url'],
       ]},
     ],
     preview: {
@@ -143,13 +165,14 @@ export const TOKENS_BY_CONTEXT = {
     },
   },
 
-  /* ──────── birthdays.announce ──────── */
+  /* ───────── birthdays.announce ───────── */
   'birthdays.announce': {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
-        ['user', 'Упоминание именинника'],
+        ['user', 'Упоминание именинника', 'mention'],
         ['username', 'Ник без @'],
         ['displayName', 'Отображаемое имя'],
+        ['avatarUrl', 'URL аватара', 'url'],
       ]},
       { label: 'День рождения', items: [
         ['birthday', 'Дата без года (ДД.ММ)'],
@@ -160,6 +183,7 @@ export const TOKENS_BY_CONTEXT = {
       { label: CATEGORY_LABELS.server, items: [
         ['guild', 'Имя сервера'],
         ['count', 'Всего участников'],
+        ['guildIconUrl', 'URL иконки сервера', 'url'],
       ]},
     ],
     preview: {
@@ -171,12 +195,13 @@ export const TOKENS_BY_CONTEXT = {
     },
   },
 
-  /* ──────── birthdays.cmdSet ──────── */
+  /* ───────── birthdays.cmdSet ───────── */
   'birthdays.cmdSet': {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
-        ['user', 'Упоминание'],
+        ['user', 'Упоминание', 'mention'],
         ['displayName', 'Отображаемое имя'],
+        ['avatarUrl', 'URL аватара', 'url'],
       ]},
       { label: 'День рождения', items: [
         ['birthday', 'Дата без года'],
@@ -198,11 +223,11 @@ export const TOKENS_BY_CONTEXT = {
     },
   },
 
-  /* ──────── birthdays.cmdToggle ──────── */
+  /* ───────── birthdays.cmdToggle ───────── */
   'birthdays.cmdToggle': {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
-        ['user', 'Упоминание'],
+        ['user', 'Упоминание', 'mention'],
         ['displayName', 'Отображаемое имя'],
       ]},
       { label: 'День рождения', items: [
@@ -226,7 +251,7 @@ export const TOKENS_BY_CONTEXT = {
     },
   },
 
-  /* ──────── birthdays.cmdList ──────── */
+  /* ───────── birthdays.cmdList ───────── */
   'birthdays.cmdList': {
     categories: [
       { label: CATEGORY_LABELS.server, items: [
@@ -234,7 +259,7 @@ export const TOKENS_BY_CONTEXT = {
         ['count', 'Сколько в списке'],
       ]},
       { label: 'День рождения', items: [
-        ['topUsers', 'Готовый список ближайших ДР (markdown с медалями)'],
+        ['topUsers', 'Готовый список ближайших ДР (markdown с медалями)', 'markdown'],
         ['birthdaysCount', 'Сколько участников указали ДР'],
       ]},
     ],
@@ -248,13 +273,55 @@ export const TOKENS_BY_CONTEXT = {
     },
   },
 
-  /* ──────── moderation.dm ──────── */
-  // Личное сообщение нарушителю (per-filter).
-  // {violation} — номер нарушения по этому фильтру (НЕ XP-уровень).
+  /* ───────── sticky ───────── */
+  sticky: {
+    categories: [
+      { label: CATEGORY_LABELS.server, items: [
+        ['guild', 'Имя сервера'],
+        ['count', 'Всего участников'],
+        ['guildIconUrl', 'URL иконки сервера', 'url'],
+      ]},
+    ],
+    preview: {
+      guild: 'Мой сервер',
+      count: '1234',
+      guildIconUrl: '',
+    },
+  },
+
+  /* ───────── scheduled ───────── */
+  scheduled: {
+    categories: [
+      { label: CATEGORY_LABELS.server, items: [
+        ['guild', 'Имя сервера'],
+        ['count', 'Всего участников'],
+        ['guildIconUrl', 'URL иконки сервера', 'url'],
+      ]},
+    ],
+    preview: {
+      guild: 'Мой сервер', count: '1234', guildIconUrl: '',
+    },
+  },
+
+  /* ───────── message-templates ───────── */
+  'message-templates': {
+    categories: [
+      { label: CATEGORY_LABELS.server, items: [
+        ['guild', 'Имя сервера'],
+        ['count', 'Всего участников'],
+        ['guildIconUrl', 'URL иконки сервера', 'url'],
+      ]},
+    ],
+    preview: {
+      guild: 'Мой сервер', count: '1234', guildIconUrl: '',
+    },
+  },
+
+  /* ───────── moderation.dm ───────── */
   'moderation.dm': {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
-        ['user', 'Упоминание'],
+        ['user', 'Упоминание', 'mention'],
         ['username', 'Ник без @'],
         ['displayName', 'Отображаемое имя'],
       ]},
@@ -264,6 +331,12 @@ export const TOKENS_BY_CONTEXT = {
         ['filter', 'Имя фильтра'],
         ['violation', 'Номер нарушения по этому фильтру'],
         ['matched', 'Найденное слово / URL'],
+        ['message', 'Текст сообщения (markdown экранирован, до 1900 символов)'],
+      ]},
+      { label: 'Канал', items: [
+        ['channel', 'Кликабельный #канал (на мобильном может показать «нет доступа»)'],
+        ['channelText', 'Текст #канал — работает всегда, но без клика'],
+        ['channelName', 'Имя канала без #'],
       ]},
       { label: CATEGORY_LABELS.server, items: [
         ['guild', 'Имя сервера'],
@@ -272,18 +345,19 @@ export const TOKENS_BY_CONTEXT = {
     preview: {
       user: '@Иван', username: 'ivan', displayName: 'Иван',
       reason: 'спам: 5 за 3 с', action: 'мут', filter: 'Антиспам',
-      violation: '3', matched: 'хуй',
+      violation: '3', matched: 'слово',
+      message: 'КУПИТЕ ДЕШЕВЫЕ ПОДПИСЧИКИ!!! bit.ly/xxxxx',
+      channel: '#general', channelText: '#general', channelName: 'general',
       guild: 'Мой сервер',
       avatarUrl: '', guildIconUrl: '',
     },
   },
 
-  /* ──────── moderation.log ──────── */
-  // Сообщение в канал логов (per-filter).
+  /* ───────── moderation.log ───────── */
   'moderation.log': {
     categories: [
       { label: CATEGORY_LABELS.user, items: [
-        ['user', 'Упоминание'],
+        ['user', 'Упоминание', 'mention'],
         ['username', 'Ник'],
         ['displayName', 'Имя'],
         ['userId', 'ID пользователя'],
@@ -295,9 +369,10 @@ export const TOKENS_BY_CONTEXT = {
         ['violation', 'Номер нарушения по этому фильтру'],
       ]},
       { label: 'Канал', items: [
-        ['channel', 'Упоминание канала'],
-        ['channelName', 'Имя канала'],
-        ['message', 'Текст сообщения'],
+        ['channel', 'Кликабельный #канал (на мобильном может показать «нет доступа»)'],
+        ['channelText', 'Текст #канал — работает всегда, но без клика'],
+        ['channelName', 'Имя канала без #'],
+        ['message', 'Текст сообщения (markdown экранирован, до 1900 символов)'],
       ]},
       { label: CATEGORY_LABELS.server, items: [
         ['guild', 'Имя сервера'],
@@ -307,8 +382,29 @@ export const TOKENS_BY_CONTEXT = {
       user: '@Иван', username: 'ivan', displayName: 'Иван', userId: '123456',
       reason: 'спам: 5 за 3 с', action: 'мут', filter: 'Антиспам',
       violation: '3',
-      channel: '#general', channelName: 'general',
-      message: 'купите подписчиков',
+      channel: '#general', channelText: '#general', channelName: 'general',
+      message: 'КУПИТЕ ДЕШЕВЫЕ ПОДПИСЧИКИ!!! bit.ly/xxxxx',
+      guild: 'Мой сервер',
+      avatarUrl: '', guildIconUrl: '',
+    },
+  },
+
+  /* ───────── moderation.raid ───────── */
+  'moderation.raid': {
+    categories: [
+      { label: 'Антирейд', items: [
+        ['reason', 'Название события: «Волна входов», «Подозрительный аккаунт»'],
+        ['message', 'Детали события (вошедших, raid mode, возраст аккаунта, действие)'],
+        ['filter', 'Имя фильтра — «Антирейд»'],
+      ]},
+      { label: CATEGORY_LABELS.server, items: [
+        ['guild', 'Имя сервера'],
+      ]},
+    ],
+    preview: {
+      reason: 'Обнаружена "**Волна входов**", для них будет предпринято действие: **кик всех вошедших**.',
+      message: '👥 Вошедших: **15** за **10 с** · Raid mode **активен 60 мин** (новые входы — **кик**).',
+      filter: 'Антирейд',
       guild: 'Мой сервер',
       avatarUrl: '', guildIconUrl: '',
     },
@@ -317,6 +413,23 @@ export const TOKENS_BY_CONTEXT = {
 
 export function getTokensFor(context) {
   return TOKENS_BY_CONTEXT[context] || TOKENS_BY_CONTEXT.greetings;
+}
+
+/**
+ * Разрешён ли токен данного kind в поле данного контекста.
+ *
+ * @param {string} kind — 'text' | 'url' | 'mention' | 'timestamp' | 'markdown'
+ * @param {string} fieldContext — 'rich' | 'title' | 'label' | 'footer' | 'url'
+ * @param {boolean} isV2 — true, если displayMode === 'flat' (Components V2)
+ */
+export function isTokenAllowed(kind, fieldContext, isV2) {
+  if (fieldContext === 'url')    return kind === 'url';
+  if (fieldContext === 'title')  return kind === 'text';
+  if (fieldContext === 'label')  return kind === 'text';
+  if (fieldContext === 'footer') return kind === 'text';
+
+  if (isV2) return kind === 'text' || kind === 'markdown';
+  return true;
 }
 
 export default TOKENS_BY_CONTEXT;

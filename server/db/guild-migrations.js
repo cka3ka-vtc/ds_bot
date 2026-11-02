@@ -246,7 +246,6 @@ export const GUILD_MIGRATIONS = [
   },
   {
     // v8: user_id для logs — чтобы JOIN с user_profiles давал username/displayName/avatarUrl.
-    // Без этой колонки уровни/дни рождения/автомодерация показывались без юзера.
     version: 8,
     up(db) {
       const cols = new Set(
@@ -259,7 +258,6 @@ export const GUILD_MIGRATIONS = [
         );
       }
 
-      // Backfill: пробуем вытащить userId из meta у старых записей
       try {
         db.exec(`
           UPDATE logs
@@ -270,6 +268,219 @@ export const GUILD_MIGRATIONS = [
         `);
       } catch {
         // старый битый JSON — пропускаем
+      }
+    },
+  },
+  {
+    // v9: soft-delete для mod_actions — снятие/истечение бана больше не удаляет
+    // запись из БД, а помечает её. Появилась колонка removed_at / removed_by,
+    // а также индексы под фильтры журнала.
+    version: 9,
+    up(db) {
+      const cols = new Set(
+        db.prepare('PRAGMA table_info(mod_actions)').all().map((r) => r.name),
+      );
+      if (!cols.has('removed_at')) {
+        db.exec('ALTER TABLE mod_actions ADD COLUMN removed_at INTEGER');
+      }
+      if (!cols.has('removed_by')) {
+        db.exec('ALTER TABLE mod_actions ADD COLUMN removed_by TEXT');
+      }
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_mod_actions_status
+          ON mod_actions(removed_at, expires_at, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_mod_actions_kind
+          ON mod_actions(kind, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_mod_actions_moderator
+          ON mod_actions(moderator_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_mod_actions_user
+          ON mod_actions(user_id, created_at DESC);
+      `);
+    },
+  },
+  {
+    // v10: filter_key + violation в mod_actions — для структурированного
+    // отображения в журнале («по правилу «Фильтр мата» · нарушение №3»).
+    // Backfill переводит старые auto-записи (reason = 'мат'/'спам'/...) в новый формат.
+    version: 10,
+    up(db) {
+      const cols = new Set(
+        db.prepare('PRAGMA table_info(mod_actions)').all().map((r) => r.name),
+      );
+      if (!cols.has('filter_key')) {
+        db.exec('ALTER TABLE mod_actions ADD COLUMN filter_key TEXT');
+      }
+      if (!cols.has('violation')) {
+        db.exec('ALTER TABLE mod_actions ADD COLUMN violation INTEGER');
+      }
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_mod_actions_filter
+          ON mod_actions(filter_key, created_at DESC);
+      `);
+
+      try {
+        db.exec(`
+          UPDATE mod_actions
+          SET filter_key = CASE reason
+            WHEN 'мат'         THEN 'profanity'
+            WHEN 'спам'        THEN 'spam'
+            WHEN 'капс'        THEN 'caps'
+            WHEN 'дубликат'    THEN 'duplicates'
+            WHEN 'ссылка'      THEN 'links'
+            WHEN 'инвайт'      THEN 'invites'
+            WHEN 'упоминания'  THEN 'mentions'
+            WHEN 'рейд'        THEN 'raid'
+            WHEN 'залго'       THEN 'zalgo'
+            WHEN 'эмодзи'      THEN 'emoji'
+          END
+          WHERE moderator_id IS NULL
+            AND filter_key IS NULL
+            AND reason IN ('мат','спам','капс','дубликат','ссылка','инвайт','упоминания','рейд','залго','эмодзи');
+        `);
+
+        db.exec(`
+          UPDATE mod_actions
+          SET reason = CASE filter_key
+            WHEN 'profanity'  THEN 'Фильтр мата'
+            WHEN 'spam'       THEN 'Антиспам'
+            WHEN 'caps'       THEN 'Фильтр капса'
+            WHEN 'duplicates' THEN 'Дубликаты'
+            WHEN 'links'      THEN 'Блокировка ссылок'
+            WHEN 'invites'    THEN 'Блокировка инвайтов'
+            WHEN 'mentions'   THEN 'Массовые упоминания'
+            WHEN 'raid'       THEN 'Антирейд'
+            WHEN 'zalgo'      THEN 'Анти-залго'
+            WHEN 'emoji'      THEN 'Эмодзи-спам'
+          END
+          WHERE filter_key IS NOT NULL
+            AND moderator_id IS NULL;
+        `);
+      } catch {
+        // backfill — best-effort, при ошибке не блокируем миграцию
+      }
+    },
+  },
+  {
+    // v11: sticky_messages, autodelete_rules, autodelete_pending
+    version: 11,
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sticky_messages (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          channel_id TEXT NOT NULL,
+          message_config TEXT NOT NULL DEFAULT '{}',
+          last_message_id TEXT,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER DEFAULT (unixepoch()),
+          updated_at INTEGER DEFAULT (unixepoch())
+        );
+        CREATE INDEX IF NOT EXISTS idx_sticky_channel
+          ON sticky_messages(channel_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_sticky_unique_enabled_channel
+          ON sticky_messages(channel_id) WHERE enabled = 1;
+
+        CREATE TABLE IF NOT EXISTS autodelete_rules (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          channel_id TEXT NOT NULL,
+          mode TEXT NOT NULL DEFAULT 'instant',
+          delay_value INTEGER,
+          delay_unit TEXT,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER DEFAULT (unixepoch()),
+          updated_at INTEGER DEFAULT (unixepoch())
+        );
+        CREATE INDEX IF NOT EXISTS idx_autodelete_channel
+          ON autodelete_rules(channel_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_autodelete_unique_enabled_channel
+          ON autodelete_rules(channel_id) WHERE enabled = 1;
+
+        CREATE TABLE IF NOT EXISTS autodelete_pending (
+          message_id TEXT PRIMARY KEY,
+          channel_id TEXT NOT NULL,
+          delete_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_autodelete_pending_at
+          ON autodelete_pending(delete_at);
+      `);
+    },
+  },
+  {
+    // v12: scheduled_messages, message_templates
+    version: 12,
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS scheduled_messages (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          channel_id TEXT NOT NULL,
+          message_config TEXT NOT NULL DEFAULT '{}',
+          scheduled_at INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          last_sent_at INTEGER,
+          last_error TEXT,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER DEFAULT (unixepoch()),
+          updated_at INTEGER DEFAULT (unixepoch())
+        );
+        CREATE INDEX IF NOT EXISTS idx_scheduled_pending
+          ON scheduled_messages(status, scheduled_at)
+          WHERE enabled = 1;
+
+        CREATE TABLE IF NOT EXISTS message_templates (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          message_config TEXT NOT NULL DEFAULT '{}',
+          created_at INTEGER DEFAULT (unixepoch()),
+          updated_at INTEGER DEFAULT (unixepoch())
+        );
+      `);
+    },
+  },
+  {
+    // v13: default_channel_id для message_templates
+    version: 13,
+    up(db) {
+      const tables = new Set(
+        db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name),
+      );
+      if (!tables.has('message_templates')) return;
+
+      const cols = new Set(
+        db.prepare('PRAGMA table_info(message_templates)').all().map((r) => r.name),
+      );
+      if (!cols.has('default_channel_id')) {
+        db.exec('ALTER TABLE message_templates ADD COLUMN default_channel_id TEXT');
+      }
+    },
+  },
+  {
+    // v14: last_sent_at для message_templates, last_deleted_at для autodelete_rules
+    version: 14,
+    up(db) {
+      const tables = new Set(
+        db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name),
+      );
+
+      if (tables.has('message_templates')) {
+        const cols = new Set(
+          db.prepare('PRAGMA table_info(message_templates)').all().map((r) => r.name),
+        );
+        if (!cols.has('last_sent_at')) {
+          db.exec('ALTER TABLE message_templates ADD COLUMN last_sent_at INTEGER');
+        }
+      }
+
+      if (tables.has('autodelete_rules')) {
+        const cols = new Set(
+          db.prepare('PRAGMA table_info(autodelete_rules)').all().map((r) => r.name),
+        );
+        if (!cols.has('last_deleted_at')) {
+          db.exec('ALTER TABLE autodelete_rules ADD COLUMN last_deleted_at INTEGER');
+        }
       }
     },
   },

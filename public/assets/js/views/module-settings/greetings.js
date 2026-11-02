@@ -7,6 +7,7 @@ import { channelPickerHTML, bindChannelPicker } from './pickers.js';
 import { MessageEditor, emptyMessageConfig } from './message-editor.js';
 import { mergeGreetingsConfig } from '/shared/greetings-config.js';
 import { UI } from '/shared/ui-strings.js';
+import { renderModuleOffBanner, bindModuleOffBanner } from '../../components/moduleBanner.js';
 
 const G = UI.greetings;
 
@@ -184,11 +185,32 @@ export default {
       editor: null,
       config: cfg,
       permissions: null,
+      enabled: !!serverConfig.enabled,   // ← добавить
       botId, guildId,
     };
 
     container.innerHTML = buildPageHTML(cfg);
+
+    /* ─── Баннер «Модуль выключен» ─── */
+    if (!serverConfig.enabled) {
+     container.querySelector('.module-page')?.insertAdjacentHTML(
+        'afterbegin',
+        renderModuleOffBanner({
+          moduleKey: 'greetings',
+          moduleName: 'Приветствия',
+          hint: 'Сообщения не будут отправляться, пока модуль выключен в общем списке.',
+        }),
+      );
+    }
+
     this._setupHandlers(container, this.state, { channels, roles, bot });
+
+    bindModuleOffBanner({
+      container,
+      botId: this.state.botId,
+      guildId: this.state.guildId,
+      moduleKey: 'greetings',
+    });
   },
 
   destroy() {

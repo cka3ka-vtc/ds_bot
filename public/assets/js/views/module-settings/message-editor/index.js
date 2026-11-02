@@ -8,7 +8,6 @@ import { UI } from '/shared/ui-strings.js';
 import { getTokensFor } from '../message-editor-tokens.js';
 import { uid, debounce, emptyMessageConfig } from './helpers.js';
 
-// Импорт функций-монтажёров (см. ниже в этом файле их вызовы).
 import { mountRenderMethods } from './render.js';
 import { mountBlockMethods } from './blocks.js';
 import { mountPreviewMethods } from './preview.js';
@@ -36,9 +35,15 @@ export class MessageEditor {
     this._templatesCollapseKey = `msg_editor_templates_collapsed_${opts.guildId || 'x'}_${opts.context || 'default'}`;
 
     this._ctx = getTokensFor(opts.context);
-    this._previewTokens = { ...this._ctx.preview };
+
+    // previewTokens — статичный «контекст» для превью, накладывается поверх
+    // ctx.preview. Позволяет передать актуальное значение {filter} для
+    // конкретного фильтра автомодерации (иначе preview всегда показывал «Антиспам»).
+    this._previewTokens = { ...this._ctx.preview, ...(opts.previewTokens || {}) };
+
     this._botAvatarUrl = opts.bot?.avatarUrl || '';
     this._presets = getPresetsFor(opts.presetKey || opts.context || '');
+    this._resetFactory = typeof opts.resetFactory === 'function' ? opts.resetFactory : null;
     this._markDirty = debounce(() => this.onChange?.(this.getConfig()), 150);
   }
 
@@ -126,14 +131,6 @@ export class MessageEditor {
     if (el) el.textContent = UI.msgEditor.blocks.count(this.config.blocks.length);
   }
 }
-
-/* ═══════════════════════════════════════════════════════════════════
-   Монтаж методов на прототип.
-
-   Импорты выше hoisted (мы получаем ссылки на функции), но выполнение
-   mountXxxMethods(MessageEditor) происходит ПОСЛЕ объявления класса —
-   поэтому прототип существует и Object.assign срабатывает корректно.
-   ═══════════════════════════════════════════════════════════════════ */
 
 mountRenderMethods(MessageEditor);
 mountBlockMethods(MessageEditor);

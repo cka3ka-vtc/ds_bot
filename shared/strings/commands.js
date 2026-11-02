@@ -7,7 +7,7 @@ export const commands = {
   tableCommand: 'Команда', tableCategory: 'Категория', tableType: 'Тип', tableActions: 'Действия',
   emptyTitle: 'Команды не найдены',
   emptyHint: 'Попробуйте изменить фильтр или создать новую команду',
-  typeBuiltin: 'Встроенная', typeCustom: 'Custom', badgeBuiltin: 'Встроенная',
+  typeBuiltin: 'Встроенная', typeCustom: 'Пользовательская', badgeBuiltin: 'Встроенная',
   editorCreate: 'Новая команда', editorEdit: 'Редактирование команды',
   editorSubtitleCreate: 'Слэш-команда сервера',
   editorLabelName: 'Имя команды (без /)', editorLabelDesc: 'Описание', editorLabelResponse: 'Ответ',

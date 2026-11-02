@@ -5,6 +5,7 @@ import { getTitleForLevel } from '../../../shared/titles.js';
 import { mergeLevelsConfig } from '../../../shared/levels-config.js';
 import { getNonBotMemberCount } from '../../core/guildCounts.js';
 import { retryDiscord } from '../../core/retry.js';
+import { mentionUser, buildAllowedMentions } from '../../core/mentions.js';
 
 export function mountXpMethods(LevelsModule) {
   Object.assign(LevelsModule.prototype, {
@@ -34,10 +35,6 @@ export function mountXpMethods(LevelsModule) {
 
     /* ═══════════════════ Public API ═══════════════════ */
 
-    /**
-     * Начисляет XP за slash-команду. Fire-and-forget из interaction.js.
-     * Кладёт в буфер — реальная запись произойдёт при следующем flush.
-     */
     async awardCommandXp(interaction, opts = {}) {
       if (!interaction?.isChatInputCommand?.()) return;
       if (interaction.commandName === 'daily') return;
@@ -86,11 +83,6 @@ export function mountXpMethods(LevelsModule) {
 
     /* ═══════════════════ XP buffer ═══════════════════ */
 
-    /**
-     * Кладёт начисление в буфер. Если запись для юзера уже есть — суммирует
-     * amount, обновляет member (актуальные роли/boost) и updatedAt.
-     * config — от первого добавления (за 3 сек настройки модуля не меняются).
-     */
     _awardXpBuffered({ botId, guildId, member, config, amount }) {
       if (!amount || amount <= 0) return;
       const k = `${botId}:${guildId}:${member.id}`;
@@ -113,10 +105,6 @@ export function mountXpMethods(LevelsModule) {
       }
     },
 
-    /**
-     * Flush всех накопленных записей. Вызывается по таймеру раз в 3 сек,
-     * а также принудительно перед чтением и при shutdown.
-     */
     async _flushXpBuffer() {
       if (!this._xpBuffer.size) return;
       const entries = [...this._xpBuffer.values()];
@@ -124,7 +112,6 @@ export function mountXpMethods(LevelsModule) {
       await this._applyEntries(entries);
     },
 
-    /** Flush одного пользователя — перед /rank, /daily. */
     async _flushXpUserSync(botId, guildId, userId) {
       const k = `${botId}:${guildId}:${userId}`;
       const entry = this._xpBuffer.get(k);
@@ -133,7 +120,6 @@ export function mountXpMethods(LevelsModule) {
       await this._applyEntries([entry]);
     },
 
-    /** Flush всех пользователей гильдии — перед /leaderboard. */
     async _flushXpGuildSync(botId, guildId) {
       const prefix = `${botId}:${guildId}:`;
       const entries = [];
@@ -165,10 +151,6 @@ export function mountXpMethods(LevelsModule) {
 
     /* ═══════════════════ Sync award (для /daily) ═══════════════════ */
 
-    /**
-     * Синхронное начисление — используется в /daily (там нужен immediate
-     * результат для ответа пользователю). В hot path не вызывать.
-     */
     async _awardXp({ botId, guildId, member, config, amount }) {
       if (!amount || amount <= 0) return;
       await this._applyXpBatch({
@@ -233,15 +215,15 @@ export function mountXpMethods(LevelsModule) {
             level: 'info',
             module: 'levels',
             userId: member.id,
-            message: `достиг ${level} уровня`,
+            message: `достиг ${newLevel} уровня`,
             meta: {
               userId: member.id,
               username: member.user.username,
               displayName: member.displayName || member.user.globalName || member.user.username,
               avatarUrl: member.user.displayAvatarURL?.({ size: 128 }) || null,
-              level,
+              level: newLevel,
               oldLevel,
-              xp,
+              xp: newXp,
             },
           });
         } catch (err) {
@@ -280,10 +262,10 @@ export function mountXpMethods(LevelsModule) {
         .map((id) => `<@&${id}>`);
 
       const tokens = {
-        user: `<@${member.id}>`,
-        mention: `<@${member.id}>`,
+        user: mentionUser(member.id),
+        mention: mentionUser(member.id),
         username: member.user.username,
-        displayName: member.user.globalName || member.user.username,
+        displayName: member.displayName || member.user.globalName || member.user.username,
         avatarUrl: member.user.displayAvatarURL?.({ size: 128 }) || '',
         guild: member.guild.name,
         count,
@@ -316,7 +298,7 @@ export function mountXpMethods(LevelsModule) {
           () => channel.send({
             flags: FLAG_COMPONENTS_V2,
             components,
-            allowedMentions: { parse: ['users'] },
+            allowedMentions: buildAllowedMentions(components, { ping: true }),
           }),
           {
             maxAttempts: 3,

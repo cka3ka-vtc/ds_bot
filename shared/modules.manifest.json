@@ -73,6 +73,18 @@
       }
     },
     {
+      "key": "sticky",
+      "name": "Липнущее сообщение",
+      "description": "Сообщение, которое переопубликовывается при каждом новом сообщении в канале",
+      "icon": "fa-thumbtack",
+      "color": "purple",
+      "category": "engagement",
+      "version": "1.0.0",
+      "defaultEnabled": false,
+      "events": ["messageCreate"],
+      "configSchema": {}
+    },
+    {
       "key": "moderation",
       "name": "Автомодерация",
       "description": "Фильтры, карта нарушений и автоматические наказания",
@@ -112,47 +124,52 @@
     {
       "key": "autodelete",
       "name": "Автоудаление",
-      "description": "Очистка каналов по таймеру",
+      "description": "Правила автоудаления сообщений в выбранных каналах",
       "icon": "fa-trash",
       "color": "red",
       "category": "moderation",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "defaultEnabled": false,
       "events": ["messageCreate"],
-      "configSchema": {
-        "channelId":      { "type": "text",    "label": "ID канала" },
-        "deleteAfterMin": { "type": "number",  "label": "Удалять через (мин)", "default": 30 },
-        "skipModerators": { "type": "boolean", "label": "Исключать модераторов", "default": true }
-      }
+      "configSchema": {}
     },
     {
       "key": "scheduled",
       "name": "Отложенные сообщения",
-      "description": "Публикует сообщения в каналы в указанное время",
+      "description": "Автоматическая отправка сообщений в заданную дату и время",
       "icon": "fa-clock",
       "color": "pink",
       "category": "utility",
-      "version": "1.0.0",
+      "version": "2.0.0",
       "defaultEnabled": false,
       "events": [],
-      "configSchema": {
-        "channelId": { "type": "text", "label": "ID канала" },
-        "weekly":    { "type": "boolean", "label": "Повторять еженедельно", "default": false }
-      }
+      "configSchema": {}
     },
     {
       "key": "messages",
-      "name": "Сообщения",
-      "description": "Компоненты v2: кнопки, секции, медиа",
-      "icon": "fa-message",
+      "name": "Интерактивные сообщения",
+      "description": "Кнопки-роли из редактора сообщений",
+      "icon": "fa-hand-pointer",
       "color": "purple",
       "category": "utility",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "defaultEnabled": false,
       "events": ["interactionCreate"],
       "configSchema": {
         "templates": { "type": "json", "label": "Шаблоны сообщений" }
       }
+    },
+    {
+      "key": "message-templates",
+      "name": "Сообщения",
+      "description": "Заготовленные сообщения — отправляйте в канал в любой момент",
+      "icon": "fa-message",
+      "color": "blue",
+      "category": "utility",
+      "version": "1.0.0",
+      "defaultEnabled": false,
+      "events": [],
+      "configSchema": {}
     },
     {
       "key": "tickets",

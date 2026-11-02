@@ -9,7 +9,9 @@ import { createApp } from '../api/app.js';
 import { syncAllGuildCommands, flushPendingSyncs } from '../core/commandSync.js';
 import { ensureMainBot, syncGuildsOnStartup } from './startup.js';
 import { registerAllEvents } from './events/index.js';
+import { initEventBuffer, flushEventBuffer } from './events/_event-buffer.js';
 import { configCache } from '../core/config-cache.js';
+import { cleanupGuildAccessCache } from '../core/guild-access.js';
 
 export async function bootstrap() {
   logger.info({
@@ -25,6 +27,8 @@ export async function bootstrap() {
   logger.info({ main: config.DATABASE_PATH, guildsDir: './data/guilds/' }, 'boot: db initialized');
 
   await db.guildManager.applyAllMigrations();
+
+  initEventBuffer({ db, logger });
 
   const botManager = new BotManager({ db, logger, eventBus });
   const registry = new ModuleRegistry({ db, logger, eventBus, botManager });
@@ -82,6 +86,7 @@ export async function bootstrap() {
   const timers = [];
 
   timers.push(setInterval(() => configCache.cleanup(), 5 * 60_000));
+  timers.push(setInterval(() => cleanupGuildAccessCache(), 5 * 60_000));
 
   timers.push(setInterval(() => {
     try {
@@ -106,26 +111,29 @@ export async function bootstrap() {
     timers.forEach((t) => clearInterval(t));
     server.close();
 
-    // 1) Debounced sync'и команд → Discord.
+    // 1) Буфер событий → SQLite.
+    try { flushEventBuffer(); }
+    catch (err) { logger.warn({ err }, 'flushEventBuffer failed'); }
+
+    // 2) Debounced sync'и команд → Discord.
     try { await flushPendingSyncs(); }
     catch (err) { logger.warn({ err }, 'flushPendingSyncs failed'); }
 
-    // 2) XP-буфер → SQLite (иначе при рестарте теряется ≤3 сек активности).
+    // 3) XP-буфер → SQLite.
     try {
       const levels = registry.get('levels');
       if (levels?._flushXpBuffer) await levels._flushXpBuffer();
     } catch (err) { logger.warn({ err }, 'levels._flushXpBuffer failed'); }
 
-    // 3) Боты → gateway стоп.
+    // 4) Боты → gateway стоп.
     try { await botManager.shutdown(); }
     catch (err) { logger.warn({ err }, 'botManager shutdown failed'); }
 
-    // 4) Модули → таймеры стоп (unregister внутри тоже делает финальный flush XP,
-    //    но на всякий случай — уже сделали выше).
+    // 5) Модули → таймеры стоп.
     try { await registry.unregisterAll(); }
     catch (err) { logger.warn({ err }, 'registry shutdown failed'); }
 
-    // 5) БД.
+    // 6) БД.
     try { db.guildManager.closeAll(); } catch {}
     try { db.main.close(); } catch {}
 

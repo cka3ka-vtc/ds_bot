@@ -74,10 +74,14 @@ export function initDb(dbPath, logger) {
       g(botId, guildId).getOldAnnouncements(beforeTs),
 
     // moderation
-    getModActions: (botId, guildId, kind) => g(botId, guildId).getModActions(kind),
+    getModActions: (botId, guildId, opts) => g(botId, guildId).getModActions(opts),
+    getModActionStats: (botId, guildId, opts) => g(botId, guildId).getModActionStats(opts),
+    getExpiredBans: (botId, guildId, nowTs) => g(botId, guildId).getExpiredBans(nowTs),
     addModAction: (botId, guildId, a) => g(botId, guildId).addModAction(a),
-    removeModAction: (botId, guildId, id) => g(botId, guildId).removeModAction(id),
     getModAction: (botId, guildId, id) => g(botId, guildId).getModAction(id),
+    markModActionRemoved: (botId, guildId, id, removedBy) =>
+      g(botId, guildId).markModActionRemoved(id, removedBy),
+    removeModAction: (botId, guildId, id) => g(botId, guildId).removeModAction(id),
     addLog: (botId, guildId, entry) => g(botId, guildId).addLog(entry),
     getLogs: (botId, guildId, limit) => g(botId, guildId).getLogs(limit),
     countLogsByLevel: (botId, guildId, level, since) => g(botId, guildId).countLogsByLevel(level, since),
@@ -90,6 +94,68 @@ export function initDb(dbPath, logger) {
     deleteCustomCommand: (botId, guildId, id) => g(botId, guildId).deleteCustomCommand(id),
     getCustomCommand: (botId, guildId, id) => g(botId, guildId).getCustomCommand(id),
     incrementCommandUsage: (botId, guildId, id) => g(botId, guildId).incrementCommandUsage(id),
+
+    // sticky messages
+    listSticky: (botId, guildId) => g(botId, guildId).listSticky(),
+    getSticky: (botId, guildId, id) => g(botId, guildId).getSticky(id),
+    listStickyByChannel: (botId, guildId, channelId) =>
+      g(botId, guildId).listStickyByChannel(channelId),
+    createSticky: (botId, guildId, data) => g(botId, guildId).createSticky(data),
+    updateSticky: (botId, guildId, id, data) => g(botId, guildId).updateSticky(id, data),
+    setStickyLastMessage: (botId, guildId, id, messageId) =>
+      g(botId, guildId).setStickyLastMessage(id, messageId),
+    deleteSticky: (botId, guildId, id) => g(botId, guildId).deleteSticky(id),
+    countEnabledStickyForChannel: (botId, guildId, channelId, excludeId) =>
+      g(botId, guildId).countEnabledStickyForChannel(channelId, excludeId),
+
+    // autodelete
+    listAutodeleteRules: (botId, guildId) => g(botId, guildId).listAutodeleteRules(),
+    getAutodeleteRule: (botId, guildId, id) => g(botId, guildId).getAutodeleteRule(id),
+    listAutodeleteRulesByChannel: (botId, guildId, channelId) =>
+      g(botId, guildId).listAutodeleteRulesByChannel(channelId),
+    createAutodeleteRule: (botId, guildId, data) => g(botId, guildId).createAutodeleteRule(data),
+    updateAutodeleteRule: (botId, guildId, id, data) =>
+      g(botId, guildId).updateAutodeleteRule(id, data),
+    deleteAutodeleteRule: (botId, guildId, id) => g(botId, guildId).deleteAutodeleteRule(id),
+    countEnabledAutodeleteForChannel: (botId, guildId, channelId, excludeId) =>
+      g(botId, guildId).countEnabledRulesForChannel(channelId, excludeId),
+    scheduleAutodelete: (botId, guildId, messageId, channelId, deleteAt) =>
+      g(botId, guildId).scheduleAutodelete(messageId, channelId, deleteAt),
+    popDueAutodeletions: (botId, guildId, nowSec) =>
+      g(botId, guildId).popDueAutodeletions(nowSec),
+    clearAutodeletePendingForChannel: (botId, guildId, channelId) =>
+      g(botId, guildId).clearAutodeletePendingForChannel(channelId),
+
+    // scheduled messages
+    listScheduled: (botId, guildId) => g(botId, guildId).listScheduled(),
+    getScheduled: (botId, guildId, id) => g(botId, guildId).getScheduled(id),
+    createScheduled: (botId, guildId, data) => g(botId, guildId).createScheduled(data),
+    updateScheduled: (botId, guildId, id, data) => g(botId, guildId).updateScheduled(id, data),
+    deleteScheduled: (botId, guildId, id) => g(botId, guildId).deleteScheduled(id),
+    setScheduledEnabled: (botId, guildId, id, enabled) =>
+      g(botId, guildId).setScheduledEnabled(id, enabled),
+    markScheduledSent: (botId, guildId, id, ts) =>
+      g(botId, guildId).markScheduledSent(id, ts),
+    markScheduledError: (botId, guildId, id, error) =>
+      g(botId, guildId).markScheduledError(id, error),
+    getDueScheduled: (botId, guildId, nowSec) =>
+      g(botId, guildId).getDueScheduled(nowSec),
+
+    // autodelete (дополнено)
+    touchAutodeleteLastDeleted: (botId, guildId, id) =>
+      g(botId, guildId).touchAutodeleteLastDeleted(id),
+
+    // message templates (дополнено)
+    touchMessageTemplateLastSent: (botId, guildId, id) =>
+      g(botId, guildId).touchMessageTemplateLastSent(id),
+
+    // message templates
+    listMessageTemplates: (botId, guildId) => g(botId, guildId).listMessageTemplates(),
+    getMessageTemplate: (botId, guildId, id) => g(botId, guildId).getMessageTemplate(id),
+    createMessageTemplate: (botId, guildId, data) => g(botId, guildId).createMessageTemplate(data),
+    updateMessageTemplate: (botId, guildId, id, data) =>
+      g(botId, guildId).updateMessageTemplate(id, data),
+    deleteMessageTemplate: (botId, guildId, id) => g(botId, guildId).deleteMessageTemplate(id),
 
     // commands — builtin settings
     getBuiltinSettings: (botId, guildId, name) => g(botId, guildId).getBuiltinSettings(name),

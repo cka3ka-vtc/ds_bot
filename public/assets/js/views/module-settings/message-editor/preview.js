@@ -3,11 +3,6 @@ import { escapeHtml } from '../../../core/utils.js';
 import { UI } from '/shared/ui-strings.js';
 import { formatDateByCode } from './helpers.js';
 
-/**
- * Предпросмотр сообщения: рендер V2-структуры в Discord-подобный UI.
- * Также содержит markdown-парсер, разворачивание {avatarUrl}/{guildIconUrl}
- * и обработку <t:...> тегов + {time:...} токенов.
- */
 export function mountPreviewMethods(MessageEditor) {
   Object.assign(MessageEditor.prototype, {
 
@@ -139,6 +134,7 @@ export function mountPreviewMethods(MessageEditor) {
       const wrapMention = (v) => `<span class="dp-mention">${escapeHtml(v)}</span>`;
       const wrapBold = (v) => `<b>${escapeHtml(v)}</b>`;
       const wrapAccent = (v) => `<span style="color:#c9cdfb;">${escapeHtml(v)}</span>`;
+      const esc = (v) => escapeHtml(String(v));
 
       html = html.replace(/\{user\}/g, wrapMention(t.user || ''));
       html = html.replace(/\{mention\}/g, wrapMention(t.mention || t.user || ''));
@@ -201,6 +197,18 @@ export function mountPreviewMethods(MessageEditor) {
         if (age == null || age === '') return '';
         return escapeHtml(String(age));
       });
+
+      /* Moderation (log / dm / raid) */
+      html = html.replace(/\{reason\}/g,    () => (t.reason    != null ? esc(t.reason)    : ''));
+      html = html.replace(/\{message\}/g,   () => (t.message   != null ? esc(t.message)   : ''));
+      html = html.replace(/\{filter\}/g,    () => (t.filter    != null ? esc(t.filter)    : ''));
+      html = html.replace(/\{action\}/g,    () => (t.action    != null ? esc(t.action)    : ''));
+      html = html.replace(/\{violation\}/g, () => (t.violation != null ? esc(t.violation) : ''));
+      html = html.replace(/\{matched\}/g,   () => (t.matched   != null ? esc(t.matched)   : ''));
+      html = html.replace(/\{userId\}/g,    () => (t.userId    != null ? esc(t.userId)    : ''));
+      html = html.replace(/\{channel\}/g,   () => (t.channel   != null ? wrapMention(String(t.channel)) : ''));
+      html = html.replace(/\{channelText\}/g, () => (t.channelText != null ? esc(t.channelText) : ''));
+      html = html.replace(/\{channelName\}/g, () => (t.channelName != null ? esc(t.channelName) : ''));
 
       html = html.replace(/\{avatarUrl\}/g, '<span class="dp-mention">[avatar]</span>');
       html = html.replace(/\{guildIconUrl\}/g, '<span class="dp-mention">[icon]</span>');

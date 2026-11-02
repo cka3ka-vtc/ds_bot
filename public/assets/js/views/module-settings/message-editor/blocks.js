@@ -7,15 +7,17 @@ import {
 } from '../pickers.js';
 import { uid, LIMITS, TYPE_LABELS } from './helpers.js';
 
-/**
- * Рендер и обработка блоков сообщения:
- *   - список блоков (text/sections/separator/image/images/file/buttons/
- *     role-buttons/footer);
- *   - drag&drop для смены порядка;
- *   - встроенные action-кнопки (вверх/вниз/удалить/добавить пункт/кнопку);
- *   - pickers для role-buttons и emoji;
- *   - counter блоков в шапке карточки.
- */
+const B = UI.msgEditor.blocks;
+
+/** Компактная кнопка «Переменные» для полей без полного тулбара. */
+function tokenBtnHTML() {
+  return `<button type="button" class="block-act" data-tokens-for="any"
+                   title="${escapeHtml(B.insertVariable)}"
+                   aria-label="${escapeHtml(B.insertVariable)}">
+            <i class="fa-solid fa-code"></i>
+          </button>`;
+}
+
 export function mountBlockMethods(MessageEditor) {
   Object.assign(MessageEditor.prototype, {
 
@@ -23,7 +25,6 @@ export function mountBlockMethods(MessageEditor) {
       const container = this._blocksEl;
       if (!container) return;
 
-      // footer всегда в конце
       this.config.blocks.sort((a, b) => {
         if (a.type === 'footer' && b.type !== 'footer') return 1;
         if (a.type !== 'footer' && b.type === 'footer') return -1;
@@ -48,7 +49,6 @@ export function mountBlockMethods(MessageEditor) {
       const isFooter = block.type === 'footer';
       const nextIsFooter = this.config.blocks[idx + 1]?.type === 'footer';
       const isCollapsed = this._isCollapsed(block.id);
-      const B = UI.msgEditor.blocks;
 
       return `
         <div class="block-card ${isCollapsed ? 'collapsed' : ''}" data-block-id="${block.id}" data-idx="${idx}">
@@ -74,15 +74,47 @@ export function mountBlockMethods(MessageEditor) {
     },
 
     _renderBlockBody(block) {
-      const B = UI.msgEditor.blocks;
       switch (block.type) {
         case 'text':
           return `
             ${this._toolbarHTML()}
-            <textarea class="input" data-field="content" rows="3" maxlength="${LIMITS.maxText}">${escapeHtml(block.content || '')}</textarea>
+            <textarea class="input" data-field="content" data-token-context="rich"
+                      rows="3" maxlength="${LIMITS.maxText}">${escapeHtml(block.content || '')}</textarea>
             <div class="char-counter" data-counter>${(block.content || '').length} / ${LIMITS.maxText}</div>
           `;
-        case 'sections': return this._sectionsHTML(block);
+
+        case 'sections': {
+          const items = block.items || [];
+          const isNumeric = block.listStyle !== 'dot';
+          return `
+            <div class="sub-item-row">
+              <input class="input" data-field="title" data-token-context="rich"
+                     placeholder="${B.sectionTitle}" value="${escapeHtml(block.title || '')}">
+              ${tokenBtnHTML()}
+            </div>
+            <div class="sub-item-row">
+              <label style="font-size:12px;color:var(--text-soft);">${B.style}</label>
+              <select class="input" data-field="listStyle" style="width:auto;">
+                <option value="numeric" ${isNumeric ? 'selected' : ''}>${B.listNumeric}</option>
+                <option value="dot" ${!isNumeric ? 'selected' : ''}>${B.listDot}</option>
+              </select>
+            </div>
+            <div class="sub-label">${B.items}</div>
+            ${items.map((item, i) => `
+              <div class="sub-item-row">
+                <span style="min-width:24px;text-align:center;font-size:11.5px;color:var(--muted);">${isNumeric ? (i + 1) + '.' : '·'}</span>
+                <input class="input" data-item-idx="${i}" data-token-context="rich"
+                       value="${escapeHtml(item)}">
+                ${tokenBtnHTML()}
+                <button type="button" class="block-act" data-action="remove-item" data-item-idx="${i}" title="${B.remove}">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+            `).join('')}
+            <button type="button" class="btn btn-ghost btn-sm" data-action="add-item">${B.addItem}</button>
+          `;
+        }
+
         case 'separator':
           return `
             <div class="segmented-control" data-spacing-seg>
@@ -90,94 +122,91 @@ export function mountBlockMethods(MessageEditor) {
               <button type="button" class="seg-btn ${block.spacing == 2 ? 'active' : ''}" data-spacing-value="2">${B.spacingLarge}</button>
             </div>
           `;
+
         case 'image':
         case 'file':
-          return `<input class="input" data-field="url" placeholder="${B.filePlaceholder}" value="${escapeHtml(block.url || '')}">`;
+          return `
+            <div class="sub-item-row">
+              <input class="input" data-field="url" data-token-context="url"
+                     placeholder="${B.filePlaceholder}" value="${escapeHtml(block.url || '')}">
+              ${tokenBtnHTML()}
+            </div>
+          `;
+
         case 'images':
           return `
             <div class="sub-label">${B.urlsLabel}</div>
-            <textarea class="input" data-field="urls" rows="3" placeholder="${B.placeholderUrls}">${(block.urls || []).join('\n')}</textarea>
+            <div class="sub-item-row" style="align-items:flex-start;">
+              <textarea class="input" data-field="urls" data-token-context="url"
+                        rows="3" placeholder="${B.placeholderUrls}">${(block.urls || []).join('\n')}</textarea>
+              ${tokenBtnHTML()}
+            </div>
           `;
-        case 'buttons': return this._buttonsHTML(block);
-        case 'role-buttons': return this._roleButtonsHTML(block);
+
+        case 'buttons': {
+          const buttons = block.buttons || [];
+          return `
+            <div class="sub-label">${B.buttonsLabel(buttons.length, LIMITS.maxButtons)}</div>
+            ${buttons.map((btn) => `
+              <div class="sub-item" data-button-id="${btn.id}">
+                <div class="sub-item-row">
+                  <input class="input" data-btn-field="label" data-token-context="label"
+                         placeholder="${B.buttonLabelPlaceholder}" maxlength="${LIMITS.maxLabel}"
+                         value="${escapeHtml(btn.label || '')}">
+                  ${tokenBtnHTML()}
+                  <button type="button" class="block-act danger" data-action="remove-button" data-button-id="${btn.id}">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+                <div class="sub-item-row">
+                  <input class="input" data-btn-field="url" data-token-context="url"
+                         placeholder="${B.buttonUrlPlaceholder}" value="${escapeHtml(btn.url || '')}">
+                  ${tokenBtnHTML()}
+                </div>
+                <div class="sub-item-row">${emojiPickerHTML({ id: btn.id, value: btn.emoji || '' })}</div>
+              </div>
+            `).join('')}
+            ${buttons.length < LIMITS.maxButtons ? `<button type="button" class="btn btn-ghost btn-sm" data-action="add-button">${B.addButton}</button>` : ''}
+          `;
+        }
+
+        case 'role-buttons': {
+          const buttons = block.buttons || [];
+          return `
+            ${buttons.map((btn) => `
+              <div class="sub-item" data-button-id="${btn.id}">
+                <div class="sub-item-row">
+                  <input class="input" data-btn-field="label" data-token-context="label"
+                         placeholder="${B.buttonLabelPlaceholder}" maxlength="${LIMITS.maxLabel}"
+                         value="${escapeHtml(btn.label || '')}">
+                  ${tokenBtnHTML()}
+                  <select class="input" data-btn-field="style" style="width:120px;">
+                    <option value="primary" ${btn.style === 'primary' ? 'selected' : ''}>Primary</option>
+                    <option value="secondary" ${btn.style === 'secondary' ? 'selected' : ''}>Secondary</option>
+                    <option value="success" ${btn.style === 'success' ? 'selected' : ''}>Success</option>
+                    <option value="danger" ${btn.style === 'danger' ? 'selected' : ''}>Danger</option>
+                  </select>
+                  <button type="button" class="block-act danger" data-action="remove-button" data-button-id="${btn.id}">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+                <div class="sub-item-row">${rolePickerHTML({ id: btn.id, value: btn.roleId, roles: this.opts.roles || [] })}</div>
+                <div class="sub-item-row">${emojiPickerHTML({ id: 'e_' + btn.id, value: btn.emoji || '' })}</div>
+              </div>
+            `).join('')}
+            ${buttons.length < LIMITS.maxButtons ? `<button type="button" class="btn btn-ghost btn-sm" data-action="add-role-button">${B.addRoleButton}</button>` : ''}
+          `;
+        }
+
         case 'footer':
-          return `${this._toolbarHTML()}<input class="input" data-field="content" placeholder="${B.footerPlaceholder}" value="${escapeHtml(block.content || '')}">`;
+          return `
+            ${this._toolbarHTML()}
+            <input class="input" data-field="content" data-token-context="footer"
+                   placeholder="${B.footerPlaceholder}" value="${escapeHtml(block.content || '')}">
+          `;
+
         default: return '';
       }
-    },
-
-    _sectionsHTML(block) {
-      const B = UI.msgEditor.blocks;
-      const items = block.items || [];
-      const isNumeric = block.listStyle !== 'dot';
-      return `
-        <div class="sub-item-row"><input class="input" data-field="title" placeholder="${B.sectionTitle}" value="${escapeHtml(block.title || '')}"></div>
-        <div class="sub-item-row">
-          <label style="font-size:12px;color:var(--text-soft);">${B.style}</label>
-          <select class="input" data-field="listStyle" style="width:auto;">
-            <option value="numeric" ${isNumeric ? 'selected' : ''}>${B.listNumeric}</option>
-            <option value="dot" ${!isNumeric ? 'selected' : ''}>${B.listDot}</option>
-          </select>
-        </div>
-        <div class="sub-label">${B.items}</div>
-        ${items.map((item, i) => `
-          <div class="sub-item-row">
-            <span style="min-width:24px;text-align:center;font-size:11.5px;color:var(--muted);">${isNumeric ? (i + 1) + '.' : '·'}</span>
-            <input class="input" data-item-idx="${i}" value="${escapeHtml(item)}">
-            <button type="button" class="block-act" data-action="remove-item" data-item-idx="${i}" title="${B.remove}">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
-        `).join('')}
-        <button type="button" class="btn btn-ghost btn-sm" data-action="add-item">${B.addItem}</button>
-      `;
-    },
-
-    _buttonsHTML(block) {
-      const B = UI.msgEditor.blocks;
-      const buttons = block.buttons || [];
-      return `
-        <div class="sub-label">${B.buttonsLabel(buttons.length, LIMITS.maxButtons)}</div>
-        ${buttons.map((btn) => `
-          <div class="sub-item" data-button-id="${btn.id}">
-            <div class="sub-item-row">
-              <input class="input" data-btn-field="label" placeholder="${B.buttonLabelPlaceholder}" maxlength="${LIMITS.maxLabel}" value="${escapeHtml(btn.label || '')}">
-              <button type="button" class="block-act danger" data-action="remove-button" data-button-id="${btn.id}">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-            <div class="sub-item-row"><input class="input" data-btn-field="url" placeholder="${B.buttonUrlPlaceholder}" value="${escapeHtml(btn.url || '')}"></div>
-            <div class="sub-item-row">${emojiPickerHTML({ id: btn.id, value: btn.emoji || '' })}</div>
-          </div>
-        `).join('')}
-        ${buttons.length < LIMITS.maxButtons ? `<button type="button" class="btn btn-ghost btn-sm" data-action="add-button">${B.addButton}</button>` : ''}
-      `;
-    },
-
-    _roleButtonsHTML(block) {
-      const B = UI.msgEditor.blocks;
-      const buttons = block.buttons || [];
-      return `
-        ${buttons.map((btn) => `
-          <div class="sub-item" data-button-id="${btn.id}">
-            <div class="sub-item-row">
-              <input class="input" data-btn-field="label" placeholder="${B.buttonLabelPlaceholder}" maxlength="${LIMITS.maxLabel}" value="${escapeHtml(btn.label || '')}">
-              <select class="input" data-btn-field="style" style="width:120px;">
-                <option value="primary" ${btn.style === 'primary' ? 'selected' : ''}>Primary</option>
-                <option value="secondary" ${btn.style === 'secondary' ? 'selected' : ''}>Secondary</option>
-                <option value="success" ${btn.style === 'success' ? 'selected' : ''}>Success</option>
-                <option value="danger" ${btn.style === 'danger' ? 'selected' : ''}>Danger</option>
-              </select>
-              <button type="button" class="block-act danger" data-action="remove-button" data-button-id="${btn.id}">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-            <div class="sub-item-row">${rolePickerHTML({ id: btn.id, value: btn.roleId, roles: this.opts.roles || [] })}</div>
-            <div class="sub-item-row">${emojiPickerHTML({ id: 'e_' + btn.id, value: btn.emoji || '' })}</div>
-          </div>
-        `).join('')}
-        ${buttons.length < LIMITS.maxButtons ? `<button type="button" class="btn btn-ghost btn-sm" data-action="add-role-button">${B.addRoleButton}</button>` : ''}
-      `;
     },
 
     _bindBlockPickers() {
@@ -241,20 +270,18 @@ export function mountBlockMethods(MessageEditor) {
       const block = this.config.blocks[idx];
       if (!block) return;
 
-      /* Свернуть/развернуть блок (клик по типу) */
       const typeTag = e.target.closest('[data-toggle-collapse]');
       if (typeTag) {
         e.preventDefault();
         const collapsed = this._toggleCollapse(block.id);
         card.classList.toggle('collapsed', collapsed);
-        typeTag.title = collapsed ? UI.msgEditor.blocks.expand : UI.msgEditor.blocks.collapse;
+        typeTag.title = collapsed ? B.expand : B.collapse;
         if (!collapsed) requestAnimationFrame(() => {
           card.querySelectorAll('textarea').forEach((t) => this._autoResize(t));
         });
         return;
       }
 
-      /* Separator: spacing */
       const spacingBtn = e.target.closest('[data-spacing-value]');
       if (spacingBtn) {
         e.preventDefault();
@@ -265,7 +292,6 @@ export function mountBlockMethods(MessageEditor) {
         return;
       }
 
-      /* Action-кнопки */
       const actionBtn = e.target.closest('[data-action]');
       if (!actionBtn) return;
       e.preventDefault();

@@ -62,10 +62,10 @@ export function createListRouter() {
       .filter((m) => !m.roles.cache.some((r) => excludedRoles.has(r.id)))
       .map((m) => ({ id: m.id, member: m }));
 
-    const activeIds = activeMembers.map((x) => x.id);
+    const activeIdSet = new Set(activeMembers.map((x) => x.id));
     const leftProfiles = db.getLeftUsers(botId, guildId)
-      .filter((u) => !activeIds.includes(u.user_id));
-    const allIds = [...activeIds, ...leftProfiles.map((u) => u.user_id)];
+      .filter((u) => !activeIdSet.has(u.user_id));
+    const allIds = [...activeIdSet, ...leftProfiles.map((u) => u.user_id)];
 
     const statsMap = db.getUserStatsBatch(botId, guildId, allIds);
 

@@ -2,11 +2,6 @@
 import { escapeHtml } from '../../../core/utils.js';
 import { UI } from '/shared/ui-strings.js';
 
-/**
- * Рендер каркаса редактора: карточка шаблонов (если есть),
- * карточка настроек, карточка блоков, карточка preview.
- * Заполняет this._root, this._blocksEl, this._previewEl.
- */
 export function mountRenderMethods(MessageEditor) {
   Object.assign(MessageEditor.prototype, {
 
@@ -24,36 +19,55 @@ export function mountRenderMethods(MessageEditor) {
       const P = UI.msgEditor.preview;
       const TPL = UI.msgEditor.presets;
 
-      const templatesHTML = this._presets.length ? `
+      const hasPresets = this._presets.length > 0;
+      const hasResetFactory = !!this._resetFactory;
+      const showTemplates = hasPresets || hasResetFactory;
+
+      const gridHTML = hasPresets ? `
+        <div class="msg-templates-grid">
+          ${this._presets.map((p) => `
+            <button type="button" class="msg-template-btn" data-preset="${escapeHtml(p.key)}">
+              <span class="msg-template-icon"><i class="fa-solid ${escapeHtml(p.icon)}"></i></span>
+              <span class="msg-template-text">
+                <strong>${escapeHtml(p.label)}</strong>
+                <span>${escapeHtml(p.description || '')}</span>
+              </span>
+            </button>
+          `).join('')}
+        </div>
+      ` : '';
+
+      const resetBtnHTML = hasResetFactory ? `
+        <button type="button" class="btn btn-ghost btn-sm" data-reset-template>
+          <i class="fa-solid fa-rotate-left"></i> ${TPL.reset}
+        </button>
+      ` : '';
+
+      const actionsHTML = `
+        <div class="msg-templates-actions">
+          ${resetBtnHTML}
+          <button type="button" class="btn btn-ghost btn-sm" data-clear-template>
+            <i class="fa-solid fa-eraser"></i> ${TPL.clear}
+          </button>
+        </div>
+      `;
+
+      const templatesHTML = showTemplates ? `
         <div class="card msg-templates-card ${templatesCollapsed ? 'collapsed' : ''}" data-templates-card>
           <div class="card-head" data-templates-toggle role="button" tabindex="0"
                aria-expanded="${!templatesCollapsed}"
                title="${templatesCollapsed ? TPL.expand : TPL.collapse}">
             <div>
               <span class="card-title">${TPL.title}</span>
-              <span class="card-sub">${TPL.subtitle}</span>
+              ${hasPresets ? `<span class="card-sub">${TPL.subtitle}</span>` : ''}
             </div>
             <span class="card-collapse-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </span>
           </div>
           <div class="card-body">
-            <div class="msg-templates-grid">
-              ${this._presets.map((p) => `
-                <button type="button" class="msg-template-btn" data-preset="${escapeHtml(p.key)}">
-                  <span class="msg-template-icon"><i class="fa-solid ${escapeHtml(p.icon)}"></i></span>
-                  <span class="msg-template-text">
-                    <strong>${escapeHtml(p.label)}</strong>
-                    <span>${escapeHtml(p.description || '')}</span>
-                  </span>
-                </button>
-              `).join('')}
-            </div>
-            <div class="msg-templates-actions">
-              <button type="button" class="btn btn-ghost btn-sm" data-clear-template>
-                <i class="fa-solid fa-eraser"></i> ${TPL.clear}
-              </button>
-            </div>
+            ${gridHTML}
+            ${actionsHTML}
           </div>
         </div>
       ` : '';
@@ -93,16 +107,25 @@ export function mountRenderMethods(MessageEditor) {
                 <div class="form-field" style="margin-top:14px;">
                   <label>${S.titleLabel}</label>
                   ${this._toolbarHTML()}
-                  <textarea class="input" data-title-input rows="1" maxlength="4000" placeholder="${S.placeholderTitle}"></textarea>
+                  <textarea class="input" data-title-input data-token-context="title"
+                            rows="1" maxlength="4000" placeholder="${S.placeholderTitle}"></textarea>
                 </div>
                 <div class="form-field">
                   <label>${S.subtitleLabel}</label>
                   ${this._toolbarHTML()}
-                  <textarea class="input" data-subtitle-input rows="1" maxlength="4000" placeholder="${S.placeholderSubtitle}"></textarea>
+                  <textarea class="input" data-subtitle-input data-token-context="rich"
+                            rows="1" maxlength="4000" placeholder="${S.placeholderSubtitle}"></textarea>
                 </div>
                 <div class="form-field">
                   <label>${S.thumbnailLabel}</label>
-                  <input class="input" data-thumbnail-input placeholder="${S.placeholderThumbnail}">
+                  <div class="sub-item-row">
+                    <input class="input" data-thumbnail-input data-token-context="url"
+                           placeholder="${S.placeholderThumbnail}">
+                    <button type="button" class="block-act" data-tokens-for="thumbnail"
+                            title="${B.insertVariable}" aria-label="${B.insertVariable}">
+                      <i class="fa-solid fa-code"></i>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

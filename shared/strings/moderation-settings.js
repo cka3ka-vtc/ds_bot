@@ -4,19 +4,16 @@ export const moderationSettings = {
   pageSubtitle: 'Фильтры, наказания и уведомления — настраиваются под каждый фильтр',
   backToModules: 'К модулям',
 
-  /* ─── Фильтры ─── */
   filtersTitle: 'Фильтры',
   filtersSubtitle: 'У каждого фильтра — свой канал логов, шаблоны и наказания',
   filtersActiveBadge: (on, total) => `${on} из ${total} активны`,
 
-  /* ─── Вкладки внутри фильтра ─── */
   tabParams: 'Параметры',
   tabPunish: 'Наказания',
   tabScope: 'Условия',
   tabLog: 'Лог',
   tabDm: 'ЛС',
 
-  /* ─── Параметры ─── */
   paramsSectionTitle: 'Настройки фильтра',
   notificationsSectionTitle: 'Уведомления',
   logChannelLabel: 'Канал логов',
@@ -28,7 +25,6 @@ export const moderationSettings = {
   dmToggleLabel: 'Отправлять ЛС нарушителю',
   dmToggleHint: 'Приватное сообщение с причиной и наказанием',
 
-  /* ─── Антирейд ─── */
   raid: {
     detectionTitle: 'Обнаружение волны',
     detectionHint: 'Сколько входов за какой промежуток считать рейдом',
@@ -72,7 +68,6 @@ export const moderationSettings = {
     cooldownMinLabel: 'Не повторять',
   },
 
-  /* ─── Карта нарушений ─── */
   escalationTitle: 'Карта нарушений',
   escalationSubtitle: 'Счётчик нарушений свой для каждого фильтра — нарушения по другим правилам не учитываются',
   escalationToggle: 'Учитывать повторные нарушения',
@@ -81,19 +76,16 @@ export const moderationSettings = {
   escalationRemoveLabel: 'Удалить',
   escalationInfo: 'Уровни выше применяются ко всем нарушениям этого фильтра после последнего указанного уровня. При выключенной карте — используется действие ниже.',
 
-  /* ─── Обнуление счётчика ─── */
-  resetToggleLabel: 'Обнуление счётчика нарушений',
-  resetToggleHintOn: (days) => `Нарушения этого фильтра обнулятся через ${days} дн. тишины`,
-  resetToggleHintOff: 'Нарушения этого фильтра накапливаются бессрочно',
-  resetDaysLabel: 'Через',
+  resetToggleLabel: 'Сброс счётчика нарушений',
+  resetToggleHintOn: (days) => `Счётчик нарушений по этому фильтру сбрасывается, если ${days} дн. подряд не было нарушений`,
+  resetToggleHintOff: 'Нарушения по этому фильтру накапливаются бессрочно',
+  resetDaysLabel: 'Сброс через',
   resetDaysSuffix: 'дн.',
 
-  /* ─── Действие по умолчанию ─── */
   actionSection: 'Действие по умолчанию',
   actionFallbackLabel: 'Применяется, если карта нарушений выключена',
   actionDurationLabel: 'Длительность',
 
-  /* ─── Условия ─── */
   scopeSection: 'Где работает',
   scopeAll: 'Везде',
   scopeWhitelist: 'Только в этих',
@@ -104,18 +96,15 @@ export const moderationSettings = {
   scopeRolesEmpty: 'Роли не выбраны',
   scopeRolesAdd: 'Добавить роль...',
 
-  /* ─── Вкладка Лог ─── */
   logEditorTitle: 'Шаблон сообщения в лог',
   logEditorHint: 'Отправляется в канал, указанный на вкладке «Параметры»',
   logChannelNotSet: 'Канал логов не выбран. Отчёты будут только в БД.',
 
-  /* ─── Вкладка ЛС ─── */
   dmEditorTitle: 'Шаблон личного сообщения',
   dmEditorHint: 'Отправляется нарушителю при срабатывании',
   dmDisabledTitle: 'ЛС отключены',
   dmDisabledHint: 'Включите тумблер «Отправлять ЛС нарушителю» на вкладке «Параметры»',
 
-  /* ─── Словарь мата ─── */
   dictTitle: 'Словарь мата',
   dictSubtitle: 'Регулярки + ваши слова',
   dictImport: 'Импорт .txt',
@@ -133,7 +122,6 @@ export const moderationSettings = {
   dictSubstring: 'Мат в составе',
   dictSubstringHint: 'искать как подстроку',
 
-  /* ─── Тест ─── */
   testTitle: 'Проверка правил',
   testSubtitle: 'Прогнать текст через все включённые фильтры',
   testInputLabel: 'Тестовое сообщение',
@@ -141,7 +129,6 @@ export const moderationSettings = {
   testHint: 'Ничего не отправится в Discord — только предпросмотр.',
   testNoHit: 'Ни один фильтр не сработал — сообщение прошло бы нормально',
 
-  /* ─── Общее ─── */
   save: 'Сохранить',
   saving: 'Сохранение...',
   cancel: 'Отмена',

@@ -3,27 +3,36 @@
 //   - regexRules (маски из Filter.txt с per-rule whitelist)
 //   - customWords (свои слова-триггеры)
 //   - customExceptions (свои глобальные whitelist, работают через перекрытие)
+//
+// URL из содержимого вырезаются для фильтров мата/капса/залго/эмодзи —
+// ссылки не должны становиться ложными срабатываниями. Для links/invites
+// содержимое проверяется как есть.
+
+const URL_REGEX = /https?:\/\/[^\s<>"']+/gi;
+
+/** Заменяет URL в тексте пробелами. Кириллица в path сохраняется корректно. */
+function stripUrls(text) {
+  return String(text || '').replace(URL_REGEX, ' ');
+}
 
 export async function checkFilter(key, fc, { content, message }) {
   const p = fc.params || {};
   switch (key) {
     case 'spam':       return null;
     case 'duplicates': return null;
-    case 'profanity':  return checkProfanity(p, content);
-    case 'caps':       return checkCaps(p, content);
+    case 'profanity':  return checkProfanity(p, stripUrls(content));
+    case 'caps':       return checkCaps(p, stripUrls(content));
     case 'links':      return checkLinks(p, content);
     case 'invites':    return checkInvites(p, content);
     case 'mentions':   return checkMentions(p, message);
     case 'raid':       return null;
-    case 'zalgo':      return checkZalgo(p, content);
-    case 'emoji':      return checkEmoji(p, content);
+    case 'zalgo':      return checkZalgo(p, stripUrls(content));
+    case 'emoji':      return checkEmoji(p, stripUrls(content));
     default:           return null;
   }
 }
 
-/* ═════════════════════════════════════════════════════════════
-   Profanity
-   ═════════════════════════════════════════════════════════════ */
+/* ═════════════════ Profanity ═════════════════ */
 
 const HAS_REGEX_CHARS = /[[\]()+*?|{}\\.^$]/;
 const HAS_CYRILLIC = /[\u0400-\u04FF]/;
@@ -32,12 +41,6 @@ function escapeRegex(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/**
- * Слово → паттерн:
- *   - если содержит regex-спецсимволы и кириллицу → используем как есть (маска);
- *   - иначе → литерал с границами слова.
- * Возвращает строку-паттерн или null.
- */
 function wordToPattern(word) {
   const w = String(word || '').trim();
   if (!w) return null;
@@ -49,10 +52,6 @@ function wordToPattern(word) {
   return `(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`;
 }
 
-/**
- * Компилирует все триггеры и глобальный whitelist с кэшем по сигнатуре.
- * @returns {{ rules: Array<{trigger: RegExp, whitelist: RegExp[]}>, globalWhitelist: RegExp[] }}
- */
 function getCompiledState(p) {
   const cacheKey = JSON.stringify({
     r: p.regexRules || [],
@@ -63,7 +62,6 @@ function getCompiledState(p) {
     return getCompiledState._cache.value;
   }
 
-  /* ── Триггеры из масок ── */
   const rules = [];
   for (const rule of (p.regexRules || [])) {
     if (!rule?.pattern) continue;
@@ -80,7 +78,6 @@ function getCompiledState(p) {
     if (rules.length >= 1000) break;
   }
 
-  /* ── Свои слова мата как триггеры ── */
   for (const word of (p.customWords || [])) {
     const pat = wordToPattern(word);
     if (!pat) continue;
@@ -90,7 +87,6 @@ function getCompiledState(p) {
     if (rules.length >= 1000) break;
   }
 
-  /* ── Свои исключения — глобальный whitelist ── */
   const globalWhitelist = [];
   for (const word of (p.customExceptions || [])) {
     const pat = wordToPattern(word);
@@ -103,10 +99,6 @@ function getCompiledState(p) {
   return value;
 }
 
-/**
- * Перекрывает ли whitelist-match триггер-match.
- * Условие: whitelist содержит trigger целиком.
- */
 function matchOverlaps(triggerMatch, text, whitelistRegexes) {
   if (!whitelistRegexes.length) return false;
   const ts = triggerMatch.index;
@@ -138,9 +130,7 @@ function checkProfanity(p, content) {
     const globalTrigger = new RegExp(rule.trigger.source, flags);
 
     for (const m of text.matchAll(globalTrigger)) {
-      // Whitelist самого правила
       if (matchOverlaps(m, text, rule.whitelist)) continue;
-      // Глобальные исключения
       if (matchOverlaps(m, text, globalWhitelist)) continue;
 
       return {
@@ -154,9 +144,7 @@ function checkProfanity(p, content) {
   return null;
 }
 
-/* ═════════════════════════════════════════════════════════════
-   Остальные фильтры — без изменений
-   ═════════════════════════════════════════════════════════════ */
+/* ═════════════════ Остальные фильтры ═════════════════ */
 
 function checkCaps(p, content) {
   const letters = String(content || '').replace(/[^\p{L}]/gu, '');

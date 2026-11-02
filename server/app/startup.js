@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { encrypt } from '../core/crypto.js';
 import { eventBus } from '../core/eventBus.js';
 import { ensureBuiltinCommands } from '../core/commandSync.js';
+import { runWithConcurrency } from '../core/concurrency.js';
 
 export async function ensureMainBot({ db, botManager, logger }) {
   const existing = db.getMainBot();
@@ -28,7 +29,6 @@ export async function ensureMainBot({ db, botManager, logger }) {
   try {
     await instance.start();
   } catch (err) {
-    // Не роняем процесс: бот может быть недоступен, но панель должна работать
     logger.error(
       { err: err?.message || err },
       'failed to start main bot — check DISCORD_MAIN_BOT_TOKEN; web panel continues',
@@ -51,20 +51,6 @@ export async function ensureMainBot({ db, botManager, logger }) {
   }
 
   botManager.bots.set(instance.id, instance);
-}
-
-async function runWithConcurrency(items, limit, fn) {
-  const results = [];
-  let i = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (i < items.length) {
-      const idx = i++;
-      try { results[idx] = await fn(items[idx]); }
-      catch (err) { results[idx] = { error: err }; }
-    }
-  });
-  await Promise.all(workers);
-  return results;
 }
 
 export async function syncGuildsOnStartup({ db, botManager, logger }) {

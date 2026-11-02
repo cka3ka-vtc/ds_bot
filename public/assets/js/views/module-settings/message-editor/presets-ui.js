@@ -4,20 +4,16 @@ import { UI } from '/shared/ui-strings.js';
 import { emptyMessageConfig } from './helpers.js';
 
 /**
- * Применение пресета и очистка сообщения.
+ * Применение пресета, сброс к стандартному и очистка сообщения.
  *
- * Оба действия — полная замена конфига (не инкрементальная правка),
- * поэтому onChange пробрасывается СИНХРОННО, а не через _markDirty
- * (debounce 150 мс). Иначе при клике «Применить пресет» → «Сохранить»
- * на родительской странице состояние ещё не успело обновиться и
- * сохранение уходит со старым конфигом.
+ * Все три действия — полная замена конфига, поэтому onChange пробрасывается
+ * СИНХРОННО (_notifyChangeSync), а не через debounce _markDirty.
  */
 export function mountPresetsMethods(MessageEditor) {
   Object.assign(MessageEditor.prototype, {
 
     /**
-     * Синхронно уведомляет родителя о смене конфига. Используется в
-     * местах, где нельзя ждать debounce (пресет, очистка, загрузка).
+     * Синхронно уведомляет родителя о смене конфига.
      */
     _notifyChangeSync() {
       try {
@@ -39,7 +35,6 @@ export function mountPresetsMethods(MessageEditor) {
       }
       this.config = structuredClone(preset.build());
       this._rerenderAndRebind();
-      // Полная замена — уведомляем синхронно, без debounce.
       this._notifyChangeSync();
     },
 
@@ -54,6 +49,31 @@ export function mountPresetsMethods(MessageEditor) {
         if (!ok) return;
       }
       this.config = emptyMessageConfig();
+      this._rerenderAndRebind();
+      this._notifyChangeSync();
+    },
+
+    /**
+     * Сброс к стандартному шаблону. Стандарт определяется через
+     * opts.resetFactory, переданный в конструктор. Для фильтров
+     * автомодерации это filterLogDefault(key) / filterDmDefault(key)
+     * (см. shared/moderation-config.js).
+     *
+     * Если resetFactory не задан — метод ничего не делает
+     * (и кнопка «Сбросить» в UI не рендерится).
+     */
+    async _resetConfig() {
+      if (!this._resetFactory) return;
+      const P = UI.msgEditor.presets;
+      if (hasMessageContent(this.config)) {
+        const ok = await this._confirm({
+          title: P.confirmResetTitle,
+          text: P.confirmReset,
+          ctaLabel: P.reset,
+        });
+        if (!ok) return;
+      }
+      this.config = structuredClone(this._resetFactory());
       this._rerenderAndRebind();
       this._notifyChangeSync();
     },

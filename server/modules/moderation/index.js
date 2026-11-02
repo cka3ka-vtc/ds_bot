@@ -2,16 +2,17 @@
 // Антирейд расширен: одиночные подозрительные аккаунты, волна, raid mode, cooldown.
 // Каждый фильтр имеет свой канал логов, шаблон ЛС/лога, карту нарушений.
 // mod_actions пишется для action !== 'delete'; logs — только для action === 'delete'.
-// Так в дашборде нет дублей и тексты читаемые.
 
 import { Module } from '../_base.js';
 import { configCache } from '../../core/config-cache.js';
 import {
-  mergeModerationConfig, FILTER_KEYS, FILTER_META, ACTION_OPTIONS,
+  mergeModerationConfig, FILTER_KEYS, FILTER_META,
 } from '../../../shared/moderation-config.js';
 import { checkFilter } from './filters.js';
 import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../../core/componentsBuilder.js';
 import { v2ConfigToEmbed, embedHasContent } from '../../core/v2-to-embed.js';
+import { mentionUser, buildAllowedMentions } from '../../core/mentions.js';
+import { formatMessageForLog } from '../../core/discord-text.js';
 
 const SPAM_MAP_TTL          = 60_000;
 const EXPIRE_BANS_INTERVAL  = 60_000;
@@ -23,7 +24,6 @@ const ACTION_LABEL_RU = {
   mute:   'мут',
   ban:    'бан',
   kick:   'кик',
-  role:   'выдача роли',
 };
 
 export default class ModerationModule extends Module {
@@ -68,9 +68,9 @@ export default class ModerationModule extends Module {
     return { enabled: raw.enabled, config: mergeModerationConfig(raw.config) };
   }
 
-  /* ═════════════════════════════════════════════════════════════
+  /* ══════════════════════════════════════════════════════════════
      Dispatch
-     ═════════════════════════════════════════════════════════════ */
+     ══════════════════════════════════════════════════════════════ */
 
   async onEvent({ event, client, guildId, message, member }) {
     if (event === 'guildMemberAdd') {
@@ -111,9 +111,9 @@ export default class ModerationModule extends Module {
     }
   }
 
-  /* ═════════════════════════════════════════════════════════════
+  /* ══════════════════════════════════════════════════════════════
      Stateful-фильтры
-     ═════════════════════════════════════════════════════════════ */
+     ══════════════════════════════════════════════════════════════ */
 
   async _runFilter(key, fc, message, ctx) {
     if (key === 'spam')       return this._checkSpam(ctx, fc.params, message);
@@ -176,9 +176,9 @@ export default class ModerationModule extends Module {
     };
   }
 
-  /* ═════════════════════════════════════════════════════════════
+  /* ══════════════════════════════════════════════════════════════
      Антирейд
-     ═════════════════════════════════════════════════════════════ */
+     ══════════════════════════════════════════════════════════════ */
 
   async _onMemberJoin({ client, guildId, member }) {
     if (!member?.user || member.user.bot) return;
@@ -261,6 +261,7 @@ export default class ModerationModule extends Module {
       this.logger.warn({ err, guildId, waveAction: p.waveAction }, 'moderation: wave action failed');
     }
 
+    let raidModeNote = '';
     if (p.enableRaidMode) {
       const until = Date.now() + p.raidModeDurationMin * 60_000;
       state.raidModeUntil = until;
@@ -272,11 +273,8 @@ export default class ModerationModule extends Module {
       t.unref?.();
       state.timers.add(t);
 
-      await this._sendRaidAlert({
-        client, fc, guildId, botId,
-        title: 'Raid mode активирован',
-        text: `Все новые входы будут автоматически ${p.raidModeAction === 'ban' ? 'забанены' : 'кикнуты'} в течение ${p.raidModeDurationMin} мин.`,
-      });
+      const rmLabel = p.raidModeAction === 'ban' ? 'бан' : 'кик';
+      raidModeNote = ` · Raid mode **активен ${p.raidModeDurationMin} мин** (новые входы — **${rmLabel}**)`;
     }
 
     if (p.cooldownMin > 0) {
@@ -287,6 +285,20 @@ export default class ModerationModule extends Module {
       t.unref?.();
       state.timers.add(t);
     }
+
+    const actionText = {
+      alert:    'только уведомление модераторов',
+      slowmode: `slowmode ${p.slowmodeSec} сек на ${p.lockdownDurationMin} мин`,
+      lockdown: `lockdown на ${p.lockdownDurationMin} мин`,
+      kick_all: 'кик всех вошедших',
+      ban_all:  'бан всех вошедших',
+    }[p.waveAction] || p.waveAction;
+
+    await this._sendRaidAlert({
+      client, fc, guildId, botId,
+      reason: `Обнаружена "**Волна входов**", для них будет предпринято действие: **${actionText}**.`,
+      message: `👥 Вошедших: **${recentMembers.length}** за **${p.windowSec} с**${raidModeNote}.`,
+    });
   }
 
   async _applyAgeAction({ botId, guildId, fc, member, client, ageDays }) {
@@ -327,10 +339,16 @@ export default class ModerationModule extends Module {
       this.logger.warn({ err, guildId, ageAction: p.ageAction }, 'moderation: age action failed');
     }
 
+    const actionText = {
+      alert: 'только уведомление модераторов',
+      kick:  'кик',
+      ban:   'бан',
+    }[p.ageAction] || p.ageAction;
+
     await this._sendRaidAlert({
       client, fc, guildId, botId,
-      title: 'Новый аккаунт',
-      text: `Пользователь <@${member.id}> (возраст ${ageText}) — действие: **${p.ageAction}**`,
+      reason: `Обнаружен "**Подозрительный аккаунт**", со дня создания аккаунта прошло менее **${p.minAccountAgeDays}** дней.`,
+      message: `👤 <@${member.id}> · Возраст: **${ageText}** · Действие: **${actionText}**.`,
     });
   }
 
@@ -520,9 +538,9 @@ export default class ModerationModule extends Module {
     return s;
   }
 
-  /* ═════════════════════════════════════════════════════════════
+  /* ══════════════════════════════════════════════════════════════
      Наказания
-     ═════════════════════════════════════════════════════════════ */
+     ══════════════════════════════════════════════════════════════ */
 
   async _applyPunishment({ botId, guildId, filterKey, filterCfg, message, client, hit }) {
     await this._deleteMessages({ client, guildId, message, hit });
@@ -534,17 +552,17 @@ export default class ModerationModule extends Module {
     const prev = this.db.countEvents(botId, guildId, `automod_${filterKey}`, since);
     const violation = prev + 1;
 
-    const { action, durationMin, roleId } = this._resolveFilterAction(filterCfg, violation);
+    const { action, durationMin } = this._resolveFilterAction(filterCfg, violation);
 
-    // mod_actions — для action ≠ delete (это наши «наказания»)
-    // logs — только для delete (иначе дублирование в дашборде)
     if (action !== 'delete') {
       try {
         this.db.addModAction(botId, guildId, {
           userId: message.author.id,
           moderatorId: null,
           kind: this._actionToKind(action),
-          reason: hit.reason,
+          reason: FILTER_META[filterKey]?.name || filterKey,
+          filterKey,
+          violation,
           expiresAt: durationMin > 0
             ? Math.floor(Date.now() / 1000) + durationMin * 60
             : null,
@@ -553,7 +571,6 @@ export default class ModerationModule extends Module {
         this.logger.warn({ err, guildId }, 'moderation: addModAction failed');
       }
     } else {
-      // Только удаление — пишем в logs с кратким описанием
       this._log(
         botId, guildId, 'warn', 'moderation',
         'Сообщение удалено', {
@@ -563,11 +580,12 @@ export default class ModerationModule extends Module {
           filterName: FILTER_META[filterKey]?.name || filterKey,
           reason: hit.reason,
           details: hit.details,
+          // Для БД — до 500 символов, markdown-экранирован (это мета, не отправка).
+          message: formatMessageForLog(message.content, message.attachments, 500),
         },
       );
     }
 
-    // Discord action
     try {
       if (action === 'mute') {
         await message.member.timeout(durationMin * 60_000, `Автомодерация: ${hit.reason}`);
@@ -578,20 +596,11 @@ export default class ModerationModule extends Module {
           reason: `Автомодерация: ${hit.reason}`,
           deleteMessageSeconds: 0,
         });
-      } else if (action === 'role' && roleId) {
-        await message.member.roles.add(roleId, `Автомодерация: ${hit.reason}`);
-        if (durationMin > 0) {
-          const t = setTimeout(() => {
-            message.member.roles.remove(roleId, 'Автомодерация: снятие роли').catch(() => {});
-          }, durationMin * 60_000);
-          t.unref?.();
-        }
       }
     } catch (err) {
       this.logger.warn({ err, guildId, action }, 'moderation: discord action failed');
     }
 
-    // Событие для счётчика нарушений
     try {
       this.db.addEvent({
         botId, guildId, userId: message.author.id,
@@ -602,7 +611,6 @@ export default class ModerationModule extends Module {
       this.logger.warn({ err, guildId }, 'moderation: addEvent failed');
     }
 
-    // Discord-лог и ЛС — как раньше
     await this._sendLog({ message, client, filterCfg, filterKey, hit, action, violation });
     await this._sendDm({ message, filterCfg, filterKey, hit, action, violation });
   }
@@ -641,9 +649,9 @@ export default class ModerationModule extends Module {
     }
   }
 
-  /* ═════════════════════════════════════════════════════════════
+  /* ══════════════════════════════════════════════════════════════
      Планировщик: снятие временных банов
-     ═════════════════════════════════════════════════════════════ */
+     ══════════════════════════════════════════════════════════════ */
 
   async _expireBans() {
     const now = Math.floor(Date.now() / 1000);
@@ -654,15 +662,13 @@ export default class ModerationModule extends Module {
       for (const guild of inst.client.guilds.cache.values()) {
         let bans = [];
         try {
-          bans = this.db.getModActions(inst.id, guild.id, 'ban');
+          bans = this.db.getExpiredBans(inst.id, guild.id, now);
         } catch (err) {
-          this.logger.debug({ err, guildId: guild.id }, 'moderation: getModActions failed');
+          this.logger.debug({ err, guildId: guild.id }, 'moderation: getExpiredBans failed');
           continue;
         }
 
         for (const b of bans) {
-          if (!b.expires_at || b.expires_at > now) continue;
-
           try {
             await guild.bans.remove(b.user_id, 'Автомодерация: срок бана истёк');
           } catch (err) {
@@ -675,18 +681,24 @@ export default class ModerationModule extends Module {
           }
 
           try {
-            this.db.removeModAction(inst.id, guild.id, b.id);
+            this.db.markModActionRemoved(inst.id, guild.id, b.id, 'system');
+            this.db.addLog(inst.id, guild.id, {
+              level: 'info', module: 'moderation',
+              userId: b.user_id,
+              message: 'Срок бана истёк',
+              meta: { banId: b.id, userId: b.user_id, expiresAt: b.expires_at },
+            });
           } catch (err) {
-            this.logger.debug({ err, banId: b.id }, 'moderation: removeModAction failed');
+            this.logger.debug({ err, banId: b.id }, 'moderation: expire record failed');
           }
         }
       }
     }
   }
 
-  /* ═════════════════════════════════════════════════════════════
+  /* ══════════════════════════════════════════════════════════════
      Утилиты
-     ═════════════════════════════════════════════════════════════ */
+     ══════════════════════════════════════════════════════════════ */
 
   _resolveFilterAction(filterCfg, violation) {
     if (filterCfg.escalation.enabled && filterCfg.escalation.rows.length) {
@@ -697,14 +709,12 @@ export default class ModerationModule extends Module {
         return {
           action: row.action,
           durationMin: row.durationMin,
-          roleId: row.roleId,
         };
       }
     }
     return {
       action: filterCfg.action,
       durationMin: filterCfg.durationMin,
-      roleId: filterCfg.roleId,
     };
   }
 
@@ -712,8 +722,7 @@ export default class ModerationModule extends Module {
     return {
       warn: 'warn',
       mute: 'mute',
-      role: 'mute',
-      kick: 'auto',
+      kick: 'kick',
       ban:  'ban',
     }[action] || 'auto';
   }
@@ -729,7 +738,7 @@ export default class ModerationModule extends Module {
     if (!channel?.isSendable?.() || channel.guild.id !== message.guild.id) return;
 
     const tokens = {
-      user: `<@${message.author.id}>`,
+      user: mentionUser(message.author.id),
       username: message.author.username,
       displayName: message.member?.displayName || message.author.username,
       userId: message.author.id,
@@ -737,9 +746,14 @@ export default class ModerationModule extends Module {
       action: this._actionLabel(action),
       filter: FILTER_META[filterKey]?.name || filterKey,
       violation: String(violation),
+      // {channel} — кликабельный <#id>, на mobile может показать «нет доступа».
       channel: `<#${message.channel.id}>`,
+      // {channelText} — plain «#name», всегда работает на mobile и desktop.
+      channelText: message.channel.name ? `#${message.channel.name}` : '—',
       channelName: message.channel.name || '',
-      message: (message.content || '').slice(0, 200),
+      // {message} — полный текст (до 1900), markdown экранирован,
+      // вложения учитываются как «[+N вложен.]».
+      message: formatMessageForLog(message.content, message.attachments),
       guild: message.guild.name,
     };
 
@@ -756,7 +770,7 @@ export default class ModerationModule extends Module {
       await channel.send({
         flags: FLAG_COMPONENTS_V2,
         components,
-        allowedMentions: { parse: [] },
+        allowedMentions: buildAllowedMentions(components, { ping: false }),
       });
     } catch (err) {
       this.logger.warn({ err, guildId: message.guild.id }, 'moderation: log send failed');
@@ -768,7 +782,7 @@ export default class ModerationModule extends Module {
     if (!filterCfg.templateDm) return;
 
     const tokens = {
-      user: `<@${message.author.id}>`,
+      user: mentionUser(message.author.id),
       username: message.author.username,
       displayName: message.member?.displayName || message.author.username,
       reason: hit.reason,
@@ -777,6 +791,11 @@ export default class ModerationModule extends Module {
       violation: String(violation),
       matched: hit.matched || '',
       guild: message.guild.name,
+      channel: `<#${message.channel.id}>`,
+      channelText: message.channel.name ? `#${message.channel.name}` : '—',
+      channelName: message.channel.name || '',
+      // {message} — тот же формат, что и в логе (полный текст + escape).
+      message: formatMessageForLog(message.content, message.attachments),
     };
 
     let embed;
@@ -791,22 +810,17 @@ export default class ModerationModule extends Module {
     message.author.send({ embeds: [embed] }).catch(() => {});
   }
 
-  async _sendRaidAlert({ client, fc, guildId, botId, title, text }) {
+  async _sendRaidAlert({ client, fc, guildId, botId, reason, message }) {
     if (!fc.logChannelId) return;
 
     const channel = await client.channels.fetch(fc.logChannelId).catch(() => null);
     if (!channel?.isSendable?.() || channel.guild.id !== guildId) return;
 
     const tokens = {
-      reason: title,
-      action: 'антирейд',
-      filter: 'Антирейд',
+      reason: reason || '',
+      message: message || '',
+      filter: FILTER_META.raid.name,
       guild: channel.guild.name,
-      message: text,
-      user: '—',
-      channel: '—',
-      channelName: '—',
-      violation: '1',
     };
 
     let components;
@@ -822,7 +836,7 @@ export default class ModerationModule extends Module {
       await channel.send({
         flags: FLAG_COMPONENTS_V2,
         components,
-        allowedMentions: { parse: [] },
+        allowedMentions: buildAllowedMentions(components, { ping: false }),
       });
     } catch (err) {
       this.logger.warn({ err, guildId }, 'moderation: raid alert send failed');

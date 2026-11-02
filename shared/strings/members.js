@@ -39,7 +39,7 @@ export const members = {
     lastActiveLabel: 'Последняя активность',
     birthdayLabel: 'День рождения',
     birthdayPublic: 'публичное', birthdayHidden: 'скрытое',
-    birthdayNotSet: 'Не указан (команда /birthday)',
+    birthdayNotSet: 'Не указан (команда /birthday_set)',
     editTitle: 'Редактирование',
     nicknameLabel: 'Никнейм на сервере',
     nicknameHint: 'Пусто — сброс к имени пользователя. Требуется право «Управление никнеймами».',

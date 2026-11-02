@@ -2,6 +2,6 @@
 
 export const modulesGrid = {
   openSettings: 'Настройки модуля',
-  openSettingsDisabled: 'Настройки в разработке',
+  openSettingsDisabled: 'Настройки недоступны',
   inDevelopment: 'Настройки модуля в разработке',
 };

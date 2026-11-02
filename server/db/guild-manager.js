@@ -9,13 +9,11 @@ import { createModerationRepo } from './repositories/moderation.js';
 import { createCommandsRepo } from './repositories/commands.js';
 import { createEventsRepo } from './repositories/events.js';
 import { createUserProfilesRepo } from './repositories/userProfiles.js';
+import { createStickyRepo } from './repositories/sticky.js';
+import { createAutodeleteRepo } from './repositories/autodelete.js';
+import { createScheduledRepo } from './repositories/scheduled.js';
+import { createMessageTemplatesRepo } from './repositories/message-templates.js';
 
-/**
- * Общее открытие SQLite-соединения с правильными pragma.
- * busy_timeout — защита от SQLITE_BUSY при параллельных записях.
- * WAL — параллельные чтения при записи.
- * foreign_keys — целостность (без него ON DELETE CASCADE не работает).
- */
 function openDbWithPragmas(dbPath) {
   const raw = new Database(dbPath);
   raw.pragma('journal_mode = WAL');
@@ -103,6 +101,74 @@ export class GuildDbManager {
     return moved;
   }
 
+  /**
+   * Defensive-миграция: гарантирует наличие критичных колонок и индексов,
+   * даже если запись о версии в schema_migrations есть, а изменений нет.
+   *
+   * Покрывает случаи:
+   *   - файл миграции не обновился, но schema_migrations свежая (застряло);
+   *   - прерванная транзакция, оставившая запись без изменений;
+   *   - ручное восстановление/копирование БД.
+   */
+  _ensureSchema(raw, guildId) {
+    try {
+      const tables = new Set(
+        raw.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name),
+      );
+
+      /* mod_actions: removed_at / removed_by */
+      if (tables.has('mod_actions')) {
+        const cols = new Set(
+          raw.prepare('PRAGMA table_info(mod_actions)').all().map((r) => r.name),
+        );
+
+        let healed = false;
+        if (!cols.has('removed_at')) {
+          raw.exec('ALTER TABLE mod_actions ADD COLUMN removed_at INTEGER');
+          healed = true;
+        }
+        if (!cols.has('removed_by')) {
+          raw.exec('ALTER TABLE mod_actions ADD COLUMN removed_by TEXT');
+          healed = true;
+        }
+
+        raw.exec(`
+          CREATE INDEX IF NOT EXISTS idx_mod_actions_status
+            ON mod_actions(removed_at, expires_at, created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_mod_actions_kind
+            ON mod_actions(kind, created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_mod_actions_moderator
+            ON mod_actions(moderator_id, created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_mod_actions_user
+            ON mod_actions(user_id, created_at DESC);
+        `);
+
+        if (healed) {
+          this.logger?.warn(
+            { guildId },
+            'guild-db: self-heal applied — mod_actions was missing removed_at/removed_by',
+          );
+        }
+      }
+
+      /* logs: user_id (v8 — на случай застрявшей миграции) */
+      if (tables.has('logs')) {
+        const cols = new Set(
+          raw.prepare('PRAGMA table_info(logs)').all().map((r) => r.name),
+        );
+        if (!cols.has('user_id')) {
+          raw.exec('ALTER TABLE logs ADD COLUMN user_id TEXT');
+          raw.exec(
+            'CREATE INDEX IF NOT EXISTS idx_logs_user ON logs(user_id, created_at DESC)',
+          );
+          this.logger?.warn({ guildId }, 'guild-db: self-heal added logs.user_id');
+        }
+      }
+    } catch (err) {
+      this.logger?.error({ err, guildId }, 'guild-db: self-heal failed');
+    }
+  }
+
   get(botId, guildId) {
     const k = this._key(botId, guildId);
     let entry = this.connections.get(k);
@@ -112,6 +178,10 @@ export class GuildDbManager {
     const raw = openDbWithPragmas(dbPath);
     runGuildMigrations(raw, this.logger, guildId);
 
+    // Self-heal: даже если runGuildMigrations пропустил v9 (застрявшая запись,
+    // устаревший файл миграции), колонки будут добавлены здесь.
+    this._ensureSchema(raw, guildId);
+
     const repos = {
       raw,
       ...createModulesRepo(raw),
@@ -120,6 +190,10 @@ export class GuildDbManager {
       ...createCommandsRepo(raw),
       ...createEventsRepo(raw),
       ...createUserProfilesRepo(raw),
+      ...createStickyRepo(raw),
+      ...createAutodeleteRepo(raw),
+      ...createScheduledRepo(raw),
+      ...createMessageTemplatesRepo(raw),
     };
     entry = { raw, repos };
     this.connections.set(k, entry);
@@ -178,6 +252,8 @@ export class GuildDbManager {
       .map((d) => d.name);
 
     let applied = 0;
+    let healed = 0;
+
     for (const guildId of folders) {
       const dir = path.join(this.baseDir, guildId);
       let files;
@@ -189,6 +265,7 @@ export class GuildDbManager {
           const fullPath = path.join(dir, f);
           const raw = openDbWithPragmas(fullPath);
           runGuildMigrations(raw, this.logger, guildId);
+          this._ensureSchema(raw, guildId);  // ← self-heal при старте
           raw.close();
           applied++;
         } catch (err) {
@@ -197,7 +274,10 @@ export class GuildDbManager {
       }
     }
 
-    this.logger?.info({ count: applied }, 'guild-db: migrations applied on startup');
+    this.logger?.info(
+      { count: applied, healed, folders: folders.length },
+      'guild-db: migrations applied on startup',
+    );
     return applied;
   }
 

@@ -2,15 +2,6 @@
 import { UI } from '/shared/ui-strings.js';
 import { LIMITS } from './helpers.js';
 
-/**
- * Главный bind() редактора. Внутри разбит на независимые функции:
- *   bindSettingsCard, bindTemplatesCard, bindPresets, bindModeSeg,
- *   bindColorInput, bindTextInputs, bindAddMenu, bindRootToolbar,
- *   bindTextareaAutoResize, bindBlocks
- *
- * Каждая функция принимает editor (this), корень root и signal для AbortController.
- * Все подписки идут через { signal } — destroy() абортит всё разом.
- */
 export function mountBindMethods(MessageEditor) {
   MessageEditor.prototype._bind = function _bind() {
     this._abort?.abort();
@@ -26,6 +17,7 @@ export function mountBindMethods(MessageEditor) {
     bindTextInputs(this, root, signal);
     bindAddMenu(this, root, signal);
     bindRootToolbar(this, root, signal);
+    bindCompactTokenButtons(this, root, signal);
     bindTextareaAutoResize(this, root, signal);
     bindBlocks(this, signal);
   };
@@ -86,7 +78,7 @@ function bindTemplatesCard(editor, root, signal) {
   }, { signal });
 }
 
-/* ─── Presets: применение и очистка ─── */
+/* ─── Presets + actions bar (reset / clear) ─── */
 function bindPresets(editor, root, signal) {
   root.querySelectorAll('[data-preset]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -95,6 +87,11 @@ function bindPresets(editor, root, signal) {
       if (preset) await editor._applyPreset(preset);
     }, { signal });
   });
+
+  const resetBtn = root.querySelector('[data-reset-template]');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => editor._resetConfig(), { signal });
+  }
 
   const clearBtn = root.querySelector('[data-clear-template]');
   if (clearBtn) {
@@ -173,15 +170,10 @@ function bindRootToolbar(editor, root, signal) {
     if (tokensBtn && tokensBtn.closest('.editor-toolbar')) {
       e.preventDefault();
       e.stopPropagation();
-      const blockCard = tokensBtn.closest('.block-card');
-      let target;
-      if (blockCard) {
-        target = blockCard.querySelector('textarea[data-field="content"]')
-          || blockCard.querySelector('input[data-field="content"]');
-      } else {
-        const field = tokensBtn.closest('.form-field');
-        target = field?.querySelector('textarea');
-      }
+      // Ищем textarea/input в том же родителе (тулбар — sibling до поля)
+      const parent = tokensBtn.closest('.editor-toolbar')?.parentElement;
+      const target = parent?.querySelector('textarea, input.input[data-token-context]')
+        || parent?.querySelector('textarea, input.input');
       if (target) editor._showTokensMenu(tokensBtn, target);
       return;
     }
@@ -192,16 +184,24 @@ function bindRootToolbar(editor, root, signal) {
     e.preventDefault();
     e.stopPropagation();
 
-    const blockCard = fmtBtn.closest('.block-card');
-    let target;
-    if (blockCard) {
-      target = blockCard.querySelector('textarea[data-field="content"]')
-        || blockCard.querySelector('input[data-field="content"]');
-    } else {
-      const field = fmtBtn.closest('.form-field');
-      target = field?.querySelector('textarea');
-    }
+    const parent = fmtBtn.closest('.editor-toolbar')?.parentElement;
+    const target = parent?.querySelector('textarea, input.input[data-token-context]')
+      || parent?.querySelector('textarea, input.input');
     if (target) editor._handleFormat(fmtBtn, target);
+  }, { signal });
+}
+
+/* ─── Компактные кнопки «{x}» в блоках ─── */
+// data-tokens-for — маркер; target — input в том же .sub-item-row.
+function bindCompactTokenButtons(editor, root, signal) {
+  root.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-tokens-for]');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const row = btn.closest('.sub-item-row');
+    const target = row?.querySelector('input.input, textarea.input');
+    if (target) editor._showTokensMenu(btn, target);
   }, { signal });
 }
 
@@ -217,7 +217,11 @@ function bindBlocks(editor, signal) {
   const blocksEl = editor._blocksEl;
   if (!blocksEl) return;
 
-  blocksEl.addEventListener('click', (e) => editor._handleBlockClick(e), { signal });
+  blocksEl.addEventListener('click', (e) => {
+    // кнопки {x} в блоках обрабатывает bindCompactTokenButtons, не мешаем
+    if (e.target.closest('[data-tokens-for]')) return;
+    editor._handleBlockClick(e);
+  }, { signal });
   blocksEl.addEventListener('input', (e) => editor._handleBlockInput(e), { signal });
   blocksEl.addEventListener('change', (e) => editor._handleBlockInput(e), { signal });
 

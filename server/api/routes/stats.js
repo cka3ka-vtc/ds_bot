@@ -1,8 +1,7 @@
 // server/api/routes/stats.js
-// Сводная статистика и графики. Списки участников — в stats-members.js.
-
 import { Router } from 'express';
 import { requireAuth, requireBotAccess } from '../auth-middleware.js';
+import { getNonBotMemberCount } from '../../core/guildCounts.js';
 
 function daysUntilBirthday(ddmm) {
   const [d, m] = ddmm.split('.').map(Number);
@@ -32,7 +31,6 @@ export function statsRouter() {
     const guild = inst.client.guilds.cache.get(guildId);
     if (!guild) return res.status(404).json({ error: 'guild_not_found' });
 
-    const { getNonBotMemberCount } = await import('../../core/guildCounts.js');
     const totalMembers = await getNonBotMemberCount(guild);
 
     const now = Math.floor(Date.now() / 1000);
@@ -72,7 +70,6 @@ export function statsRouter() {
       birthdays: enabledSet.has('birthdays'),
     };
 
-    // Дашборд показывает всех с ДР, включая отключивших (для пометки).
     let upcomingBirthdays = [];
     if (modulesEnabled.birthdays) {
       const rows = db.getUpcomingBirthdays(botId, guildId, false);

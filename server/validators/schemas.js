@@ -30,7 +30,14 @@ export const commandsCheckQuery = z.object({
 export const modActionsQuery = z.object({
   botId: discordId,
   guildId: discordId,
-  kind: z.enum(['warn', 'mute', 'ban', 'auto']).optional(),
+  kind: z.enum(['warn', 'mute', 'ban', 'kick', 'auto']).optional(),
+  status: z.enum(['all', 'active', 'expired', 'removed']).optional().default('all'),
+  moderatorId: discordId.optional(),
+  userId: discordId.optional(),
+  search: z.string().max(100).optional().default(''),
+  since: z.enum(['24h', '7d', '30d', 'all']).optional().default('all'),
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
 export const membersListQuery = z.object({
@@ -134,7 +141,7 @@ export const modActionCreateBody = z.object({
   botId: discordId,
   guildId: discordId,
   userId: discordId,
-  kind: z.enum(['warn', 'mute', 'ban', 'auto']),
+  kind: z.enum(['warn', 'mute', 'ban']),
   reason: z.string().max(500).optional().default(''),
   durationMinutes: z.number().int().min(1).max(60 * 24 * 365).nullable().optional(),
 });
@@ -195,12 +202,6 @@ export const greetingsTestBody = z.object({
   messageConfig: messageConfigSchema,
 });
 
-/**
- * Тест levels.
- * `which` — какой таб тестируется:
- *   - levelUp → отправится Components V2 (как реальный анонс)
- *   - rank/leaderboard/daily → отправится embed (как реальные команды)
- */
 export const levelsTestBody = z.object({
   botId: discordId,
   guildId: discordId,
@@ -209,12 +210,6 @@ export const levelsTestBody = z.object({
   which: z.enum(['levelUp', 'rank', 'leaderboard', 'daily']).optional().default('daily'),
 });
 
-/**
- * Тест birthdays.
- * `which` — какой таб тестируется:
- *   - announce (анонс в канал) → Components V2 (как реальное поздравление)
- *   - cmdSet / cmdToggle / cmdList → embed (как реальные команды)
- */
 export const birthdaysTestBody = z.object({
   botId: discordId,
   guildId: discordId,
@@ -233,6 +228,104 @@ export const moderationTestBody = z.object({
   botId: discordId,
   guildId: discordId,
   text: z.string().min(1).max(4000),
+});
+
+/* ---------- Sticky messages ---------- */
+export const stickyCreateBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  name: z.string().min(1).max(80),
+  channelId: discordId,
+  messageConfig: z.record(z.any()).optional(),
+});
+
+export const stickyUpdateBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  name: z.string().min(1).max(80).optional(),
+  channelId: discordId.optional(),
+  messageConfig: z.record(z.any()).optional(),
+});
+
+export const stickyToggleBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  enabled: z.boolean(),
+});
+
+/* ---------- Autodelete rules ---------- */
+export const autodeleteCreateBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  name: z.string().min(1).max(80),
+  channelId: discordId,
+  mode: z.enum(['instant', 'after']),
+  delayValue: z.number().int().min(1).max(365 * 24 * 60).nullable().optional(),
+  delayUnit: z.enum(['minutes', 'hours', 'days']).nullable().optional(),
+});
+
+export const autodeleteUpdateBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  name: z.string().min(1).max(80).optional(),
+  channelId: discordId.optional(),
+  mode: z.enum(['instant', 'after']).optional(),
+  delayValue: z.number().int().min(1).max(365 * 24 * 60).nullable().optional(),
+  delayUnit: z.enum(['minutes', 'hours', 'days']).nullable().optional(),
+});
+
+export const autodeleteToggleBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  enabled: z.boolean(),
+});
+
+/* ---------- Scheduled messages ---------- */
+export const scheduledCreateBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  name: z.string().min(1).max(80),
+  channelId: discordId,
+  scheduledAt: z.number().int().min(1),
+  messageConfig: z.record(z.any()).optional(),
+});
+
+export const scheduledUpdateBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  name: z.string().min(1).max(80).optional(),
+  channelId: discordId.optional(),
+  scheduledAt: z.number().int().min(1).optional(),
+  messageConfig: z.record(z.any()).optional(),
+});
+
+export const scheduledToggleBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  enabled: z.boolean(),
+});
+
+/* ---------- Message templates ---------- */
+export const templateCreateBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  name: z.string().min(1).max(80),
+  defaultChannelId: discordId.nullable().optional(),
+  messageConfig: z.record(z.any()).optional(),
+});
+
+export const templateUpdateBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  name: z.string().min(1).max(80).optional(),
+  defaultChannelId: discordId.nullable().optional(),
+  messageConfig: z.record(z.any()).optional(),
+});
+
+export const templateSendBody = z.object({
+  botId: discordId,
+  guildId: discordId,
+  channelId: discordId.optional(),
 });
 
 export { messageConfigSchema, messageBlockSchema, discordId, hexColor };

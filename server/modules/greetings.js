@@ -3,6 +3,7 @@ import { Module } from './_base.js';
 import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../core/componentsBuilder.js';
 import { getNonBotMemberCount } from '../core/guildCounts.js';
 import { retryDiscord } from '../core/retry.js';
+import { mentionUser, buildAllowedMentions } from '../core/mentions.js';
 
 export default class GreetingsModule extends Module {
   get key() { return 'greetings'; }
@@ -40,10 +41,10 @@ export default class GreetingsModule extends Module {
     }
 
     const tokens = {
-      user: `<@${member.id}>`,
-      mention: `<@${member.id}>`,
+      user: mentionUser(member.id),
+      mention: mentionUser(member.id),
       username: member.user.username,
-      displayName: member.user.globalName || member.user.username,
+      displayName: member.displayName || member.user.globalName || member.user.username,
       avatarUrl: member.user.displayAvatarURL?.({ size: 128 }) || '',
       guild: member.guild.name,
       count: nonBotCount,
@@ -65,7 +66,8 @@ export default class GreetingsModule extends Module {
         () => channel.send({
           flags: FLAG_COMPONENTS_V2,
           components,
-          allowedMentions: { parse: ['users'] },
+          // Пинг нового участника — часть UX приветствия.
+          allowedMentions: buildAllowedMentions(components, { ping: true }),
         }),
         {
           maxAttempts: 3,

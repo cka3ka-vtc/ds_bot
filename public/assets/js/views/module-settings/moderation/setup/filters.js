@@ -4,7 +4,7 @@ import { bindChannelPicker, bindRolePicker } from '../../pickers.js';
 import { MessageEditor, emptyMessageConfig } from '../../message-editor.js';
 import { UI } from '/shared/ui-strings.js';
 import {
-  FILTER_KEYS, filterDmDefault, actionNeedsDuration,
+  FILTER_KEYS, FILTER_META, filterDmDefault, filterLogDefault, actionNeedsDuration,
 } from '/shared/moderation-config.js';
 import {
   chipsHTML, bindChips, refreshChips,
@@ -372,11 +372,18 @@ function bindLogSection(card, key, fc, ctx) {
   const editorEl = card.querySelector('[data-filter-log-editor]');
   if (!editorEl) return;
 
+  const isRaid = key === 'raid';
+  const filterName = FILTER_META[key]?.name || key;
+
   const ed = new MessageEditor(editorEl, fc.templateLog || emptyMessageConfig(), {
     bot: ctx.bot || { name: 'Bot', avatarUrl: null },
     roles: ctx.roles || [],
-    context: 'moderation.log',
+    context: isRaid ? 'moderation.raid' : 'moderation.log',
     presetKey: null,
+    resetFactory: () => filterLogDefault(key),
+    // Прокидываем корректное имя фильтра для preview — иначе {filter}
+    // в превью всегда показывал «Антиспам» (статичное значение контекста).
+    previewTokens: { filter: filterName },
     guildId: ctx.guildId,
     botId: ctx.botId,
   });
@@ -403,11 +410,15 @@ function mountDmEditor(card, fc, ctx) {
     : filterDmDefault(key);
   fc.templateDm = initial;
 
+  const filterName = FILTER_META[key]?.name || key;
+
   const ed = new MessageEditor(editorEl, initial, {
     bot: ctx.bot || { name: 'Bot', avatarUrl: null },
     roles: ctx.roles || [],
     context: 'moderation.dm',
     presetKey: null,
+    resetFactory: () => filterDmDefault(key),
+    previewTokens: { filter: filterName },
     guildId: ctx.guildId,
     botId: ctx.botId,
   });

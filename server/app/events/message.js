@@ -1,5 +1,6 @@
 // server/app/events/message.js
 import { saveProfileThrottled, snapshotOf } from './helpers.js';
+import { addBufferedEvent } from './_event-buffer.js';
 
 export function onMessage({ db, logger, payload }) {
   const { botId, guildId, message } = payload;
@@ -9,7 +10,7 @@ export function onMessage({ db, logger, payload }) {
   const snap = snapshotOf(message.member || message.author);
 
   try {
-    db.addEvent({
+    addBufferedEvent({
       botId, guildId, userId, type: 'message',
       meta: { channelId: message.channel.id, ...snap },
     });

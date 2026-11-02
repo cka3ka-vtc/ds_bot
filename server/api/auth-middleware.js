@@ -2,46 +2,12 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import { userApiLimiter } from './middleware/rate-limit.js';
-
-const adminCache = new Map();
-const ADMIN_TTL = 2 * 60_000;
-
-async function checkMemberAdmin(inst, guildId, userId) {
-  const key = `${inst.id}:${guildId}:${userId}`;
-  const now = Date.now();
-  const c = adminCache.get(key);
-  if (c && now - c.ts < ADMIN_TTL) return c.value;
-
-  if (!inst?.client?.isReady?.()) return false;
-  try {
-    const guild = inst.client.guilds.cache.get(guildId);
-    if (!guild) { adminCache.set(key, { value: false, ts: now }); return false; }
-
-    let member = guild.members.cache.get(userId);
-    if (!member) {
-      member = await guild.members.fetch({ user: userId, force: false }).catch(() => null);
-    }
-    const value = !!(
-      member?.permissions?.has?.('Administrator') ||
-      member?.permissions?.has?.('ManageGuild')
-    );
-    adminCache.set(key, { value, ts: now });
-    return value;
-  } catch {
-    adminCache.set(key, { value: false, ts: now });
-    return false;
-  }
-}
-
-export function invalidateAdminCache(botId, guildId, userId) {
-  adminCache.delete(`${botId}:${guildId}:${userId}`);
-}
+import { checkMemberAdmin, invalidateGuildAccess } from '../core/guild-access.js';
 
 /**
  * Проверка JWT-cookie. При успехе:
  *   - req.user = { id, username, ... };
- *   - пропускает через userApiLimiter (300 req/min per user_id),
- *     чтобы 1 IP = N админов не били лимит друг другу.
+ *   - пропускает через userApiLimiter.
  */
 export function requireAuth(req, res, next) {
   const token = req.cookies?.auth;
@@ -56,7 +22,6 @@ export function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'unauthorized' });
   }
 
-  // Per-user rate limit — после того как req.user.id известен.
   return userApiLimiter(req, res, next);
 }
 
@@ -111,4 +76,9 @@ export function requireBotAccess(req, res, next) {
       res.status(500).json({ error: 'internal_error' });
     }
   })();
+}
+
+/** Совместимость: сохраняет экспорт для существующих вызовов. */
+export function invalidateAdminCache(botId, guildId, userId) {
+  invalidateGuildAccess(botId, guildId, userId);
 }

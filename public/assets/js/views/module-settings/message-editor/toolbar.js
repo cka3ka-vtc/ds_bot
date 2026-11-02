@@ -3,13 +3,8 @@ import { escapeHtml } from '../../../core/utils.js';
 import { UI } from '/shared/ui-strings.js';
 import { positionPopup } from '../pickers.js';
 import { TIME_FORMAT_CODES } from './helpers.js';
+import { isTokenAllowed } from '../message-editor-tokens.js';
 
-/**
- * Тулбар: форматирование markdown + вставка времени и токенов.
- *   - [data-format] кнопки — обёртка выделения (bold/italic/...);
- *   - time menu — выбор <t:now:code>;
- *   - tokens menu — вставка {token}.
- */
 export function mountToolbarMethods(MessageEditor) {
   Object.assign(MessageEditor.prototype, {
 
@@ -93,19 +88,56 @@ export function mountToolbarMethods(MessageEditor) {
     _showTokensMenu(anchor, target) {
       document.querySelectorAll('.time-dropdown, .tokens-dropdown, .picker-popup').forEach((d) => d.remove());
 
+      const fieldContext = target?.dataset?.tokenContext || 'rich';
+      const isV2 = this.config.displayMode === 'flat';
+      const H = UI.msgEditor.tokensMenu;
+
+      /* Фильтруем категории и токены по контексту поля + displayMode. */
+      const categories = this._ctx.categories
+        .map((cat) => ({
+          label: cat.label,
+          items: cat.items.filter(([id, desc, kind]) =>
+            isTokenAllowed(kind || 'text', fieldContext, isV2),
+          ),
+        }))
+        .filter((cat) => cat.items.length > 0);
+
       const dd = document.createElement('div');
       dd.className = 'tokens-dropdown';
-      dd.innerHTML = this._ctx.categories.map((cat) => `
-        <div class="tokens-category">
-          <div class="tokens-category-label">${escapeHtml(cat.label)}</div>
-          ${cat.items.map(([id, desc]) => `
-            <button type="button" class="tokens-item" data-token-id="${escapeHtml(id)}">
-              <code class="tokens-item-code">{${escapeHtml(id)}}</code>
-              <span class="tokens-item-desc">${escapeHtml(desc || '')}</span>
-            </button>
-          `).join('')}
-        </div>
-      `).join('');
+
+      if (!categories.length) {
+        dd.innerHTML = `<div class="tokens-empty">
+          <i class="fa-solid fa-circle-info"></i>
+          <div>
+            <strong>${escapeHtml(H.empty)}</strong>
+            <span>${escapeHtml(H.emptyHint)}</span>
+          </div>
+        </div>`;
+      } else {
+        dd.innerHTML = categories.map((cat) => `
+          <div class="tokens-category">
+            <div class="tokens-category-label">${escapeHtml(cat.label)}</div>
+            ${cat.items.map(([id, desc]) => `
+              <button type="button" class="tokens-item" data-token-id="${escapeHtml(id)}">
+                <code class="tokens-item-code">{${escapeHtml(id)}}</code>
+                <span class="tokens-item-desc">${escapeHtml(desc || '')}</span>
+              </button>
+            `).join('')}
+          </div>
+        `).join('');
+
+        /* Подсказка сверху — почему список короткий */
+        const hint = fieldContext === 'title' ? H.titleOnlyHint
+          : fieldContext === 'url' ? H.urlOnlyHint
+          : fieldContext === 'label' ? H.labelHint
+          : fieldContext === 'footer' ? H.footerHint
+          : (isV2 && (fieldContext === 'rich')) ? H.v2Hint
+          : '';
+        if (hint) {
+          dd.insertAdjacentHTML('afterbegin',
+            `<div class="tokens-hint"><i class="fa-solid fa-info-circle"></i> ${escapeHtml(hint)}</div>`);
+        }
+      }
 
       document.body.appendChild(dd);
       positionPopup(dd, anchor, 280);

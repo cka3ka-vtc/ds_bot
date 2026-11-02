@@ -3,6 +3,7 @@ import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../../core/compon
 import { mergeBirthdaysConfig } from '../../../shared/birthdays-config.js';
 import { hasMessageContent } from '../../../shared/message-presets.js';
 import { retryDiscord } from '../../core/retry.js';
+import { mentionUser, buildAllowedMentions } from '../../core/mentions.js';
 import {
   todayDdMm,
   isLeapYear,
@@ -35,7 +36,7 @@ export function mountSchedulerMethods(BirthdaysModule) {
               await this._cleanupOldAnnouncements(inst, guild, nowTs);
             }
 
-            if (config.announceChannelId && hhmm === config.sendTime) {
+            if (config.announceChannelId && hhmm >= config.sendTime) {
               await this._announceBirthdays(inst, guild, config, today, isLeap);
             }
           } catch (err) {
@@ -127,7 +128,6 @@ export function mountSchedulerMethods(BirthdaysModule) {
           || await guild.members.fetch(row.user_id).catch(() => null);
         if (!member) continue;
 
-        // 1) Исключённые роли — побеждают required.
         if (excludedRoles.size > 0 && member.roles.cache.some((r) => excludedRoles.has(r.id))) {
           this.logger.debug(
             { userId: row.user_id, guildId: guild.id },
@@ -136,7 +136,6 @@ export function mountSchedulerMethods(BirthdaysModule) {
           continue;
         }
 
-        // 2) Разрешённые роли — если список непустой, нужна хотя бы одна.
         if (requiredRoles.size > 0 && !member.roles.cache.some((r) => requiredRoles.has(r.id))) {
           this.logger.debug(
             { userId: row.user_id, guildId: guild.id },
@@ -161,8 +160,8 @@ export function mountSchedulerMethods(BirthdaysModule) {
         if (hasMessageContent(cfgMsg)) {
           const age = ageOnNextBirthday(row.birthday_year);
           const tokens = {
-            user: `<@${member.id}>`,
-            mention: `<@${member.id}>`,
+            user: mentionUser(member.id),
+            mention: mentionUser(member.id),
             username: member.user.username,
             displayName: member.displayName || member.user.globalName || member.user.username,
             avatarUrl: member.user.displayAvatarURL?.({ size: 128 }) || '',
@@ -183,7 +182,8 @@ export function mountSchedulerMethods(BirthdaysModule) {
                 () => channel.send({
                   flags: FLAG_COMPONENTS_V2,
                   components,
-                  allowedMentions: { parse: ['users'] },
+                  // Пинг именинника — часть UX поздравления.
+                  allowedMentions: buildAllowedMentions(components, { ping: true }),
                 }),
                 {
                   maxAttempts: 3,

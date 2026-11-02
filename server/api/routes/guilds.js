@@ -3,25 +3,16 @@ import { Router } from 'express';
 import { requireAuth, requireBotAccess } from '../auth-middleware.js';
 import { getNonBotMemberCount } from '../../core/guildCounts.js';
 import { runWithConcurrency } from '../../core/concurrency.js';
+import { checkMemberAdmin } from '../../core/guild-access.js';
 
 /**
- * Локальный кэш approximate_presence_count.
- * Discord обновляет approximate_presence_count на своём backend'е редко
- * (~раз в 10 минут), поэтому чаще, чем раз в 5 минут, дёргать REST смысла нет —
- * только зря расходуем rate-limit бота.
- *
- * Ключ — guildId, значение — { value: number|null, ts: number }.
+ * Кэш approximate_presence_count.
+ * TTL 5 минут — Discord обновляет approximate_presence_count на своём backend
+ * редко (~раз в 10 минут); дёргать REST чаще смысла нет.
  */
 const presenceCache = new Map();
 const PRESENCE_CACHE_TTL = 5 * 60_000;
 
-/**
- * Возвращает approximate_presence_count для гильдии.
- *  - если в кэше свежо → возвращаем;
- *  - если протухло → REST fetch withCounts:true (force:true),
- *    который заодно патчит guild-объект в discord.js кэше;
- *  - если fetch упал → fallback на существующее значение.
- */
 async function ensurePresenceCount(inst, guild, logger) {
   if (!guild) return null;
 
@@ -58,12 +49,6 @@ async function ensurePresenceCount(inst, guild, logger) {
   }
 }
 
-/**
- * non-bot online = approximate_presence_count − (memberCount − nonBotMemberCount).
- * Точность: Discord считает approximate_presence_count как число ВСЕХ
- * участников с presence (вкл. ботов). Вычитаем всех ботов — это даёт
- * нижнюю границу «онлайн без ботов» (боты обычно онлайн, погрешность мала).
- */
 function computeApproxOnline(guild, nonBotMemberCount, presenceCount) {
   if (presenceCount == null) return null;
   const total = guild.memberCount ?? 0;
@@ -71,53 +56,15 @@ function computeApproxOnline(guild, nonBotMemberCount, presenceCount) {
   return Math.max(0, presenceCount - bots);
 }
 
-/**
- * Кэш проверки «member is admin/manage_guild» на гильдии.
- * TTL 2 мин — компромисс: слишком короткий бьёт по Discord API,
- * слишком длинный — задерживает отзыв прав.
- */
-const adminCache = new Map();
-const ADMIN_TTL = 2 * 60_000;
-
-async function checkMemberAdmin(inst, guildId, userId) {
-  const key = `${inst.id}:${guildId}:${userId}`;
-  const now = Date.now();
-  const c = adminCache.get(key);
-  if (c && now - c.ts < ADMIN_TTL) return c.value;
-
-  if (!inst?.client?.isReady?.()) return false;
-  try {
-    const guild = inst.client.guilds.cache.get(guildId);
-    if (!guild) { adminCache.set(key, { value: false, ts: now }); return false; }
-    let member = guild.members.cache.get(userId);
-    if (!member) {
-      member = await guild.members.fetch({ user: userId, force: false }).catch(() => null);
-    }
-    const value = !!(member?.permissions?.has?.('Administrator')
-                  || member?.permissions?.has?.('ManageGuild'));
-    adminCache.set(key, { value, ts: now });
-    return value;
-  } catch {
-    adminCache.set(key, { value: false, ts: now });
-    return false;
-  }
-}
-
-/**
- * Concurrency для REST-запросов к Discord. При 50+ гильдиях параллельные
- * fetch'и без лимита дают 429 (Discord rate-limit ~50 req/sec, но с
- * учётом presence-фетчей и members-фетчей внутри одного гильда —
- * реальный burst выше). 5 одновременных — безопасно.
- */
 const GUILDS_FETCH_CONCURRENCY = 5;
 
 export function guildsRouter() {
   const router = Router();
   router.use(requireAuth);
 
-  /* ═══════════════════════════════════════════════════════════════
+  /* ══════════════════════════════════════════════════════════════
      GET /api/guilds
-     ═══════════════════════════════════════════════════════════════ */
+     ══════════════════════════════════════════════════════════════ */
   router.get('/', requireBotAccess, async (req, res) => {
     const db = req.app.locals.db;
     const logger = req.app.locals.logger;
@@ -257,9 +204,9 @@ export function guildsRouter() {
     res.json(enriched);
   });
 
-  /* ═══════════════════════════════════════════════════════════════
+  /* ══════════════════════════════════════════════════════════════
      DELETE /api/guilds/:guildId/data
-     ═══════════════════════════════════════════════════════════════ */
+     ══════════════════════════════════════════════════════════════ */
   router.delete('/:guildId/data', async (req, res) => {
     const db = req.app.locals.db;
     const logger = req.app.locals.logger;
@@ -299,9 +246,9 @@ export function guildsRouter() {
     res.json({ ok: true, message: 'Данные гильдии удалены' });
   });
 
-  /* ═══════════════════════════════════════════════════════════════
+  /* ══════════════════════════════════════════════════════════════
      GET /api/guilds/roles
-     ═══════════════════════════════════════════════════════════════ */
+     ══════════════════════════════════════════════════════════════ */
   router.get('/roles', requireBotAccess, async (req, res) => {
     const inst = req.app.locals.botManager.get(req.bot.id);
     if (!inst?.client) return res.status(503).json({ error: 'bot_offline' });
@@ -334,25 +281,9 @@ export function guildsRouter() {
     }
   });
 
-  /* ═══════════════════════════════════════════════════════════════
+  /* ══════════════════════════════════════════════════════════════
      GET /api/guilds/channels
-     ═══════════════════════════════════════════════════════════════
-     По умолчанию — только текстовые (type 0).
-     `?includeVoice=1` — также голосовые (type 2) и stage (type 13),
-     у которых есть встроенный текстовый чат.
-
-     Используется в:
-       - picker каналов (автомодерация, приветствия, уровни);
-       - whitelist/blacklist каналов;
-       - канал логов.
-
-     Discord channel types:
-       0  — Text
-       2  — Voice (со встроенным текстовым чатом)
-       5  — Announcement (news)
-       13 — Stage (со встроенным текстовым чатом)
-       15 — Forum
-     */
+     ══════════════════════════════════════════════════════════════ */
   router.get('/channels', requireBotAccess, async (req, res) => {
     const inst = req.app.locals.botManager.get(req.bot.id);
     if (!inst?.client) return res.status(503).json({ error: 'bot_offline' });
@@ -365,8 +296,8 @@ export function guildsRouter() {
         || req.query.includeVoice === 'true';
 
       const allowedTypes = includeVoice
-        ? new Set([0, 2, 5, 13, 15])   // text, voice, news, stage, forum
-        : new Set([0, 5, 15]);          // все текстовые типы
+        ? new Set([0, 2, 5, 13, 15])
+        : new Set([0, 5, 15]);
 
       const rulesId = guild.rulesChannelId || null;
 
@@ -389,12 +320,9 @@ export function guildsRouter() {
     }
   });
 
-  /* ═══════════════════════════════════════════════════════════════
+  /* ══════════════════════════════════════════════════════════════
      GET /api/guilds/channels/:channelId/permissions
-     ═══════════════════════════════════════════════════════════════
-     Проверка прав бота в конкретном канале.
-     Работает и для голосовых каналов: send работают через текстовый чат.
-     */
+     ══════════════════════════════════════════════════════════════ */
   router.get('/channels/:channelId/permissions', requireBotAccess, async (req, res) => {
     const inst = req.app.locals.botManager.get(req.bot.id);
     if (!inst?.client) return res.status(503).json({ error: 'bot_offline' });
