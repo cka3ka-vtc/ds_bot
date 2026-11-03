@@ -216,14 +216,34 @@ function eventToLogEntry(e) {
     }
 
     if (module === 'levels') {
-      // Приоритет — meta.level (пишется новыми логами).
-      // Fallback — точный regex по «уров»/«level», а НЕ первое число из message.
+      // ФИКС: показываем источник XP (message / voice / command / daily)
+      // и корректный текст. Раньше был возможен fallback «Достигает нового уровня»
+      // без числа — из-за того, что meta.level не всегда был доступен.
       const metaLvl = meta.level != null ? String(meta.level) : null;
       const lvl = metaLvl || extractLevelFromText(e.message);
+      const src = meta.source || null;
 
-      const text = lvl
-        ? `Достигает ${escapeHtml(String(lvl))} уровня`
-        : 'Достигает нового уровня';
+      // Человекочитаемые ярлыки для источников XP
+      const sourceLabel = {
+        message: 'за сообщение',
+        voice:   'за голосовую активность',
+        command: 'за команду',
+        daily:   'за /daily',
+      }[src] || '';
+
+      // Ключевая часть: формируем текст из реальных данных.
+      // Если lvl есть — «Достигает N уровня за <source>».
+      // Если lvl нет (старая запись) — показываем реальный текст из лога.
+      let text;
+      if (lvl) {
+        text = sourceLabel
+          ? `Достигает ${escapeHtml(lvl)} уровня ${escapeHtml(sourceLabel)}`
+          : `Достигает ${escapeHtml(lvl)} уровня`;
+      } else {
+        // fallback для старых записей: показываем что реально в логе
+        const raw = String(e.message || '').trim();
+        text = raw ? escapeHtml(raw) : 'Повышение уровня';
+      }
 
       return {
         tone: 'level',
@@ -235,11 +255,38 @@ function eventToLogEntry(e) {
     }
 
     if (module === 'birthdays') {
+      // ФИКС: показываем РЕАЛЬНЫЙ текст лога, а не хардкод.
+      // Раньше любой лог с module='birthdays' рендерился как
+      // «Празднует сегодня день рождения» — даже cleanup-логи и
+      // force-снятие роли. Пользователь видел 3 «праздника» на дашборде,
+      // хотя реальное поздравление могло быть только одно (или ноль).
+      const rawMsg = String(e.message || '').trim();
+      let tone = 'birthday';
+      let label = 'День рождения';
+      let text = escapeHtml(rawMsg || 'Событие дня рождения');
+
+      if (/^Снято зависших/i.test(rawMsg)) {
+        // cleanup (теперь debug-уровень, но на случай старых записей — показываем корректно)
+        tone = 'info';
+        label = 'Очистка ролей';
+        text = escapeHtml(rawMsg);
+      } else if (/снята.*день не сегодня/i.test(rawMsg)) {
+        // force-removed role: важный warn
+        tone = 'warn';
+        label = 'Роль снята';
+        text = escapeHtml(rawMsg);
+      } else if (/^Поздравление/i.test(rawMsg)) {
+        // успешное поздравление
+        tone = 'birthday';
+        label = 'Поздравление';
+        text = escapeHtml(rawMsg);
+      }
+
       return {
-        tone: 'birthday',
-        label: 'День рождения',
+        tone,
+        label,
         userId, username, displayName, avatarUrl,
-        text: 'Празднует сегодня день рождения',
+        text,
         timestamp: e.created_at,
       };
     }

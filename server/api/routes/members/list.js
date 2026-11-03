@@ -13,7 +13,9 @@ export function createListRouter() {
     const { botId, guildId, page, limit, search, roleId, status } = req.validatedQuery;
     const db = req.app.locals.db;
     const inst = req.app.locals.botManager.get(botId);
-    if (!inst?.client) return res.status(404).json({ error: 'bot_offline' });
+    // ФИКС: 503 вместо 404 (bot_offline — временная недоступность,
+    // как в /api/stats и /api/guilds).
+    if (!inst?.client) return res.status(503).json({ error: 'bot_offline' });
 
     const guild = inst.client.guilds.cache.get(guildId);
     if (!guild) return res.status(404).json({ error: 'guild_not_found' });

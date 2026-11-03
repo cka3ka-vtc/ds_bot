@@ -1,11 +1,19 @@
 // public/assets/js/views/module-settings/moderation/setup/test.js
+//
 // Проверка правил: отправка текста в POST /api/moderation/test,
-// отрисовка результата в плашке.
+// отрисовка результата с учётом stateful-фильтров (spam, duplicates, raid),
+// которые нельзя прогнать на одном тексте — они попадают в `skipped`.
 
 import { UI } from '/shared/ui-strings.js';
 import { escapeHtml } from '../../../../core/utils.js';
 
 const S = UI.moderationSettings;
+
+const STATEFUL_LABELS = {
+  spam: 'Спам (stateful)',
+  duplicates: 'Дубликаты (stateful)',
+  raid: 'Рейд (на входе)',
+};
 
 export function setupTest(ctx) {
   const { root, api, botId, guildId } = ctx;
@@ -28,14 +36,30 @@ export function setupTest(ctx) {
     try {
       const res = await api.post('/api/moderation/test', { botId, guildId, text });
       const hits = res?.hits || [];
+      const skipped = res?.skipped || [];
+
       result.hidden = false;
       result.className = 'gr-perm-status ' + (hits.length ? 'warn' : 'ok');
+
+      // Секция пропущенных stateful-фильтров — добавляется всегда, если есть skipped
+      const skippedHTML = skipped.length
+        ? `
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11.5px;color:var(--muted);">
+            <i class="fa-solid fa-circle-info"></i>
+            Не проверяются на одном тексте: ${
+              skipped.map((k) => `<code>${escapeHtml(STATEFUL_LABELS[k] || k)}</code>`).join(', ')
+            }
+          </div>
+        `
+        : '';
+
       if (!hits.length) {
         result.innerHTML = `
           <i class="fa-solid fa-circle-check"></i>
           <div>
-            <strong>Ни один фильтр не сработал</strong>
+            <strong>Код ошибок фильтров не сработал</strong>
             <span>${S.testNoHit}</span>
+            ${skippedHTML}
           </div>`;
       } else {
         const list = hits.map((h) =>
@@ -45,6 +69,7 @@ export function setupTest(ctx) {
           <div>
             <strong>Сработали фильтры: ${hits.length}</strong>
             <span>${list}</span>
+            ${skippedHTML}
           </div>`;
       }
     } catch (err) {

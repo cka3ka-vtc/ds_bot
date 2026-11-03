@@ -1,7 +1,7 @@
 /* ============================================================
    Shared UI kit
    brand · buttons · forms · badges · cards · modal
-   toast · tooltip · chart-filters · contact-list · empty-state · tabs
+   toast · tooltip · contact-list · empty-state · tabs
    ============================================================ */
 
 /* Brand */
@@ -136,7 +136,7 @@ a.brand:hover { text-decoration: none; color: var(--text); }
 .btn-link:hover i { opacity: 1; }
 
 /* ============================================================
-   Form controls — единые стили для всех input/textarea/select
+   Form controls — единая стилизация для input/textarea/select
    ============================================================ */
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
@@ -145,7 +145,6 @@ a.brand:hover { text-decoration: none; color: var(--text); }
 .form-field label { font-size: 12.5px; font-weight: 600; color: var(--text-soft); }
 .form-field .hint { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
 
-/* ─── Базовое поле ─── */
 .input,
 input.input,
 input[type="text"],
@@ -176,7 +175,6 @@ input[type="number"]::placeholder {
   color: var(--placeholder);
 }
 
-/* ─── Textarea ─── */
 textarea,
 textarea.input,
 .form-field textarea {
@@ -202,7 +200,6 @@ textarea.input::placeholder {
   color: var(--placeholder);
 }
 
-/* ─── Select (любой select) ─── */
 select,
 select.input,
 select.custom-select,
@@ -242,7 +239,6 @@ select option {
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e96a8' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
 }
 
-/* ─── Hover ─── */
 .input:hover:not(:focus):not(:disabled),
 input.input:hover:not(:focus):not(:disabled),
 input[type="text"]:hover:not(:focus):not(:disabled),
@@ -253,7 +249,6 @@ select:hover:not(:focus):not(:disabled) {
   border-color: var(--border-strong);
 }
 
-/* ─── Focus ─── */
 .input:focus,
 input.input:focus,
 input[type="text"]:focus,
@@ -274,7 +269,6 @@ select.custom-select:focus,
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-/* ─── Disabled ─── */
 .input:disabled,
 input:disabled,
 textarea:disabled,
@@ -283,10 +277,8 @@ select:disabled {
   cursor: not-allowed;
 }
 
-/* ─── Wrapper без стрелки (позиционирование остаётся на месте) ─── */
 .select-wrap { position: relative; display: block; }
 
-/* ─── Формы: toggle-row ─── */
 .form-toggle-row {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; padding: 10px 0; border-top: 1px solid var(--border);
@@ -396,26 +388,7 @@ select:disabled {
   color: var(--muted);
 }
 
-/* Chart filters */
-.chart-filters {
-  display: flex; gap: 4px; padding: 4px;
-  background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: var(--r-md);
-}
-.chart-filter {
-  padding: 7px 14px; border-radius: var(--r-sm);
-  background: transparent; border: 1px solid transparent;
-  font-size: 12px; font-weight: 600; color: var(--text-soft);
-  cursor: pointer;
-  transition: background .2s, color .2s, border-color .2s, box-shadow .2s;
-  white-space: nowrap;
-}
-.chart-filter:hover { color: var(--text); background: var(--surface); }
-.chart-filter.active {
-  background: var(--accent); color: #fff; border-color: var(--accent);
-  box-shadow: 0 4px 12px rgba(79, 91, 213, .4);
-  font-weight: 700;
-}
+/* .chart-filters / .chart-filter определены в panel-dashboard.css (дашборд) */
 
 /* Empty state */
 .empty-state {
@@ -536,7 +509,7 @@ select:disabled {
   pointer-events: auto; max-width: 360px;
   animation: toastIn .3s ease backwards;
   position: relative;
-  padding-right: 38px; /* место под кнопку закрытия */
+  padding-right: 38px;
 }
 .toast i { width: 20px; text-align: center; font-size: 14px; flex-shrink: 0; }
 .toast.success i { color: var(--green); }
@@ -598,7 +571,7 @@ select:disabled {
 .global-tooltip.show { opacity: 1; }
 
 /* ============================================================
-   Log entries — единый компонент для дашборда и модерации
+   Log entries — единый компонент для логов и модерации
    ============================================================ */
 
 .log-list {
@@ -682,7 +655,6 @@ select:disabled {
 .log-badge--leave    { background: var(--red-soft);    color: var(--red); }
 .log-badge--info     { background: var(--surface-3);   color: var(--muted); }
 
-/* Пользователь: аватар + displayName + @username · ID: xxx */
 .log-user {
   display: inline-flex;
   align-items: center;
@@ -798,7 +770,7 @@ select:disabled {
   opacity: 1;
 }
 
-/* ─── Активные наказания — компактнее ─── */
+/* Секции активных наказаний */
 .active-list-section + .active-list-section {
   margin-top: 12px;
   padding-top: 12px;
@@ -836,7 +808,7 @@ select:disabled {
   text-align: center;
 }
 
-/* ─── Mobile ─── */
+/* Mobile */
 @media (max-width: 640px) {
   .log-entry {
     grid-template-columns: 32px 1fr;

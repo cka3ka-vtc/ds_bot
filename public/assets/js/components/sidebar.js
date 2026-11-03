@@ -39,7 +39,7 @@ const NAV_ITEMS = [
   { key: 'moderation', icon: 'fa-shield-halved', label: UI.nav.moderation },
   { key: 'commands',   icon: 'fa-terminal',      label: UI.nav.commands },
   { key: 'members',    icon: 'fa-user-group',    label: UI.nav.members },
-  { key: 'settings',   icon: 'fa-gear',          label: UI.nav.settings },
+  // ФИКС: убран пункт `settings` — раздел был заглушкой и удалён в батче 1.
   { section: UI.nav.sectionAccount },
   { key: 'bots',       icon: 'fa-robot',         label: UI.nav.bots },
 ];

@@ -14,7 +14,6 @@ import bots from './views/bots.js';
 import moderation from './views/moderation/index.js';
 import commands from './views/commands/index.js';
 import members from './views/members/index.js';
-import settings from './views/settings/index.js';
 import servers from './views/servers.js';
 
 async function boot() {
@@ -59,7 +58,17 @@ async function boot() {
 
   const router = new Router({
     container: document.getElementById('viewRoot'),
-    views: { overview, modules, bots, moderation, commands, members, settings, servers },
+    views: {
+      overview,
+      modules,
+      bots,
+      moderation,
+      commands,
+      members,
+      servers,
+      // ФИКС: удалён пункт `settings` — view и его файл удалены в батче 1.
+      // Если пользователь перейдёт по старому #settings → сработает defaultView.
+    },
     defaultView: 'overview',
   });
   window.__router = router;

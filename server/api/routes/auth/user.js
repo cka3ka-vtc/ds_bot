@@ -6,12 +6,6 @@ import { config } from '../../../config.js';
 import { authLimiter } from '../../middleware/rate-limit.js';
 import { clearOauthCookies, isAdminGuild } from './_shared.js';
 
-/**
- * OAuth пользователя через Discord:
- *   GET /auth/discord          — редирект на Discord OAuth (scope: identify guilds)
- *   GET /auth/discord/callback — обмен code → token, сохранение user + admin-guilds
- *                                 в БД, установка JWT-cookie, редирект в /panel.html
- */
 export function createUserOAuthRouter() {
   const router = Router();
 
@@ -24,13 +18,14 @@ export function createUserOAuthRouter() {
       secure: config.NODE_ENV === 'production',
     });
 
+    // ФИКС: убран prompt:'consent' — Discord показывает экран согласия
+    // только при первом входе, а не при каждом F5.
     const params = new URLSearchParams({
       client_id: config.DISCORD_CLIENT_ID,
       redirect_uri: config.DISCORD_REDIRECT_URI,
       response_type: 'code',
       scope: 'identify guilds',
       state,
-      prompt: 'consent',
     });
     res.redirect(`https://discord.com/oauth2/authorize?${params}`);
   });

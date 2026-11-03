@@ -2,43 +2,12 @@
 import { Router } from 'express';
 import { requireAuth } from '../auth-middleware.js';
 import { config } from '../../config.js';
-
-async function checkMemberAdmin(inst, guildId, userId) {
-  if (!inst?.client?.isReady?.()) return { value: false, member: null };
-  try {
-    const guild = inst.client.guilds.cache.get(guildId);
-    if (!guild) return { value: false, member: null };
-
-    let member = guild.members.cache.get(userId);
-    if (!member) {
-      member = await guild.members.fetch({ user: userId, force: false }).catch(() => null);
-    }
-    if (!member) return { value: false, member: null };
-
-    return {
-      value: !!(member.permissions?.has?.('Administrator')
-             || member.permissions?.has?.('ManageGuild')),
-      member: {
-        hasAdministrator: member.permissions?.has?.('Administrator') || false,
-        hasManageGuild: member.permissions?.has?.('ManageGuild') || false,
-        hasManageRoles: member.permissions?.has?.('ManageRoles') || false,
-        hasManageChannels: member.permissions?.has?.('ManageChannels') || false,
-        permissionsBitfield: member.permissions?.bitfield?.toString?.() || null,
-        roles: member.roles?.cache ? [...member.roles.cache.values()]
-          .filter((r) => r.name !== '@everyone')
-          .map((r) => ({ id: r.id, name: r.name, permissions: r.permissions?.bitfield?.toString?.() || '0' }))
-          : [],
-      },
-    };
-  } catch (err) {
-    return { value: false, member: { error: err.message } };
-  }
-}
+import { checkMemberAdminVerbose } from '../../core/guild-access.js';
 
 export function guildsDebugRouter() {
   const router = Router();
 
-  // В production эндпоинт недоступен
+  // В production отключён
   if (config.NODE_ENV !== 'development') {
     router.use((req, res) => res.status(404).json({ error: 'not_found' }));
     return router;
@@ -57,7 +26,6 @@ export function guildsDebugRouter() {
       const userId = String(req.user.id);
       const user = db.getUser(userId);
 
-      const botRunning = !!inst;
       const botReady = !!inst?.client?.isReady?.();
       const cacheSizeBefore = inst?.client?.guilds?.cache?.size ?? 0;
 
@@ -76,13 +44,12 @@ export function guildsDebugRouter() {
           id: g.id, name: g.name, ownerId: g.ownerId,
           memberCount: g.memberCount,
           approximatePresenceCount: g.approximatePresenceCount ?? null,
-          presencesCacheSize: g.presences?.cache?.size ?? null,
           createdTimestamp: g.createdTimestamp,
         }));
       }
 
       const forceFetchReport = [];
-      if (inst?.client?.isReady?.()) {
+      if (botReady) {
         await Promise.all([...inst.client.guilds.cache.values()].map(async (g) => {
           try {
             const f = await inst.client.guilds.fetch({
@@ -92,7 +59,6 @@ export function guildsDebugRouter() {
               id: g.id, name: f.name,
               memberCount: f.memberCount,
               approximatePresenceCount: f.approximatePresenceCount ?? null,
-              presencesCacheSize: f.presences?.cache?.size ?? null,
               ownerId: f.ownerId,
             });
           } catch (err) {
@@ -116,6 +82,7 @@ export function guildsDebugRouter() {
         ...cacheList.map((g) => g.id),
         ...dbGuilds.map((g) => g.id),
       ]);
+
       const accessReport = [];
       await Promise.all([...allGuildIds].map(async (gid) => {
         const inCache = cacheList.find((g) => g.id === gid) || null;
@@ -126,8 +93,10 @@ export function guildsDebugRouter() {
 
         let byPermissions = false;
         let memberInfo = null;
-        if (!bySnapshot && !byOwner && inst?.client?.isReady?.()) {
-          const r = await checkMemberAdmin(inst, gid, userId);
+        if (!bySnapshot && !byOwner && botReady) {
+          // ФИКС: переиспользуем core/guild-access.checkMemberAdminVerbose
+          // вместо локальной копии.
+          const r = await checkMemberAdminVerbose(inst, gid, userId);
           byPermissions = r.value;
           memberInfo = r.member;
         }
@@ -147,7 +116,7 @@ export function guildsDebugRouter() {
       res.json({
         user: { id: userId, username: user?.username || null },
         bot: {
-          id: botId, running: botRunning, ready: botReady,
+          id: botId, ready: botReady,
           cacheSizeBefore, cacheSizeAfter, fetchOk, fetchError,
           cache: cacheList,
           forceFetchWithCounts: forceFetchReport,

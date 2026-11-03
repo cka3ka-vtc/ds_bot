@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { runGuildMigrations } from './guild-migrations.js';
+import { runWithConcurrency } from '../core/concurrency.js';
 import { createModulesRepo } from './repositories/modules.js';
 import { createMembersRepo } from './repositories/members.js';
 import { createModerationRepo } from './repositories/moderation.js';
@@ -13,6 +14,10 @@ import { createStickyRepo } from './repositories/sticky.js';
 import { createAutodeleteRepo } from './repositories/autodelete.js';
 import { createScheduledRepo } from './repositories/scheduled.js';
 import { createMessageTemplatesRepo } from './repositories/message-templates.js';
+import { createRoleButtonsRepo } from './repositories/role-buttons.js';
+
+const MAX_OPEN_CONNECTIONS = 200;
+const IDLE_EVICT_MS = 30 * 60_000;
 
 function openDbWithPragmas(dbPath) {
   const raw = new Database(dbPath);
@@ -37,22 +42,10 @@ export class GuildDbManager {
     catch (err) { this.logger?.warn({ err }, 'guild-db: initial migration failed'); }
   }
 
-  _key(botId, guildId) {
-    return `${botId}:${guildId}`;
-  }
-
-  _folder(guildId) {
-    return path.join(this.baseDir, digitsOnly(guildId));
-  }
-
-  _file(botId) {
-    return `${digitsOnly(botId)}.sqlite`;
-  }
-
-  _pathExisting(botId, guildId) {
-    return path.join(this._folder(guildId), this._file(botId));
-  }
-
+  _key(botId, guildId) { return `${botId}:${guildId}`; }
+  _folder(guildId) { return path.join(this.baseDir, digitsOnly(guildId)); }
+  _file(botId) { return `${digitsOnly(botId)}.sqlite`; }
+  _pathExisting(botId, guildId) { return path.join(this._folder(guildId), this._file(botId)); }
   _path(botId, guildId) {
     const dir = this._folder(guildId);
     fs.mkdirSync(dir, { recursive: true });
@@ -68,13 +61,10 @@ export class GuildDbManager {
 
     let moved = 0;
     for (const entry of entries) {
-      if (!entry.isFile()) continue;
-      if (!entry.name.endsWith('.sqlite')) continue;
-
+      if (!entry.isFile() || !entry.name.endsWith('.sqlite')) continue;
       const base = entry.name.replace(/\.sqlite$/, '');
       const parts = base.split('_');
       if (parts.length !== 2) continue;
-
       const [botId, guildId] = parts;
       if (!/^\d+$/.test(botId) || !/^\d+$/.test(guildId)) continue;
 
@@ -101,66 +91,35 @@ export class GuildDbManager {
     return moved;
   }
 
-  /**
-   * Defensive-миграция: гарантирует наличие критичных колонок и индексов,
-   * даже если запись о версии в schema_migrations есть, а изменений нет.
-   *
-   * Покрывает случаи:
-   *   - файл миграции не обновился, но schema_migrations свежая (застряло);
-   *   - прерванная транзакция, оставившая запись без изменений;
-   *   - ручное восстановление/копирование БД.
-   */
   _ensureSchema(raw, guildId) {
     try {
       const tables = new Set(
         raw.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name),
       );
 
-      /* mod_actions: removed_at / removed_by */
       if (tables.has('mod_actions')) {
-        const cols = new Set(
-          raw.prepare('PRAGMA table_info(mod_actions)').all().map((r) => r.name),
-        );
-
+        const cols = new Set(raw.prepare('PRAGMA table_info(mod_actions)').all().map((r) => r.name));
         let healed = false;
-        if (!cols.has('removed_at')) {
-          raw.exec('ALTER TABLE mod_actions ADD COLUMN removed_at INTEGER');
-          healed = true;
-        }
-        if (!cols.has('removed_by')) {
-          raw.exec('ALTER TABLE mod_actions ADD COLUMN removed_by TEXT');
-          healed = true;
-        }
+        if (!cols.has('removed_at')) { raw.exec('ALTER TABLE mod_actions ADD COLUMN removed_at INTEGER'); healed = true; }
+        if (!cols.has('removed_by')) { raw.exec('ALTER TABLE mod_actions ADD COLUMN removed_by TEXT'); healed = true; }
 
         raw.exec(`
-          CREATE INDEX IF NOT EXISTS idx_mod_actions_status
-            ON mod_actions(removed_at, expires_at, created_at DESC);
-          CREATE INDEX IF NOT EXISTS idx_mod_actions_kind
-            ON mod_actions(kind, created_at DESC);
-          CREATE INDEX IF NOT EXISTS idx_mod_actions_moderator
-            ON mod_actions(moderator_id, created_at DESC);
-          CREATE INDEX IF NOT EXISTS idx_mod_actions_user
-            ON mod_actions(user_id, created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_mod_actions_status ON mod_actions(removed_at, expires_at, created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_mod_actions_kind ON mod_actions(kind, created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_mod_actions_moderator ON mod_actions(moderator_id, created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_mod_actions_user ON mod_actions(user_id, created_at DESC);
         `);
 
         if (healed) {
-          this.logger?.warn(
-            { guildId },
-            'guild-db: self-heal applied — mod_actions was missing removed_at/removed_by',
-          );
+          this.logger?.warn({ guildId }, 'guild-db: self-heal applied — mod_actions was missing removed_at/removed_by');
         }
       }
 
-      /* logs: user_id (v8 — на случай застрявшей миграции) */
       if (tables.has('logs')) {
-        const cols = new Set(
-          raw.prepare('PRAGMA table_info(logs)').all().map((r) => r.name),
-        );
+        const cols = new Set(raw.prepare('PRAGMA table_info(logs)').all().map((r) => r.name));
         if (!cols.has('user_id')) {
           raw.exec('ALTER TABLE logs ADD COLUMN user_id TEXT');
-          raw.exec(
-            'CREATE INDEX IF NOT EXISTS idx_logs_user ON logs(user_id, created_at DESC)',
-          );
+          raw.exec('CREATE INDEX IF NOT EXISTS idx_logs_user ON logs(user_id, created_at DESC)');
           this.logger?.warn({ guildId }, 'guild-db: self-heal added logs.user_id');
         }
       }
@@ -172,14 +131,26 @@ export class GuildDbManager {
   get(botId, guildId) {
     const k = this._key(botId, guildId);
     let entry = this.connections.get(k);
-    if (entry) return entry.repos;
+    const now = Date.now();
+
+    if (entry) {
+      this.connections.delete(k);
+      entry.last_used = now;
+      this.connections.set(k, entry);
+      return entry.repos;
+    }
+
+    if (this.connections.size >= MAX_OPEN_CONNECTIONS) {
+      const oldestKey = this.connections.keys().next().value;
+      const oldest = this.connections.get(oldestKey);
+      try { oldest?.raw?.close(); } catch {}
+      this.connections.delete(oldestKey);
+      this.logger?.info({ evicted: oldestKey, size: this.connections.size }, 'guild-db: LRU evict');
+    }
 
     const dbPath = this._path(botId, guildId);
     const raw = openDbWithPragmas(dbPath);
     runGuildMigrations(raw, this.logger, guildId);
-
-    // Self-heal: даже если runGuildMigrations пропустил v9 (застрявшая запись,
-    // устаревший файл миграции), колонки будут добавлены здесь.
     this._ensureSchema(raw, guildId);
 
     const repos = {
@@ -194,10 +165,27 @@ export class GuildDbManager {
       ...createAutodeleteRepo(raw),
       ...createScheduledRepo(raw),
       ...createMessageTemplatesRepo(raw),
+      ...createRoleButtonsRepo(raw),
     };
-    entry = { raw, repos };
+    entry = { raw, repos, last_used: now };
     this.connections.set(k, entry);
     return repos;
+  }
+
+  sweepIdle() {
+    const cutoff = Date.now() - IDLE_EVICT_MS;
+    let closed = 0;
+    for (const [k, entry] of this.connections) {
+      if (entry.last_used < cutoff) {
+        try { entry.raw.close(); } catch {}
+        this.connections.delete(k);
+        closed++;
+      }
+    }
+    if (closed > 0) {
+      this.logger?.debug({ closed, size: this.connections.size }, 'guild-db: swept idle connections');
+    }
+    return closed;
   }
 
   delete(botId, guildId) {
@@ -217,9 +205,7 @@ export class GuildDbManager {
       }
       try {
         const dir = this._folder(guildId);
-        if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) {
-          fs.rmdirSync(dir);
-        }
+        if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
       } catch {}
       return true;
     } catch (err) {
@@ -244,41 +230,38 @@ export class GuildDbManager {
 
   async applyAllMigrations() {
     if (!fs.existsSync(this.baseDir)) return 0;
-
     this._migrateOldLayout();
 
     const folders = fs.readdirSync(this.baseDir, { withFileTypes: true })
       .filter((d) => d.isDirectory())
       .map((d) => d.name);
 
-    let applied = 0;
-    let healed = 0;
-
+    const tasks = [];
     for (const guildId of folders) {
       const dir = path.join(this.baseDir, guildId);
       let files;
       try { files = fs.readdirSync(dir).filter((f) => f.endsWith('.sqlite')); }
       catch { continue; }
-
       for (const f of files) {
-        try {
-          const fullPath = path.join(dir, f);
-          const raw = openDbWithPragmas(fullPath);
-          runGuildMigrations(raw, this.logger, guildId);
-          this._ensureSchema(raw, guildId);  // ← self-heal при старте
-          raw.close();
-          applied++;
-        } catch (err) {
-          this.logger?.warn({ err, file: f, guildId }, 'guild-db: migration failed');
-        }
+        tasks.push({ fullPath: path.join(dir, f), guildId, file: f });
       }
     }
 
-    this.logger?.info(
-      { count: applied, healed, folders: folders.length },
-      'guild-db: migrations applied on startup',
-    );
-    return applied;
+    await runWithConcurrency(tasks, 5, async (t) => {
+      try {
+        const raw = openDbWithPragmas(t.fullPath);
+        runGuildMigrations(raw, this.logger, t.guildId);
+        this._ensureSchema(raw, t.guildId);
+        raw.close();
+        return true;
+      } catch (err) {
+        this.logger?.warn({ err, file: t.file, guildId: t.guildId }, 'guild-db: migration failed');
+        return false;
+      }
+    });
+
+    this.logger?.info({ count: tasks.length, folders: folders.length }, 'guild-db: migrations applied on startup');
+    return tasks.length;
   }
 
   purgeAll(table, cutoff) {

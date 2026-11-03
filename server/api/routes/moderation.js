@@ -7,8 +7,10 @@ import {
 } from '../../validators/schemas.js';
 import { modActionToDto } from '../dto/index.js';
 import { configCache } from '../../core/config-cache.js';
-import { mergeModerationConfig, FILTER_KEYS } from '../../../shared/moderation-config.js';
+import { mergeModerationConfig } from '../../../shared/moderation-config.js';
 import { runModerationFilters } from '../../modules/moderation/test.js';
+import { testMessageLimiter } from '../middleware/rate-limit.js';
+import { audit } from '../_audit.js';
 
 const SINCE_MAP = {
   '24h': 24 * 60 * 60,
@@ -16,21 +18,18 @@ const SINCE_MAP = {
   '30d': 30 * 24 * 60 * 60,
 };
 
-function audit(req, action, target, meta) {
-  req.app.locals.db.addAudit({
-    userId: req.user.id,
-    botId: req.body?.botId || req.query.botId,
-    guildId: req.body?.guildId || req.query.guildId,
-    action, target, meta,
-    ip: req.ip,
-  });
+async function clearModerationRegexCache() {
+  try {
+    const mod = await import('../../modules/moderation/filters.js');
+    mod?.clearCompiledCache?.();
+  } catch {}
 }
 
 export function moderationRouter() {
   const router = Router();
   router.use(requireAuth);
 
-  /* ═════════════════ Журнал / список ═════════════════ */
+  /* ─── Список / действия ─── */
 
   router.get('/actions',
     validateQuery(modActionsQuery),
@@ -70,7 +69,7 @@ export function moderationRouter() {
     },
   );
 
-  /* ═════════════════ Создание (ручное) ═════════════════ */
+  /* ─── Создание действия ─── */
 
   router.post('/actions',
     validateBody(modActionCreateBody),
@@ -84,14 +83,14 @@ export function moderationRouter() {
       const guild = inst.client.guilds.cache.get(guildId);
       if (!guild) return res.status(404).json({ error: 'guild_not_found' });
 
-      /* ── Discord action ── */
       try {
         if (kind === 'mute') {
           const member = guild.members.cache.get(userId)
             || await guild.members.fetch(userId).catch(() => null);
           if (!member) return res.status(404).json({ error: 'member_not_found' });
-          const ms = (durationMinutes || 60) * 60_000;
-          await member.timeout(ms, reason || 'Ручной мут');
+          // Ограничение Discord: 28 дней
+          const safeMin = Math.min(durationMinutes || 60, 40320);
+          await member.timeout(safeMin * 60_000, reason || 'Ручной мут');
         } else if (kind === 'ban') {
           await guild.members.ban(userId, {
             reason: reason || 'Ручной бан',
@@ -104,7 +103,6 @@ export function moderationRouter() {
         return res.status(500).json({ error: 'discord_action_failed', details: err.message });
       }
 
-      /* ── DB record ── */
       const expiresAt = (kind === 'mute' || kind === 'ban') && durationMinutes
         ? Math.floor(Date.now() / 1000) + durationMinutes * 60
         : null;
@@ -121,7 +119,7 @@ export function moderationRouter() {
     },
   );
 
-  /* ═════════════════ Снятие ═════════════════ */
+  /* ─── Снятие действия ─── */
 
   router.delete('/actions/:id',
     requireBotAccess,
@@ -134,7 +132,6 @@ export function moderationRouter() {
       if (row.removed_at) return res.status(400).json({ error: 'already_removed' });
       if (row.kind === 'kick') return res.status(400).json({ error: 'cannot_revert_kick' });
 
-      /* ── Discord action ── */
       const inst = req.app.locals.botManager.get(botId);
       const guild = inst?.client?.guilds?.cache?.get(guildId);
       const reasonText = `Снято: ${req.user.username}`;
@@ -158,7 +155,6 @@ export function moderationRouter() {
         }
       }
 
-      /* ── DB soft delete ── */
       db.markModActionRemoved(botId, guildId, req.params.id, String(req.user.id));
 
       try {
@@ -185,7 +181,7 @@ export function moderationRouter() {
     },
   );
 
-  /* ═════════════════ Конфиг автомодерации (без изменений) ═════════════════ */
+  /* ─── Конфиг модерации ─── */
 
   router.get('/config', requireBotAccess, (req, res) => {
     const { botId, guildId } = req.query;
@@ -196,7 +192,7 @@ export function moderationRouter() {
     });
   });
 
-  router.put('/config', requireBotAccess, (req, res) => {
+  router.put('/config', requireBotAccess, async (req, res) => {
     const { botId, guildId, enabled, config } = req.body || {};
     if (!botId || !guildId) return res.status(400).json({ error: 'botId_guildId_required' });
 
@@ -208,6 +204,9 @@ export function moderationRouter() {
     configCache.invalidateModule(botId, guildId, 'moderation');
     configCache.invalidateEnabled(botId, guildId);
 
+    // ФИКС: сбрасываем regex-кэш compiled-state — правила изменились.
+    await clearModerationRegexCache();
+
     audit(req, 'moderation.config.update', null, {
       enabled,
       filtersCount: Object.values(normalized.filters).filter((f) => f.enabled).length,
@@ -216,7 +215,11 @@ export function moderationRouter() {
     res.json({ ok: true, enabled: !!enabled, config: normalized });
   });
 
+  /* ─── Тест ─── */
+  // ФИКС: добавлен testMessageLimiter (был пропущен — единственный test-роут
+  // без защиты от спама).
   router.post('/test',
+    testMessageLimiter,
     validateBody(moderationTestBody),
     requireBotAccess,
     async (req, res) => {
@@ -224,8 +227,9 @@ export function moderationRouter() {
       const stored = req.app.locals.db.getModuleConfig(botId, guildId, 'moderation');
       const cfg = mergeModerationConfig(stored.config);
       try {
-        const hits = await runModerationFilters(cfg, text);
-        res.json({ hits });
+        const result = await runModerationFilters(cfg, text);
+        // Совместимость: старый test.js возвращал array, новый — { hits, skipped }.
+        res.json(Array.isArray(result) ? { hits: result, skipped: [] } : result);
       } catch (err) {
         req.app.locals.logger.warn({ err }, 'moderation test failed');
         res.status(500).json({ error: 'test_failed' });

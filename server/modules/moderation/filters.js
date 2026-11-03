@@ -1,16 +1,13 @@
 // server/modules/moderation/filters.js
-// Чистые проверки. Profanity работает только в regex-режиме:
-//   - regexRules (маски из Filter.txt с per-rule whitelist)
-//   - customWords (свои слова-триггеры)
-//   - customExceptions (свои глобальные whitelist, работают через перекрытие)
 //
-// URL из содержимого вырезаются для фильтров мата/капса/залго/эмодзи —
-// ссылки не должны становиться ложными срабатываниями. Для links/invites
-// содержимое проверяется как есть.
+// Stateless-фильтры контента. Stateful (spam, duplicates) обрабатываются в
+// index.js — им нужна история сообщений/сессий.
+//
+// URL извлекаются из текста перед анализом (stripUrls) — чтобы капсло-детекторы
+// не срабатывали на домены/пути.
 
 const URL_REGEX = /https?:\/\/[^\s<>"']+/gi;
 
-/** Заменяет URL в тексте пробелами. Кириллица в path сохраняется корректно. */
 function stripUrls(text) {
   return String(text || '').replace(URL_REGEX, ' ');
 }
@@ -18,21 +15,19 @@ function stripUrls(text) {
 export async function checkFilter(key, fc, { content, message }) {
   const p = fc.params || {};
   switch (key) {
-    case 'spam':       return null;
-    case 'duplicates': return null;
+    // stateful (spam, duplicates) — в index.js
     case 'profanity':  return checkProfanity(p, stripUrls(content));
     case 'caps':       return checkCaps(p, stripUrls(content));
     case 'links':      return checkLinks(p, content);
     case 'invites':    return checkInvites(p, content);
     case 'mentions':   return checkMentions(p, message);
-    case 'raid':       return null;
     case 'zalgo':      return checkZalgo(p, stripUrls(content));
     case 'emoji':      return checkEmoji(p, stripUrls(content));
     default:           return null;
   }
 }
 
-/* ═════════════════ Profanity ═════════════════ */
+/* ─── Profanity ─── */
 
 const HAS_REGEX_CHARS = /[[\]()+*?|{}\\.^$]/;
 const HAS_CYRILLIC = /[\u0400-\u04FF]/;
@@ -44,7 +39,6 @@ function escapeRegex(s) {
 function wordToPattern(word) {
   const w = String(word || '').trim();
   if (!w) return null;
-
   if (HAS_REGEX_CHARS.test(w) && HAS_CYRILLIC.test(w)) {
     try { new RegExp(w, 'iu'); return w; } catch { return null; }
   }
@@ -52,14 +46,26 @@ function wordToPattern(word) {
   return `(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`;
 }
 
+// КРИТИЧЕСКИЙ ФИКС: LRU-Map вместо single-slot.
+// Раньше _cache жил в одном объекте-синглтоне — при переключении между
+// гильдиями с разными правилами кэш постоянно вытеснялся, и на КАЖДОЕ сообщение
+// шла ре-компиляция до 1000 регулярок. Теперь кэш на 64 набора + LRU-touch.
+const COMPILED_CACHE_MAX = 64;
+const compiledCache = new Map();
+
 function getCompiledState(p) {
   const cacheKey = JSON.stringify({
     r: p.regexRules || [],
     w: p.customWords || [],
     e: p.customExceptions || [],
   });
-  if (getCompiledState._cache?.key === cacheKey) {
-    return getCompiledState._cache.value;
+
+  const cached = compiledCache.get(cacheKey);
+  if (cached) {
+    // LRU-touch
+    compiledCache.delete(cacheKey);
+    compiledCache.set(cacheKey, cached);
+    return cached;
   }
 
   const rules = [];
@@ -72,7 +78,7 @@ function getCompiledState(p) {
     for (const w of (rule.whitelist || [])) {
       const raw = String(w || '').trim();
       if (!raw) continue;
-      try { whitelist.push(new RegExp(raw, 'iu')); } catch { /* skip */ }
+      try { whitelist.push(new RegExp(raw, 'iu')); } catch {}
     }
     rules.push({ trigger, whitelist });
     if (rules.length >= 1000) break;
@@ -83,7 +89,7 @@ function getCompiledState(p) {
     if (!pat) continue;
     try {
       rules.push({ trigger: new RegExp(pat, 'iu'), whitelist: [] });
-    } catch { /* skip */ }
+    } catch {}
     if (rules.length >= 1000) break;
   }
 
@@ -91,12 +97,25 @@ function getCompiledState(p) {
   for (const word of (p.customExceptions || [])) {
     const pat = wordToPattern(word);
     if (!pat) continue;
-    try { globalWhitelist.push(new RegExp(pat, 'iu')); } catch { /* skip */ }
+    try { globalWhitelist.push(new RegExp(pat, 'iu')); } catch {}
   }
 
   const value = { rules, globalWhitelist };
-  getCompiledState._cache = { key: cacheKey, value };
+
+  if (compiledCache.size >= COMPILED_CACHE_MAX) {
+    const firstKey = compiledCache.keys().next().value;
+    if (firstKey !== undefined) compiledCache.delete(firstKey);
+  }
+  compiledCache.set(cacheKey, value);
   return value;
+}
+
+/**
+ * Сброс кэша скомпилированных регулярок.
+ * Вызывается из PUT /api/moderation/config и PUT /api/modules/moderation/config.
+ */
+export function clearCompiledCache() {
+  compiledCache.clear();
 }
 
 function matchOverlaps(triggerMatch, text, whitelistRegexes) {
@@ -144,7 +163,7 @@ function checkProfanity(p, content) {
   return null;
 }
 
-/* ═════════════════ Остальные фильтры ═════════════════ */
+/* ─── Caps ─── */
 
 function checkCaps(p, content) {
   const letters = String(content || '').replace(/[^\p{L}]/gu, '');
@@ -154,6 +173,8 @@ function checkCaps(p, content) {
   if (ratio < p.percent) return null;
   return { reason: 'капс', details: `${ratio}% заглавных`, filter: 'caps' };
 }
+
+/* ─── Links / invites ─── */
 
 function checkLinks(p, content) {
   const urls = String(content || '').match(/https?:\/\/[^\s<>"']+/gi);
@@ -177,6 +198,8 @@ function checkInvites(p, content) {
   return { reason: 'инвайт', matched: m[1], details: `код: ${m[1]}`, filter: 'invites' };
 }
 
+/* ─── Mentions ─── */
+
 function checkMentions(p, message) {
   if (!message) return null;
   if (p.blockEveryone && (message.mentions.everyone || message.content.includes('@here'))) {
@@ -187,6 +210,8 @@ function checkMentions(p, message) {
   }
   return null;
 }
+
+/* ─── Zalgo / emoji ─── */
 
 function checkZalgo(p, content) {
   const s = String(content || '');

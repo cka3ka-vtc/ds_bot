@@ -1,22 +1,20 @@
 // public/assets/js/views/module-settings/levels/setup/messages.js
+//
+// Настройка «Сообщения»:
+//   - 4 таба: levelUp / rank / leaderboard / daily;
+//   - каждый таб → свой MessageEditor;
+//   - кнопка «Тест» → POST /api/modules/levels/test.
+
 import { MessageEditor, emptyMessageConfig } from '../../message-editor.js';
 
 const MSG_TABS = ['levelUp', 'rank', 'leaderboard', 'daily'];
 
-/**
- * Секция «Сообщения модуля»:
- *   - 4 таба: levelUp / rank / leaderboard / daily;
- *   - каждый таб — отдельный MessageEditor;
- *   - переключение сохраняет текущий редактор в cfg.messages[tabKey];
- *   - кнопка «Тест текущего таба» отправляет сообщение в announce-канал.
- */
 export function setupMessages(ctx) {
   const { page, cfg, roles, bot, botId, guildId, state, api, toast, UI, M } = ctx;
 
   const editorContainer = page.querySelector('[data-editor-container]');
   const tabHint = page.querySelector('[data-msg-tab-hint]');
 
-  /* ── Монтаж редактора для конкретного таба ── */
   const mountEditor = (tabKey) => {
     const prev = state.editors[tabKey];
     if (prev) { try { prev.destroy(); } catch {} }
@@ -38,7 +36,6 @@ export function setupMessages(ctx) {
     state.editors[tabKey] = editor;
   };
 
-  /* ── Переключение таба ── */
   const switchMsgTab = (tabKey) => {
     if (!MSG_TABS.includes(tabKey)) return;
     if (state.activeMsgTab === tabKey) return;
@@ -59,7 +56,6 @@ export function setupMessages(ctx) {
 
   mountEditor(state.activeMsgTab);
 
-  /* ── Тест текущего таба ── */
   page.querySelector('[data-test-message]').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     if (!cfg.announceChannelId) return toast(M.testNeedChannel, 'warn');
@@ -74,7 +70,9 @@ export function setupMessages(ctx) {
     btn.disabled = true;
     btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${UI.common.sending}`;
     try {
-      await api.post('/api/levels/test', {
+      // ФИКС: /api/modules/levels/test вместо /api/levels/test.
+      // Старый URL работал через deprecated-alias — убираем зависимость.
+      await api.post('/api/modules/levels/test', {
         botId,
         guildId,
         channelId: cfg.announceChannelId,

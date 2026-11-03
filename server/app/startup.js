@@ -1,8 +1,17 @@
 // server/app/startup.js
+//
+// Применяется один раз при старте bootstrap:
+//   1) если main-бота нет в БД — создать из .env
+//   2) синхронизировать список гильдий из Discord в main-БД
+//
+// КРИТИЧЕСКИЙ ФИКС: ensureBuiltinCommands удалён из syncGuildsOnStartup —
+// он затирал кастомные команды, а следом syncAllGuildCommands (в bootstrap)
+// всё равно выполнял полный sync через guild.commands.set(builtin+custom).
+// Порядок: syncGuildsOnStartup → registry.load → syncAllGuildCommands.
+
 import { config } from '../config.js';
 import { encrypt } from '../core/crypto.js';
 import { eventBus } from '../core/eventBus.js';
-import { ensureBuiltinCommands } from '../core/commandSync.js';
 import { runWithConcurrency } from '../core/concurrency.js';
 
 export async function ensureMainBot({ db, botManager, logger }) {
@@ -73,19 +82,13 @@ export async function syncGuildsOnStartup({ db, botManager, logger }) {
         db.upsertGuild({
           id: guild.id, bot_id: inst.id, name: guild.name, icon: guild.icon,
           owner_id: guild.ownerId, member_count: guild.memberCount,
-          discord_created_at: guild.createdTimestamp ? Math.floor(guild.createdTimestamp / 1000) : null,
+          discord_created_at: guild.createdTimestamp
+            ? Math.floor(guild.createdTimestamp / 1000)
+            : null,
           online_count: guild.approximatePresenceCount ?? null,
         });
       } catch (err) {
         logger.warn({ err, guildId: guild.id }, 'upsertGuild failed');
-      }
-    });
-
-    await runWithConcurrency(guildsList, 5, async (guild) => {
-      try {
-        await ensureBuiltinCommands(guild, logger, inst.client);
-      } catch (err) {
-        logger.warn({ err, guildId: guild.id, botId: inst.id }, 'builtin commands failed');
       }
     });
 

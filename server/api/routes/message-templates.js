@@ -10,16 +10,11 @@ import { mergeTemplateMessageConfig } from '../../../shared/message-templates-co
 import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../../core/componentsBuilder.js';
 import { buildAllowedMentions } from '../../core/mentions.js';
 import { retryDiscord } from '../../core/retry.js';
-
-function audit(req, action, target, meta) {
-  req.app.locals.db.addAudit({
-    userId: req.user.id,
-    botId: req.body?.botId || req.query.botId,
-    guildId: req.body?.guildId || req.query.guildId,
-    action, target, meta,
-    ip: req.ip,
-  });
-}
+import { audit } from '../_audit.js';
+import {
+  persistRoleButtonsFromConfig,
+  deleteRoleButtonsForSource,
+} from '../../core/role-buttons-persist.js';
 
 async function resolveChannel(inst, guildId, channelId) {
   if (!channelId) return null;
@@ -62,6 +57,13 @@ export function messageTemplatesRouter() {
       messageConfig: normalized,
       defaultChannelId: defaultChannelId || null,
     });
+
+    try {
+      persistRoleButtonsFromConfig(req.app.locals.db, botId, guildId, `message-templates.${id}`, normalized);
+    } catch (err) {
+      req.app.locals.logger.warn({ err, id }, 'template: persist role-buttons failed');
+    }
+
     audit(req, 'template.create', id, { name });
     res.json({ id });
   });
@@ -86,10 +88,17 @@ export function messageTemplatesRouter() {
       : undefined;
 
     db.updateMessageTemplate(botId, guildId, id, {
-      name,
-      messageConfig: nextCfg,
-      defaultChannelId,
+      name, messageConfig: nextCfg, defaultChannelId,
     });
+
+    if (nextCfg) {
+      try {
+        persistRoleButtonsFromConfig(db, botId, guildId, `message-templates.${id}`, nextCfg);
+      } catch (err) {
+        req.app.locals.logger.warn({ err, id }, 'template: persist role-buttons failed');
+      }
+    }
+
     audit(req, 'template.update', id, { name });
     res.json({ ok: true });
   });
@@ -105,6 +114,11 @@ export function messageTemplatesRouter() {
       messageConfig: prev.messageConfig,
       defaultChannelId: prev.defaultChannelId,
     });
+
+    try {
+      persistRoleButtonsFromConfig(db, botId, guildId, `message-templates.${id}`, prev.messageConfig);
+    } catch {}
+
     audit(req, 'template.duplicate', id, { source: prev.id });
     res.json({ id });
   });
@@ -143,18 +157,14 @@ export function messageTemplatesRouter() {
           allowedMentions: buildAllowedMentions(components, { ping: false }),
         }),
         {
-          maxAttempts: 3,
-          baseDelayMs: 800,
-          maxDelayMs: 8000,
+          maxAttempts: 3, baseDelayMs: 800, maxDelayMs: 8000,
           label: 'template.send',
           logger: req.app.locals.logger,
           context: { bot_id: botId, guild_id: guildId, template_id: id },
         },
       );
 
-      // Фиксируем время отправки
       try { db.touchMessageTemplateLastSent(botId, guildId, id); } catch {}
-
       audit(req, 'template.send', id, { channelId: targetChannelId, messageId: msg.id });
       res.json({ ok: true, messageId: msg.id, sentAt: Math.floor(Date.now() / 1000) });
     } catch (err) {
@@ -169,7 +179,9 @@ export function messageTemplatesRouter() {
     const prev = db.getMessageTemplate(botId, guildId, req.params.id);
     if (!prev) return res.status(404).json({ error: 'not_found' });
 
+    try { deleteRoleButtonsForSource(db, botId, guildId, `message-templates.${req.params.id}`); } catch {}
     db.deleteMessageTemplate(botId, guildId, req.params.id);
+
     audit(req, 'template.delete', req.params.id, { name: prev.name });
     res.json({ ok: true });
   });

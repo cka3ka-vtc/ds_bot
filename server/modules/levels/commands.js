@@ -179,8 +179,8 @@ export function mountCommandMethods(LevelsModule) {
 
       this.db.setDailyAt(botId, guildId, userId, now);
 
-      // /daily — sync (пользователь сразу увидит новый XP в ответе).
-      await this._awardXp({ botId, guildId, member, config, amount: config.dailyXp });
+      // ФИКС: явно указываем source — чтобы в логах было видно, что это daily.
+      await this._awardXp({ botId, guildId, member, config, amount: config.dailyXp, source: 'daily' });
 
       const after = this._getMemberDataCached(botId, guildId, userId);
 

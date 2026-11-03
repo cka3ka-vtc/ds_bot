@@ -12,7 +12,7 @@ import { renderModuleOffBanner, bindModuleOffBanner } from '../../components/mod
 
 const M = UI.messageTemplates;
 
-/* ═════════════════ Хелперы ═════════════════ */
+/* ─── Утилиты ─── */
 
 function channelName(channels, channelId) {
   const ch = channels.find((c) => c.id === channelId);
@@ -27,7 +27,7 @@ function fmtDateTime(ts) {
   });
 }
 
-/* ═════════════════ Список ═════════════════ */
+/* ─── Список ─── */
 
 function renderList(items, search, channels) {
   const q = (search || '').trim().toLowerCase();
@@ -57,7 +57,6 @@ function renderCard(item, channels) {
     ? channelName(channels, item.defaultChannelId)
     : M.card.noChannel;
 
-  // Строка времени: создано / отправлено
   const timeRow = item.lastSentAt
     ? `<div class="rule-meta-row">
          <span class="rule-dot rule-dot--green"></span>
@@ -111,7 +110,7 @@ function renderCard(item, channels) {
   `;
 }
 
-/* ═════════════════ Редактор ═════════════════ */
+/* ─── Статус канала ─── */
 
 function setChannelStatus(el, status, tooltip) {
   if (!el) return;
@@ -212,7 +211,7 @@ function renderEditor(item, channels, bot) {
   `;
 }
 
-/* ═════════════════ Модалка «Отправить» (fallback без канала) ═════════════════ */
+/* ─── Модалка отправки (fallback без канала) ─── */
 
 function openSendModal(item, channels) {
   return openModal({
@@ -260,7 +259,7 @@ function openSendModal(item, channels) {
   });
 }
 
-/* ═════════════════ Модуль ═════════════════ */
+/* ─── Модуль ─── */
 
 export default {
   container: null,
@@ -282,15 +281,18 @@ export default {
 
     let items = [];
     let channels = [];
+    let roles = [];   // ФИКС: роли для role-buttons в редакторе сообщений
     let moduleEnabled = true;
     try {
-      const [listRes, chsRes, modsRes] = await Promise.all([
+      const [listRes, chsRes, rlsRes, modsRes] = await Promise.all([
         api.get(`/api/message-templates?botId=${botId}&guildId=${guildId}`),
         api.get(`/api/guilds/channels?botId=${botId}&guildId=${guildId}`).catch(() => []),
+        api.get(`/api/guilds/roles?botId=${botId}&guildId=${guildId}`).catch(() => []),
         api.get(`/api/modules?botId=${botId}&guildId=${guildId}`).catch(() => []),
       ]);
       items = listRes;
       channels = chsRes;
+      roles = Array.isArray(rlsRes) ? rlsRes : [];
       const m = (modsRes || []).find((x) => x.key === 'message-templates');
       moduleEnabled = !!m?.enabled;
     } catch (err) {
@@ -302,13 +304,13 @@ export default {
     if (isNew || editId) {
       const item = editId ? items.find((x) => x.id === editId) : null;
       if (editId && !item) return this._emptyError(container, 'Сообщение не найдено');
-      this.state = { botId, guildId, bot, channels, items, item, isNew, moduleEnabled };
+      this.state = { botId, guildId, bot, channels, roles, items, item, isNew, moduleEnabled };
       container.innerHTML = renderEditor(item, channels, bot);
       this._bindEditor();
       return;
     }
 
-    this.state = { botId, guildId, items, channels, search: '', moduleEnabled };
+    this.state = { botId, guildId, items, channels, roles, search: '', moduleEnabled };
     container.innerHTML = this._renderListView();
     this._bindList();
   },
@@ -410,11 +412,9 @@ export default {
         const item = this.state.items.find((x) => x.id === id);
         if (!item) return;
 
-        // Если канал задан — отправляем сразу без модалки
         if (item.defaultChannelId) {
           await this._sendDirect(item);
         } else {
-          // Иначе — модалка выбора канала
           openSendModal(item, this.state.channels).then((result) => {
             if (result === true) this._reloadList();
           });
@@ -493,7 +493,7 @@ export default {
   _bindEditor() {
     const c = this.container;
     const state = this.state;
-    const { botId, guildId, channels, item, bot } = state;
+    const { botId, guildId, channels, roles, item, bot } = state;
     const draft = item || { name: '', defaultChannelId: null, messageConfig: null };
 
     const nameEl = c.querySelector('#templateName');
@@ -543,8 +543,15 @@ export default {
     const initial = draft.messageConfig
       ? mergeTemplateMessageConfig(draft.messageConfig)
       : mergeTemplateMessageConfig(emptyMessageConfig());
+
+    // ФИКС: roles из state вместо захардкоженного пустого массива.
     const editor = new MessageEditor(editorContainer, initial, {
-      bot, roles: [], context: 'message-templates', presetKey: null, guildId, botId,
+      bot,
+      roles: roles || [],
+      context: 'message-templates',
+      presetKey: null,
+      guildId,
+      botId,
     });
     editor.mount();
     state.editor = editor;

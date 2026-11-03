@@ -1,8 +1,10 @@
+// server/api/routes/bots.js
 import { Router } from 'express';
 import { requireAuth } from '../auth-middleware.js';
 import { validateBody } from '../validate.js';
 import { addBotBody } from '../../validators/schemas.js';
 import { botToDto } from '../dto/index.js';
+import { addBotLimiter } from '../middleware/rate-limit.js';
 
 export function botsRouter() {
   const router = Router();
@@ -13,7 +15,7 @@ export function botsRouter() {
     const botManager = req.app.locals.botManager;
     const rows = db.getBotsForUser(req.user.id);
 
-    // Быстрая синхронизация имени/аватара с работающими инстансами
+    // Синхронизируем имя/аватар в БД с актуальными из инстансов
     const synced = rows.map((row) => {
       const inst = botManager.get(row.id);
       if (!inst) return row;
@@ -31,7 +33,9 @@ export function botsRouter() {
     res.json(synced.map(botToDto));
   });
 
-  router.post('/', validateBody(addBotBody), async (req, res, next) => {
+  // ФИКС: addBotLimiter применяется ПОСЛЕ requireAuth — теперь
+  // req.user.id доступен для user-based rate-limit.
+  router.post('/', addBotLimiter, validateBody(addBotBody), async (req, res, next) => {
     try {
       const bot = await req.app.locals.botManager.addUserBot({
         token: req.body.token, ownerId: req.user.id,

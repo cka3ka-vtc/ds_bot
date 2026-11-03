@@ -101,7 +101,10 @@ export function mountSchedulerMethods(BirthdaysModule) {
     async _announceBirthdays(inst, guild, config, today, isLeap) {
       const channel = await inst.client.channels.fetch(config.announceChannelId).catch(() => null);
       if (!channel?.isTextBased?.() || channel.guild.id !== guild.id) {
-        this.logger.warn({ guildId: guild.id, channelId: config.announceChannelId }, 'birthdays: invalid announce channel');
+        this.logger.warn(
+          { guildId: guild.id, channelId: config.announceChannelId },
+          'birthdays: invalid announce channel',
+        );
         return;
       }
 
@@ -150,7 +153,10 @@ export function mountSchedulerMethods(BirthdaysModule) {
             if (role && !member.roles.cache.has(role.id)) {
               await member.roles.add(role.id, 'День рождения');
             }
-            this.db.setBirthdayRoleUntil(inst.id, guild.id, row.user_id, Math.floor(Date.now() / 1000) + 86_400);
+            this.db.setBirthdayRoleUntil(
+              inst.id, guild.id, row.user_id,
+              Math.floor(Date.now() / 1000) + 86_400,
+            );
           } catch (err) {
             this.logger.warn({ err, userId: row.user_id }, 'birthdays: role add failed');
           }
@@ -182,7 +188,6 @@ export function mountSchedulerMethods(BirthdaysModule) {
                 () => channel.send({
                   flags: FLAG_COMPONENTS_V2,
                   components,
-                  // Пинг именинника — часть UX поздравления.
                   allowedMentions: buildAllowedMentions(components, { ping: true }),
                 }),
                 {
@@ -208,9 +213,21 @@ export function mountSchedulerMethods(BirthdaysModule) {
         }
 
         this.db.setLastBirthdayAnnounced(inst.id, guild.id, row.user_id, Math.floor(Date.now() / 1000));
+
+        // ФИКС: добавлены userId и meta — дашборд покажет КОГО поздравили
+        // (через блок пользователя), а в message убран username, чтобы не дублировать.
         this.db.addLog(inst.id, guild.id, {
-          level: 'info', module: 'birthdays',
-          message: `Поздравление с днём рождения: ${member.user.username}`,
+          level: 'info',
+          module: 'birthdays',
+          message: 'Поздравление с днём рождения',
+          userId: row.user_id,
+          meta: {
+            userId: row.user_id,
+            username: member.user.username,
+            displayName: member.displayName || member.user.globalName || member.user.username,
+            avatarUrl: member.user.displayAvatarURL?.({ size: 128 }) || null,
+            birthday: row.birthday,
+          },
         });
       }
     },

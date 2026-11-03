@@ -14,14 +14,12 @@ import { modulesRouter } from './routes/modules.js';
 import { moderationRouter } from './routes/moderation.js';
 import { commandsRouter } from './routes/commands.js';
 import { membersRouter } from './routes/members.js';
-import { settingsRouter } from './routes/settings.js';
 import { statsRouter } from './routes/stats.js';
 import { statsMembersRouter } from './routes/stats-members.js';
 import { publicRouter } from './routes/public.js';
-import { levelsRouter } from './routes/levels.js';
 import { previewRouter } from './routes/preview.js';
 import { originCheck } from './middleware/origin-check.js';
-import { generalApiLimiter, addBotLimiter } from './middleware/rate-limit.js';
+import { generalApiLimiter } from './middleware/rate-limit.js';
 import { stickyRouter } from './routes/sticky.js';
 import { autodeleteRouter } from './routes/autodelete.js';
 import { scheduledRouter } from './routes/scheduled.js';
@@ -29,7 +27,8 @@ import { messageTemplatesRouter } from './routes/message-templates.js';
 
 export function createApp({ db, botManager, registry, logger }) {
   const app = express();
-  app.locals = { db, botManager, registry, logger };
+
+  Object.assign(app.locals, { db, botManager, registry, logger });
 
   if (config.TRUST_PROXY) app.set('trust proxy', 1);
   app.disable('x-powered-by');
@@ -72,16 +71,6 @@ export function createApp({ db, botManager, registry, logger }) {
       req(req) { return { id: req.id, method: req.method, url: req.url }; },
       res(res) { return { statusCode: res.statusCode }; },
     },
-    /**
-     * customProps вызывается в момент завершения запроса (response event).
-     * К этому времени:
-     *   - requireAuth уже выставил req.user (для /api/*);
-     *   - botId/guildId извлечены из query/body;
-     *   - res.durationMs заполнен pino-http.
-     *
-     * Все поля — плоские (не вложенные объекты), чтобы их можно было
-     * агрегировать в Grafana/Loki по `{user_id="123"}`.
-     */
     customProps: (req, res) => ({
       user_id: req.user?.id || null,
       bot_id: req.query?.botId || req.body?.botId || null,
@@ -94,6 +83,12 @@ export function createApp({ db, botManager, registry, logger }) {
 
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
+
+  // ФИКС: Chrome DevTools автоматически запрашивает этот URL при открытии
+  // вкладки. Отдаём 204 без тела — не засоряем логи и не платим 404.
+  app.get('/.well-known/appspecific/com.chrome.devtools.json', (_req, res) => {
+    res.status(204).end();
+  });
 
   app.use('/api', generalApiLimiter);
   app.use('/shared', express.static(path.resolve('shared')));
@@ -122,13 +117,12 @@ export function createApp({ db, botManager, registry, logger }) {
 
   app.use('/api/guilds/debug', guildsDebugRouter());
 
-  app.use('/api/bots', addBotLimiter, botsRouter());
+  app.use('/api/bots', botsRouter());
   app.use('/api/guilds', guildsRouter());
   app.use('/api/modules', modulesRouter());
   app.use('/api/moderation', moderationRouter());
   app.use('/api/commands', commandsRouter());
   app.use('/api/members', membersRouter());
-  app.use('/api/guild-settings', settingsRouter());
   app.use('/api/sticky', stickyRouter());
   app.use('/api/autodelete', autodeleteRouter());
   app.use('/api/preview', previewRouter());
@@ -137,8 +131,6 @@ export function createApp({ db, botManager, registry, logger }) {
 
   app.use('/api/stats/members', statsMembersRouter());
   app.use('/api/stats', statsRouter());
-
-  app.use('/api/levels', levelsRouter());
 
   app.use(express.static(path.resolve('public')));
   app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));

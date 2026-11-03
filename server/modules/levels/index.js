@@ -15,19 +15,11 @@ export default class LevelsModule extends Module {
   constructor(ctx) {
     super(ctx);
 
-    /** Cooldown XP-начислений (per-user + type). */
     this._cooldowns = new Map();
-    /** Cooldown использования команд (per-user + cmd). */
     this._useCooldowns = new Map();
-    /** Кэш member-data для hot path, TTL 30 сек. */
     this._memberCache = new Map();
     this._MEMBER_CACHE_TTL = 30_000;
 
-    /**
-     * Буфер XP: накопление активности за 3 сек, затем один UPSERT.
-     * Ключ: `${botId}:${guildId}:${userId}`, значение:
-     *   { botId, guildId, userId, member, config, amount, createdAt, updatedAt }
-     */
     this._xpBuffer = new Map();
     this._xpFlushTimer = null;
 
@@ -40,6 +32,13 @@ export default class LevelsModule extends Module {
     this._tickInterval = setInterval(() => this._voiceTick().catch(() => {}), 60_000);
     this._inactivityInterval = setInterval(() => this._inactivityTick().catch(() => {}), 60 * 60_000);
     this._cleanupInterval = setInterval(() => this._cleanup(), 10 * 60_000);
+
+    // КРИТИЧЕСКИЙ ФИКС: первый _inactivityTick через 60с после старта.
+    // Раньше после рестарта неактивные не обрабатывались целый час.
+    const firstInactivityTick = setTimeout(() => {
+      this._inactivityTick().catch(() => {});
+    }, 60_000);
+    firstInactivityTick.unref?.();
 
     this._xpFlushTimer = setInterval(() => {
       this._flushXpBuffer().catch((err) => {
@@ -62,7 +61,6 @@ export default class LevelsModule extends Module {
     this._cleanupInterval = null;
     this._xpFlushTimer = null;
 
-    // Финальный flush — иначе при рестарте теряется ≤3 сек XP.
     try { await this._flushXpBuffer(); }
     catch (err) { this.logger.warn({ err }, 'levels: final xp flush failed'); }
 
@@ -89,10 +87,6 @@ export default class LevelsModule extends Module {
     }
   }
 
-  /**
-   * Очищает всё, что модуль держит в памяти для конкретной гильдии.
-   * Буфер XP для удалённой гильдии — drop (не flush — БД удалена).
-   */
   clearGuildCooldowns(guildId) {
     if (!guildId) return;
     const gid = String(guildId);
@@ -106,7 +100,6 @@ export default class LevelsModule extends Module {
     for (const k of this._memberCache.keys()) {
       if (k.includes(`:${gid}:`)) this._memberCache.delete(k);
     }
-    // XP-буфер: drop, НЕ flush — БД гильдии уже удалена (иначе UPSERT создаст файл заново).
     for (const k of this._xpBuffer.keys()) {
       if (k.includes(`:${gid}:`)) this._xpBuffer.delete(k);
     }

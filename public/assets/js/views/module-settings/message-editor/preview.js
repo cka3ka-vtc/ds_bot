@@ -49,7 +49,7 @@ export function mountPreviewMethods(MessageEditor) {
             if (block.title) s += `<div class="dp-heading">${this._md(block.title)}</div>`;
             if (block.items?.length) {
               const itemsHtml = block.items.map((item, i) => {
-                const prefix = block.listStyle === 'dot' ? '·' : (i + 1) + '.';
+                const prefix = block.listStyle === 'dot' ? '•' : (i + 1) + '.';
                 return `<span style="display:inline-block;min-width:10px;color:#949ba4;">${prefix}</span>${this._md(item)}`;
               }).join('<br>');
               s += `<div class="dp-text" style="margin-top:4px;">${itemsHtml}</div>`;
@@ -83,7 +83,7 @@ export function mountPreviewMethods(MessageEditor) {
             if (block.buttons?.length) {
               html += `<div class="dp-buttons">${
                 block.buttons.map((b) =>
-                  `<button type="button" class="dp-btn link">${b.emoji ? escapeHtml(b.emoji) + ' ' : ''}${escapeHtml(b.label || 'Ссылка')}</button>`,
+                  `<button type="button" class="dp-btn link">${b.emoji ? escapeHtml(b.emoji) + ' ' : ''}${escapeHtml(b.label || 'Кнопка')}</button>`,
                 ).join('')
               }</div>`;
             }
@@ -108,11 +108,15 @@ export function mountPreviewMethods(MessageEditor) {
       return html;
     },
 
+    // КРИТИЧЕСКИЙ ФИКС: пропускаем только http(s). Раньше `javascript:alert(1)`
+    // попадал в <img src>, что безопасно в браузере, но лучше не пускать вовсе.
+    // Также {avatarUrl}/{guildIconUrl} резолвятся из previewTokens.
     _resolveUrl(url) {
       if (!url) return '';
       const t = String(url).trim();
       if (t === '{avatarUrl}') return this._previewTokens?.avatarUrl || '';
       if (t === '{guildIconUrl}') return this._previewTokens?.guildIconUrl || '';
+      if (!/^https?:\/\//i.test(t)) return '';
       return t;
     },
 
@@ -125,7 +129,7 @@ export function mountPreviewMethods(MessageEditor) {
         `<span class="dp-time-tag">${escapeHtml(formatDateByCode(new Date(parseInt(u, 10) * 1000), c))}</span>`
       );
 
-      // {time} / {time:CODE} — собственный шорткат
+      // {time} / {time:CODE} — события форматкат
       html = html.replace(/\{time(?::([RrFfDdTt]))?\}/g, (_, c) =>
         `<span class="dp-time-tag">${escapeHtml(formatDateByCode(new Date(), c || 'f'))}</span>`
       );

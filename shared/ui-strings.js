@@ -20,7 +20,7 @@ import { sticky } from './strings/sticky.js';
 import { autodelete } from './strings/autodelete.js';
 import { scheduled } from './strings/scheduled.js';
 import { messageTemplates } from './strings/message-templates.js';
-import { landingTour, settingsStub } from './strings/misc.js';
+import { settingsStub } from './strings/misc.js';
 
 export { pluralize };
 
@@ -34,7 +34,7 @@ export const UI = {
   modulesGrid, bots, servers,
   msgEditor, greetings, levels, members,
   sticky, autodelete, scheduled, messageTemplates,
-  landingTour, settingsStub,
+  settingsStub,
 };
 
 export default UI;

@@ -67,7 +67,9 @@ function kpi(c, value) {
         </div>
         <span class="kpi-icon"><i class="fa-solid ${c.icon}"></i></span>
       </div>
-      <div class="kpi-value" data-count="${v}">${v.toLocaleString('ru-RU')}</div>
+      <div class="kpi-value"
+           data-count="${v}"
+           data-count-key="${c.key}">${v.toLocaleString('ru-RU')}</div>
     </div>`;
 }
 

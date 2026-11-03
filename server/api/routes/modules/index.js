@@ -7,13 +7,9 @@ import { createCrudRouter } from './crud.js';
 import { createGreetingsTestRouter } from './greetings-test.js';
 import { createBirthdaysTestRouter } from './birthdays-test.js';
 import { createLevelsDebugRouter } from './levels-debug.js';
+import { createLevelsTestRouter } from './levels-test.js';
+import { createLevelsLeaderboardRouter } from './levels-leaderboard.js';
 
-/**
- * Собирает роутер для /api/modules.
- *  - requireAuth, requireBotAccess — на уровне родителя (все подроуты защищены);
- *  - manifest читается один раз при старте и передаётся в crud;
- *  - порядок монтирования сохранён как в исходном монолите.
- */
 export function modulesRouter() {
   const router = Router();
   router.use(requireAuth);
@@ -26,12 +22,14 @@ export function modulesRouter() {
   // CRUD: GET /, POST /:key/toggle, GET/PUT /:key/config
   router.use(createCrudRouter(manifest));
 
-  // Тесты сообщений (сохраняют общий testMessageLimiter)
+  // Тесты отправки (testMessageLimiter)
   router.use('/greetings', createGreetingsTestRouter());
   router.use('/birthdays', createBirthdaysTestRouter());
 
-  // Диагностика модуля «Уровни»
+  // Levels: debug + test + leaderboard/inactivity
   router.use('/levels', createLevelsDebugRouter());
+  router.use('/levels', createLevelsTestRouter());
+  router.use('/levels', createLevelsLeaderboardRouter());
 
   return router;
 }

@@ -3,22 +3,21 @@ import { Router } from 'express';
 import { requireBotAccess } from '../../auth-middleware.js';
 import { validateBody } from '../../validate.js';
 import {
-  commandCreateBody,
-  commandUpdateBody,
-  commandToggleBody,
+  commandCreateBody, commandUpdateBody, commandToggleBody,
 } from '../../../validators/schemas.js';
-import {
-  sanitizeCommandName,
-  scheduleGuildCommandsSync,
-} from '../../../core/commandSync.js';
+import { scheduleGuildCommandsSync } from '../../../core/commandSync.js';
 import { BUILTIN_DEFAULTS } from '../../../core/builtin-command.js';
 import { BUILTIN_COMMANDS } from '../../../../shared/builtin-commands.js';
+import { invalidateCommandsCache } from '../../../app/events/helper-cache.js';
+import {
+  persistRoleButtonsFromConfig,
+  deleteRoleButtonsForSource,
+} from '../../../core/role-buttons-persist.js';
 import { ctx, audit, validateCommandName } from './_shared.js';
 
 export function createCustomRouter() {
   const router = Router();
 
-  /* ─── Список (builtin + custom) ─── */
   router.get('/', requireBotAccess, (req, res) => {
     const { botId, guildId } = req.query;
     const db = req.app.locals.db;
@@ -57,7 +56,6 @@ export function createCustomRouter() {
     res.json({ builtin: builtinList, custom });
   });
 
-  /* ─── Создание ─── */
   router.post('/', validateBody(commandCreateBody), requireBotAccess, async (req, res) => {
     const {
       botId, guildId, name,
@@ -70,8 +68,7 @@ export function createCustomRouter() {
     const db = req.app.locals.db;
 
     const check = validateCommandName(db, botId, guildId, name, {
-      minLength: 2,
-      includeMessage: true,
+      minLength: 2, includeMessage: true,
     });
     if (!check.ok) {
       const status = check.error === 'invalid_name' ? 400 : 409;
@@ -83,8 +80,7 @@ export function createCustomRouter() {
 
     const id = db.createCustomCommand(botId, guildId, {
       name: check.sanitized,
-      description,
-      response,
+      description, response,
       type: 'custom',
       enabled: 1,
       channelsMode: normalizedChannelsMode,
@@ -97,13 +93,22 @@ export function createCustomRouter() {
       responseEmbedColor: responseEmbedColor || '#5865F2',
       messageConfig: messageConfig || {},
     });
+
+    if (messageConfig) {
+      try {
+        persistRoleButtonsFromConfig(db, botId, guildId, `cmd.${id}`, messageConfig);
+      } catch (err) {
+        req.app.locals.logger.warn({ err, id }, 'command: persist role-buttons failed');
+      }
+    }
+
     audit(req, 'command.create', id, { name: check.sanitized });
 
+    invalidateCommandsCache(botId, guildId);
     scheduleGuildCommandsSync(ctx(req), botId, guildId);
     res.json({ id, name: check.sanitized });
   });
 
-  /* ─── Обновление ─── */
   router.put('/:id', validateBody(commandUpdateBody), requireBotAccess, async (req, res) => {
     const { id } = req.params;
     const { botId, guildId, name, ...rest } = req.body;
@@ -115,9 +120,7 @@ export function createCustomRouter() {
     let newName = cmd.name;
     if (name !== undefined && name !== cmd.name) {
       const check = validateCommandName(db, botId, guildId, name, {
-        excludeId: id,
-        minLength: 2,
-        includeMessage: true,
+        excludeId: id, minLength: 2, includeMessage: true,
       });
       if (!check.ok) {
         const status = check.error === 'invalid_name' ? 400 : 409;
@@ -131,25 +134,36 @@ export function createCustomRouter() {
     }
 
     db.updateCustomCommand(botId, guildId, id, { name: newName, ...rest });
+
+    if (rest.messageConfig) {
+      try {
+        persistRoleButtonsFromConfig(db, botId, guildId, `cmd.${id}`, rest.messageConfig);
+      } catch (err) {
+        req.app.locals.logger.warn({ err, id }, 'command: persist role-buttons failed');
+      }
+    }
+
     audit(req, 'command.update', id, { name: newName });
+    invalidateCommandsCache(botId, guildId);
     scheduleGuildCommandsSync(ctx(req), botId, guildId);
     res.json({ ok: true, name: newName });
   });
 
-  /* ─── Удаление ─── */
   router.delete('/:id', requireBotAccess, async (req, res) => {
     const { botId, guildId } = req.query;
     const db = req.app.locals.db;
     const cmd = db.getCustomCommand(botId, guildId, req.params.id);
     if (!cmd) return res.status(404).json({ error: 'not_found' });
 
+    try { deleteRoleButtonsForSource(db, botId, guildId, `cmd.${req.params.id}`); } catch {}
     db.deleteCustomCommand(botId, guildId, req.params.id);
+
     audit(req, 'command.delete', req.params.id, { name: cmd.name });
+    invalidateCommandsCache(botId, guildId);
     scheduleGuildCommandsSync(ctx(req), botId, guildId);
     res.json({ ok: true });
   });
 
-  /* ─── Toggle ─── */
   router.post('/:id/toggle', validateBody(commandToggleBody), requireBotAccess, async (req, res) => {
     const { botId, guildId, enabled } = req.body;
     const db = req.app.locals.db;
@@ -158,6 +172,8 @@ export function createCustomRouter() {
 
     db.updateCustomCommand(botId, guildId, req.params.id, { enabled: !!enabled });
     audit(req, 'command.toggle', req.params.id, { enabled: !!enabled });
+
+    invalidateCommandsCache(botId, guildId);
     scheduleGuildCommandsSync(ctx(req), botId, guildId);
     res.json({ ok: true });
   });

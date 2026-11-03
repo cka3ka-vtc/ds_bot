@@ -5,7 +5,166 @@ import { getNonBotMemberCount } from '../../core/guildCounts.js';
 import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../../core/componentsBuilder.js';
 import { v2ConfigToEmbed, embedHasContent } from '../../core/v2-to-embed.js';
 import { saveProfileThrottled, snapshotOf } from './helpers.js';
+import { getCachedCommands } from './helper-cache.js';
+import {
+  defaultRoleSuccessAddResponse,
+  defaultRoleSuccessRemoveResponse,
+  defaultRoleErrorResponse,
+} from '../../../shared/role-button-responses.js';
 
+// custom_id: role_<section>_<roleId>_<buttonId>.
+// deferReply вызывается ДО roles.add/remove, иначе Discord шлёт
+// «Приложение не ответило вовремя» при медленном REST.
+//
+// Выбор ответа:
+//   hasRole === true  → нажатие снимет роль  → successRemoveResponse
+//   hasRole === false → нажатие выдаст роль  → successAddResponse
+//   ошибка            → errorResponse
+
+const ROLE_BUTTON_RE = /^role_[a-z0-9]+_(\d+)_([a-z0-9_]+)$/i;
+
+async function replyWithRoleResponse(interaction, cfgMsg, ctx) {
+  const { roleName, roleMention, roleState, roleAction, fallbackText, edited } = ctx;
+
+  const tokens = {
+    user: `<@${interaction.user.id}>`,
+    mention: `<@${interaction.user.id}>`,
+    username: interaction.user.username,
+    displayName: interaction.member?.displayName || interaction.user.username,
+    avatarUrl: interaction.user.displayAvatarURL?.({ size: 128 }) || '',
+    guild: interaction.guild?.name || '',
+    guildIconUrl: interaction.guild?.iconURL?.({ size: 128 }) || '',
+    roleName, roleMention, roleState, roleAction,
+    section: 'role-button-response',
+  };
+
+  if (cfgMsg && typeof cfgMsg === 'object') {
+    try {
+      const embed = v2ConfigToEmbed(cfgMsg, tokens);
+      if (embedHasContent(embed)) {
+        if (edited) {
+          await interaction.editReply({ embeds: [embed] }).catch(() => {});
+        } else {
+          await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral }).catch(() => {});
+        }
+        return;
+      }
+    } catch {}
+  }
+
+  if (edited) {
+    await interaction.editReply({ content: fallbackText }).catch(() => {});
+  } else {
+    await interaction.reply({ content: fallbackText, flags: MessageFlags.Ephemeral }).catch(() => {});
+  }
+}
+
+async function handleRoleButton({ db, interaction, logger }) {
+  const customId = interaction.customId || '';
+  const match = customId.match(ROLE_BUTTON_RE);
+  if (!match) return false;
+
+  const roleId = match[1];
+  const buttonId = match[2];
+  const guild = interaction.guild;
+
+  if (!guild) {
+    await interaction.reply({
+      content: '⚠️ Кнопки-роли работают только на сервере',
+      flags: MessageFlags.Ephemeral,
+    }).catch(() => {});
+    return true;
+  }
+
+  const botId = interaction.client.user.id;
+  let cfg = null;
+  try { cfg = db.getRoleButtonConfig(botId, guild.id, buttonId); } catch {}
+
+  const successAddCfg = cfg?.successAddResponse || defaultRoleSuccessAddResponse();
+  const successRemoveCfg = cfg?.successRemoveResponse || defaultRoleSuccessRemoveResponse();
+  const errorCfg = cfg?.errorResponse || defaultRoleErrorResponse();
+
+  const role = guild.roles.cache.get(roleId)
+    || await guild.roles.fetch(roleId).catch(() => null);
+
+  if (!role) {
+    await replyWithRoleResponse(interaction, errorCfg, {
+      roleName: '—', roleMention: '—',
+      roleState: '—', roleAction: '—',
+      fallbackText: '❌ Роль не найдена — возможно, она была удалена',
+      edited: false,
+    });
+    return true;
+  }
+
+  const me = guild.members.me;
+  if (!me?.permissions?.has('ManageRoles')) {
+    await replyWithRoleResponse(interaction, errorCfg, {
+      roleName: role.name, roleMention: `<@&${role.id}>`,
+      roleState: '—', roleAction: '—',
+      fallbackText: '❌ У бота нет права «Управление ролями»',
+      edited: false,
+    });
+    return true;
+  }
+
+  if (role.position >= me.roles.highest.position) {
+    await replyWithRoleResponse(interaction, errorCfg, {
+      roleName: role.name, roleMention: `<@&${role.id}>`,
+      roleState: '—', roleAction: '—',
+      fallbackText: '❌ Роль выше роли бота — выдать нельзя',
+      edited: false,
+    });
+    return true;
+  }
+
+  const member = interaction.member;
+  const hasRole = member.roles.cache.has(roleId);
+
+  // deferReply ДО roles.add/remove — снимает 3-секундный лимит Discord.
+  try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  } catch (err) {
+    logger.warn({ err, buttonId }, 'role-button: deferReply failed');
+    return true;
+  }
+
+  try {
+    if (hasRole) {
+      await member.roles.remove(roleId, 'Role-button из панели');
+    } else {
+      await member.roles.add(roleId, 'Role-button из панели');
+    }
+  } catch (err) {
+    logger.warn(
+      { err, guildId: guild.id, userId: interaction.user.id, roleId, buttonId },
+      'role-button: toggle failed',
+    );
+    await replyWithRoleResponse(interaction, errorCfg, {
+      roleName: role.name, roleMention: `<@&${role.id}>`,
+      roleState: hasRole ? 'не снята' : 'не выдана',
+      roleAction: hasRole ? 'попробовать снять' : 'попробовать выдать',
+      fallbackText: '❌ Не удалось изменить роль',
+      edited: true,
+    });
+    return true;
+  }
+
+  // Успех: выбираем ответ в зависимости от выполненного действия.
+  const chosenCfg = hasRole ? successRemoveCfg : successAddCfg;
+  await replyWithRoleResponse(interaction, chosenCfg, {
+    roleName: role.name, roleMention: `<@&${role.id}>`,
+    roleState: hasRole ? 'снята' : 'выдана',
+    roleAction: hasRole ? 'выдать её снова' : 'снять её',
+    fallbackText: hasRole
+      ? `↪️ Роль **${role.name}** снята`
+      : `✅ Роль **${role.name}** выдана`,
+    edited: true,
+  });
+  return true;
+}
+
+// ─── Cooldown slash-команд ───
 const CMD_COOLDOWNS = new Map();
 const CMD_COOLDOWN_CLEANUP_INTERVAL = 10 * 60_000;
 setInterval(() => {
@@ -67,11 +226,6 @@ async function safeReply(interaction, content, opts = {}) {
   } catch {}
 }
 
-/**
- * Какой модуль обслуживает builtin-команду.
- *   levels      → rank, leaderboard, daily
- *   birthdays   → birthday_set, birthday_toggle, birthdays
- */
 function moduleForBuiltin(name) {
   const meta = getBuiltinCommand(name);
   return meta?.moduleKey || null;
@@ -80,7 +234,14 @@ function moduleForBuiltin(name) {
 export async function onInteraction({ db, registry, logger, payload }) {
   const { botId, guildId, interaction } = payload;
   if (!guildId) return;
-  if (!interaction?.isChatInputCommand?.()) return;
+
+  if (interaction.isButton?.()) {
+    const handled = await handleRoleButton({ db, interaction, logger });
+    if (handled) return;
+    return;
+  }
+
+  if (!interaction.isChatInputCommand?.()) return;
   if (interaction.user?.bot) return;
 
   logger.info({
@@ -97,30 +258,21 @@ export async function onInteraction({ db, registry, logger, payload }) {
     deferred: interaction.deferred,
   }, 'interaction: dispatch');
 
-  /* ═════════════ 1. Builtin ═════════════ */
   if (BUILTIN_NAMES.has(interaction.commandName)) {
     const moduleKey = moduleForBuiltin(interaction.commandName);
     const mod = moduleKey ? registry.get(moduleKey) : null;
 
     if (!mod || typeof mod.handleCommand !== 'function') {
       logger.error(
-        {
-          cmd: interaction.commandName,
-          moduleKey,
-          hasModule: !!mod,
-          moduleHasHandle: !!mod?.handleCommand,
-        },
-        'interaction: module unavailable — check module load errors at startup',
+        { cmd: interaction.commandName, moduleKey, hasModule: !!mod },
+        'interaction: module unavailable',
       );
-      await safeReply(interaction, '⚠ Команда временно недоступна');
+      await safeReply(interaction, '⚠️ Команда временно недоступна');
       return;
     }
 
     if (interaction.replied || interaction.deferred) {
-      logger.warn(
-        { cmd: interaction.commandName, replied: interaction.replied, deferred: interaction.deferred },
-        'interaction: builtin already acknowledged — skipping',
-      );
+      logger.warn({ cmd: interaction.commandName }, 'interaction: builtin already acknowledged — skipping');
       return;
     }
 
@@ -157,7 +309,6 @@ export async function onInteraction({ db, registry, logger, payload }) {
     return;
   }
 
-  /* ═════════════ 2. Custom ═════════════ */
   const snap = snapshotOf(interaction.member || interaction.user);
   try {
     db.addEvent({
@@ -174,7 +325,7 @@ export async function onInteraction({ db, registry, logger, payload }) {
   }
   saveProfileThrottled(db, logger, { botId, guildId, userId: interaction.user.id, ...snap });
 
-  const customs = db.getCustomCommands(botId, guildId);
+  const customs = getCachedCommands(db, botId, guildId);
   const cmd = customs.find(
     (c) => c.enabled && c.name.toLowerCase() === interaction.commandName,
   );
@@ -189,18 +340,18 @@ export async function onInteraction({ db, registry, logger, payload }) {
 
   const channelId = interaction.channelId;
   if (cmd.channelsMode === 'whitelist' && cmd.channels.length && !cmd.channels.includes(channelId)) {
-    return replyEphemeral('⚠ Команда недоступна в этом канале');
+    return replyEphemeral('⚠️ Команда недоступна в этом канале');
   }
   if (cmd.channelsMode === 'blacklist' && cmd.channels.includes(channelId)) {
-    return replyEphemeral('⚠ Команда недоступна в этом канале');
+    return replyEphemeral('⚠️ Команда недоступна в этом канале');
   }
 
   const memberRoles = new Set(interaction.member?.roles?.cache?.keys?.() ?? []);
   if (cmd.requireRoles.length && !cmd.requireRoles.some((r) => memberRoles.has(r))) {
-    return replyEphemeral('⚠ У вас нет нужной роли для этой команды');
+    return replyEphemeral('⚠️ У вас нет нужной роли для этой команды');
   }
   if (cmd.excludeRoles.length && cmd.excludeRoles.some((r) => memberRoles.has(r))) {
-    return replyEphemeral('⚠ Вам запрещено вызывать эту команду');
+    return replyEphemeral('⚠️ Вам запрещено использовать эту команду');
   }
 
   const cdKey = `${guildId}:${interaction.user.id}:${cmd.name}`;
@@ -238,9 +389,7 @@ export async function onInteraction({ db, registry, logger, payload }) {
       if (components?.length) {
         try {
           await interaction.reply({
-            flags: replyFlags
-              ? (FLAG_COMPONENTS_V2 | replyFlags)
-              : FLAG_COMPONENTS_V2,
+            flags: replyFlags ? (FLAG_COMPONENTS_V2 | replyFlags) : FLAG_COMPONENTS_V2,
             components,
             allowedMentions: { parse: ['users'] },
           });

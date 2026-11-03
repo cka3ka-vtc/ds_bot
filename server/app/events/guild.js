@@ -1,6 +1,16 @@
 // server/app/events/guild.js
-import { syncGuildCommands, ensureBuiltinCommands } from '../../core/commandSync.js';
+//
+// Обработчики guildCreate / guildDelete.
+//
+// КРИТИЧЕСКИЙ ФИКС в onGuildCreate:
+// Раньше после syncGuildCommands (который через guild.commands.set устанавливает
+// ПОЛНЫЙ набор builtin + custom) вызывался ensureBuiltinCommands, который через
+// тот же set(builtinOnly) затирал только что установленные кастомные команды.
+// Убрано — syncGuildCommands уже делает полный набор.
+
+import { syncGuildCommands } from '../../core/commandSync.js';
 import { clearGuild as clearVoiceGuild } from '../../core/voiceTracker.js';
+import { invalidateCommandsCache } from './helper-cache.js';
 
 export async function onGuildCreate({ db, botManager, logger, payload }) {
   const { client, guild } = payload;
@@ -33,14 +43,12 @@ export async function onGuildCreate({ db, botManager, logger, payload }) {
       botId: client.user.id,
       guildId: guild.id,
       memberCount: enriched.memberCount ?? null,
-      online: enriched.approximatePresenceCount ?? null,
     },
     'guild added',
   );
 
   try {
     await syncGuildCommands({ db, botManager, logger }, client.user.id, guild.id);
-    await ensureBuiltinCommands(guild, logger, client);
   } catch (err) {
     logger.warn({ err, guildId: guild.id }, 'failed to sync commands on guildCreate');
   }
@@ -52,10 +60,10 @@ export function onGuildDelete({ db, registry, logger, payload }) {
 
   const botId = client.user.id;
 
-  // 1) Удаляем запись из MAIN (guilds.bot_id).
+  // 1) Удаляем запись из main-БД
   db.deleteGuild(botId, guild.id);
 
-  // 2) Удаляем per-guild SQLite-файл.
+  // 2) Удаляем per-guild SQLite целиком
   try {
     const ok = db.guildManager.delete(botId, guild.id);
     if (!ok) {
@@ -65,7 +73,7 @@ export function onGuildDelete({ db, registry, logger, payload }) {
     logger.warn({ err, botId, guildId: guild.id }, 'guild-db: delete failed');
   }
 
-  // 3) Чистим cooldown-карты модуля «Уровни».
+  // 3) Чистим cooldown-кэш модуля «Уровни»
   try {
     const levels = registry?.get?.('levels');
     levels?.clearGuildCooldowns?.(guild.id);
@@ -73,12 +81,15 @@ export function onGuildDelete({ db, registry, logger, payload }) {
     logger.warn({ err, guildId: guild.id }, 'levels: clearGuildCooldowns failed');
   }
 
-  // 4) Чистим голосовые сессии.
+  // 4) Чистим голосовые сессии
   try {
     clearVoiceGuild(botId, guild.id);
   } catch (err) {
     logger.warn({ err, guildId: guild.id }, 'voiceTracker: clearGuild failed');
   }
+
+  // 5) Инвалидируем кэш кастомных команд
+  try { invalidateCommandsCache(botId, guild.id); } catch {}
 
   logger.info({ botId, guildId: guild.id }, 'guild removed + data purged');
 }

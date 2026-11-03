@@ -13,14 +13,14 @@ import { renderModuleOffBanner, bindModuleOffBanner } from '../../components/mod
 
 const S = UI.sticky;
 
-/* ═════════════════ Хелперы ═════════════════ */
+/* ─── Утилиты ─── */
 
 function channelName(channels, channelId) {
   const ch = channels.find((c) => c.id === channelId);
   return ch?.name || channelId;
 }
 
-/* ═════════════════ Список ═════════════════ */
+/* ─── Список ─── */
 
 function renderList(items, search, channels) {
   const q = (search || '').trim().toLowerCase();
@@ -101,7 +101,7 @@ function renderCard(item, channels) {
   `;
 }
 
-/* ═════════════════ Редактор ═════════════════ */
+/* ─── Статус канала ─── */
 
 function setChannelStatus(el, status, tooltip) {
   if (!el) return;
@@ -207,7 +207,7 @@ function renderEditor(item, channels, bot) {
   `;
 }
 
-/* ═════════════════ Модуль ═════════════════ */
+/* ─── Модуль ─── */
 
 export default {
   container: null,
@@ -229,15 +229,18 @@ export default {
 
     let items = [];
     let channels = [];
+    let roles = [];   // ФИКС: роли для role-buttons в редакторе сообщений
     let moduleEnabled = true;
     try {
-      const [listRes, chsRes, modsRes] = await Promise.all([
+      const [listRes, chsRes, rlsRes, modsRes] = await Promise.all([
         api.get(`/api/sticky?botId=${botId}&guildId=${guildId}`),
         api.get(`/api/guilds/channels?botId=${botId}&guildId=${guildId}`).catch(() => []),
+        api.get(`/api/guilds/roles?botId=${botId}&guildId=${guildId}`).catch(() => []),
         api.get(`/api/modules?botId=${botId}&guildId=${guildId}`).catch(() => []),
       ]);
       items = listRes;
       channels = chsRes;
+      roles = Array.isArray(rlsRes) ? rlsRes : [];
       const m = (modsRes || []).find((x) => x.key === 'sticky');
       moduleEnabled = !!m?.enabled;
     } catch (err) {
@@ -249,13 +252,13 @@ export default {
     if (isNew || editId) {
       const item = editId ? items.find((x) => x.id === editId) : null;
       if (editId && !item) return this._emptyError(container, 'Сообщение не найдено');
-      this.state = { botId, guildId, bot, channels, item, isNew, moduleEnabled };
+      this.state = { botId, guildId, bot, channels, roles, item, isNew, moduleEnabled };
       container.innerHTML = renderEditor(item, channels, bot);
       this._bindEditor();
       return;
     }
 
-    this.state = { botId, guildId, items, channels, search: '', moduleEnabled };
+    this.state = { botId, guildId, items, channels, roles, search: '', moduleEnabled };
     container.innerHTML = this._renderListView();
     this._bindList();
   },
@@ -290,7 +293,7 @@ export default {
       ${moduleOff ? renderModuleOffBanner({
         moduleKey: 'sticky',
         moduleName: 'Липнущее сообщение',
-        hint: 'Сообщения не будут переопубликовываться, пока модуль выключен.',
+        hint: 'Сообщения не будут переопубликовываться, пока модуль выключен в общем списке.',
       }) : ''}
 
       <div class="rule-toolbar">
@@ -433,7 +436,7 @@ export default {
   _bindEditor() {
     const c = this.container;
     const state = this.state;
-    const { botId, guildId, channels, item, bot } = state;
+    const { botId, guildId, channels, roles, item, bot } = state;
     const draft = item || { name: '', channelId: '', messageConfig: null };
 
     const nameEl = c.querySelector('#stickyName');
@@ -483,8 +486,17 @@ export default {
     const initial = draft.messageConfig
       ? mergeStickyConfig(draft.messageConfig)
       : mergeStickyConfig(emptyMessageConfig());
+
+    // ФИКС: roles из state вместо захардкоженного пустого массива.
+    // Раньше блок «Кнопки ролей» в редакторе сообщений показывал пустой
+    // picker, потому что MessageEditor получал roles: [] и не знал о ролях сервера.
     const editor = new MessageEditor(editorContainer, initial, {
-      bot, roles: [], context: 'sticky', presetKey: null, guildId, botId,
+      bot,
+      roles: roles || [],
+      context: 'sticky',
+      presetKey: null,
+      guildId,
+      botId,
     });
     editor.mount();
     state.editor = editor;

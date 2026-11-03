@@ -2,9 +2,15 @@
 import { BUILTIN_COMMANDS, BUILTIN_NAMES, toDiscordCommand } from '../../shared/builtin-commands.js';
 import { retryDiscord } from './retry.js';
 
+/**
+ * Санитайзер имени команды.
+ * Discord разрешает: буквы Unicode, цифры, `_`, `-`. Длина 1–32 (для чат-команд).
+ * NFKC-нормализация приводит визуально-эквивалентные формы к одной.
+ */
 function sanitizeCommandName(name) {
   return String(name || '')
     .toLowerCase()
+    .normalize('NFKC')
     .replace(/[^\p{L}\p{N}_-]/gu, '')
     .slice(0, 32);
 }
@@ -32,10 +38,7 @@ function buildDesiredCommands(db, botId, guildId) {
     .map((c) => {
       const s = builtinSettings[c.name];
       const desc = (s?.description && s.description.trim()) || c.description;
-      return {
-        ...toDiscordCommand(c),
-        description: desc.slice(0, 100),
-      };
+      return { ...toDiscordCommand(c), description: desc.slice(0, 100) };
     });
 
   const customs = db
@@ -81,7 +84,6 @@ export async function syncGuildCommands({ db, botManager, logger }, botId, guild
   }
 }
 
-/* Debounced variant для UI-роутов (см. рефакторинг #7) */
 const SYNC_DEBOUNCE_MS = 1500;
 const pendingSyncs = new Map();
 
@@ -112,6 +114,12 @@ export async function flushPendingSyncs() {
   }));
 }
 
+/**
+ * Устанавливает ТОЛЬКО builtin-команды. Используется только при первичном
+ * онбординге гильдии ДО регистрации кастомных (но в новом коде —
+ * не вызывается из onGuildCreate, поскольку syncGuildCommands ставит полный
+ * набор, а ensureBuiltinCommands следом затирает кастомы).
+ */
 export async function ensureBuiltinCommands(guildOrId, logger, client) {
   const guildId = resolveGuildId(guildOrId);
   if (!guildId || !client?.application) return;

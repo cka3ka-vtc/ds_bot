@@ -6,16 +6,34 @@ import {
   emojiPickerHTML, bindEmojiPicker,
 } from '../pickers.js';
 import { uid, LIMITS, TYPE_LABELS } from './helpers.js';
+import {
+  defaultRoleSuccessAddResponse,
+  defaultRoleSuccessRemoveResponse,
+  defaultRoleErrorResponse,
+} from '/shared/role-button-responses.js';
 
 const B = UI.msgEditor.blocks;
 
-/** Компактная кнопка «Переменные» для полей без полного тулбара. */
 function tokenBtnHTML() {
   return `<button type="button" class="block-act" data-tokens-for="any"
                    title="${escapeHtml(B.insertVariable)}"
                    aria-label="${escapeHtml(B.insertVariable)}">
             <i class="fa-solid fa-code"></i>
           </button>`;
+}
+
+/** Готовая структура кнопки-роли с тремя дефолтными ответами. */
+function makeRoleButton() {
+  return {
+    id: uid(),
+    label: 'Роль',
+    style: 'primary',
+    roleId: '',
+    emoji: '',
+    successAddResponse: defaultRoleSuccessAddResponse(),
+    successRemoveResponse: defaultRoleSuccessRemoveResponse(),
+    errorResponse: defaultRoleErrorResponse(),
+  };
 }
 
 export function mountBlockMethods(MessageEditor) {
@@ -192,6 +210,11 @@ export function mountBlockMethods(MessageEditor) {
                 </div>
                 <div class="sub-item-row">${rolePickerHTML({ id: btn.id, value: btn.roleId, roles: this.opts.roles || [] })}</div>
                 <div class="sub-item-row">${emojiPickerHTML({ id: 'e_' + btn.id, value: btn.emoji || '' })}</div>
+                <div class="sub-item-row">
+                  <button type="button" class="btn btn-ghost btn-sm" data-action="edit-role-responses" data-button-id="${btn.id}">
+                    <i class="fa-solid fa-reply"></i> ${B.roleResponses || 'Ответы'}
+                  </button>
+                </div>
               </div>
             `).join('')}
             ${buttons.length < LIMITS.maxButtons ? `<button type="button" class="btn btn-ghost btn-sm" data-action="add-role-button">${B.addRoleButton}</button>` : ''}
@@ -256,8 +279,8 @@ export function mountBlockMethods(MessageEditor) {
         case 'image': return { id, type: 'image', url: '' };
         case 'images': return { id, type: 'images', urls: [] };
         case 'file': return { id, type: 'file', url: '' };
-        case 'buttons': return { id, type: 'buttons', buttons: [{ id: uid(), label: 'Ссылка', url: '', emoji: '' }] };
-        case 'role-buttons': return { id, type: 'role-buttons', buttons: [{ id: uid(), label: 'Роль', style: 'primary', roleId: '', emoji: '' }] };
+        case 'buttons': return { id, type: 'buttons', buttons: [{ id: uid(), label: 'Кнопка', url: '', emoji: '' }] };
+        case 'role-buttons': return { id, type: 'role-buttons', buttons: [makeRoleButton()] };
         case 'footer': return { id, type: 'footer', content: '' };
         default: return { id, type: 'text', content: '' };
       }
@@ -312,12 +335,12 @@ export function mountBlockMethods(MessageEditor) {
       } else if (action === 'add-button') {
         if (!block.buttons) block.buttons = [];
         if (block.buttons.length >= LIMITS.maxButtons) return;
-        block.buttons.push({ id: uid(), label: 'Ссылка', url: '', emoji: '' });
+        block.buttons.push({ id: uid(), label: 'Кнопка', url: '', emoji: '' });
         this._renderBlocks(); this._renderPreview(); this._markDirty();
       } else if (action === 'add-role-button') {
         if (!block.buttons) block.buttons = [];
         if (block.buttons.length >= LIMITS.maxButtons) return;
-        block.buttons.push({ id: uid(), label: 'Роль', style: 'primary', roleId: '', emoji: '' });
+        block.buttons.push(makeRoleButton());
         this._renderBlocks(); this._renderPreview(); this._markDirty();
       } else if (action === 'remove-button') {
         block.buttons = (block.buttons || []).filter((b) => b.id !== buttonId);
@@ -329,6 +352,25 @@ export function mountBlockMethods(MessageEditor) {
       } else if (action === 'remove-item') {
         block.items.splice(itemIdx, 1);
         this._renderBlocks(); this._renderPreview(); this._markDirty();
+      } else if (action === 'edit-role-responses') {
+        const btn = (block.buttons || []).find((b) => b.id === buttonId);
+        if (!btn) return;
+        import('./role-response-modal.js').then(({ openRoleResponseModal }) => {
+          openRoleResponseModal({
+            btn,
+            bot: this.opts.bot,
+            roles: this.opts.roles || [],
+            guildId: this.opts.guildId,
+            botId: this.opts.botId,
+          }).then((result) => {
+            if (result && result.successAddResponse) {
+              btn.successAddResponse = result.successAddResponse;
+              btn.successRemoveResponse = result.successRemoveResponse;
+              btn.errorResponse = result.errorResponse;
+              this._markDirty();
+            }
+          });
+        });
       }
     },
 

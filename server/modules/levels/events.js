@@ -30,12 +30,12 @@ export function mountEventMethods(LevelsModule) {
 
       if (!this._passCooldown(guildId, message.author.id, 'message', config.events.message.cooldownMin)) return;
 
-      // Hot path: кладём в буфер, реальная запись — раз в 3 сек.
       this._awardXpBuffered({
         botId, guildId,
         member: message.member,
         config,
         amount: config.events.message.xp,
+        source: 'message',
       });
     },
 
@@ -87,12 +87,11 @@ export function mountEventMethods(LevelsModule) {
 
           if (!shouldAward) continue;
 
-          // Голос идёт раз в `cooldownMin` минут — буфер тоже подходит
-          // (за 3 сек не будет больше 1 тика на юзера).
           this._awardXpBuffered({
             botId: s.botId, guildId: s.guildId,
             member, config,
             amount: config.events.voice.xp,
+            source: 'voice',
           });
           touchAward(s.botId, s.guildId, s.userId);
         } catch (err) {

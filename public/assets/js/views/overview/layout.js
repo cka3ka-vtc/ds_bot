@@ -7,12 +7,8 @@ import { renderTopCommands, renderTopChannels, renderUpcomingBirthdays } from '.
 const BIRTHDAYS_LIMIT = 5;
 
 /**
- * Возвращает полный HTML страницы дашборда.
- *
- * @param {object} view — объект-страница (chartFilter, channelFilter, data, ...)
- * @param {object} parts
- * @param {string} parts.eventsFiltersHTML — HTML фильтров «Последних событий»
- * @param {string} parts.eventsBodyHTML    — HTML списка «Последних событий»
+ * Собирает полный HTML страницы Overview.
+ * Все карточки-контейнеры имеют id — для точечного обновления из _autoRefresh().
  */
 export function renderLayout(view, { eventsFiltersHTML, eventsBodyHTML }) {
   const d = view.data;
@@ -25,7 +21,7 @@ export function renderLayout(view, { eventsFiltersHTML, eventsBodyHTML }) {
 
   const birthdaysSub = me.birthdays
     ? `${BIRTHDAYS_LIMIT} ближайших`
-    : 'требуется модуль';
+    : 'требует модуль';
 
   return `
     <div class="view-head">
@@ -52,7 +48,7 @@ export function renderLayout(view, { eventsFiltersHTML, eventsBodyHTML }) {
             <span class="card-sub">${birthdaysSub}</span>
           </div>
         </div>
-        <div class="card-body" style="padding:12px;">
+        <div class="card-body" style="padding:12px;" id="birthdaysBody">
           ${renderUpcomingBirthdays(d.upcomingBirthdays, me.birthdays)}
         </div>
       </div>
@@ -68,7 +64,7 @@ export function renderLayout(view, { eventsFiltersHTML, eventsBodyHTML }) {
             </div>
           </div>
         </div>
-        <div class="card-body" style="padding:12px;">
+        <div class="card-body" style="padding:12px;" id="topCommandsBody">
           ${renderTopCommands(d.topCommands)}
         </div>
       </div>

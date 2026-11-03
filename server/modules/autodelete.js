@@ -1,8 +1,10 @@
 // server/modules/autodelete.js
 import { Module } from './_base.js';
 import { delayToSeconds } from '../../shared/autodelete-config.js';
+import { TtlCache } from '../core/ttl-cache.js';
 
 const TICK_INTERVAL_MS = 30_000;
+const RULES_CACHE_TTL  = 60_000;
 
 export default class AutodeleteModule extends Module {
   get key() { return 'autodelete'; }
@@ -10,6 +12,9 @@ export default class AutodeleteModule extends Module {
   constructor(ctx) {
     super(ctx);
     this._tickInterval = null;
+    // ФИКС: кэш правил канала. Раньше db.listAutodeleteRulesByChannel() на
+    // каждое сообщение. TTL 60s + инвалидация из routes/autodelete.js.
+    this._rulesCache = new TtlCache({ ttl: RULES_CACHE_TTL, maxSize: 5000 });
   }
 
   async register() {
@@ -30,18 +35,31 @@ export default class AutodeleteModule extends Module {
     }
   }
 
+  invalidateChannelCache(botId, guildId, channelId) {
+    this._rulesCache.delete(`${botId}:${guildId}:${channelId}`);
+  }
+
+  _getChannelRules(client, guildId, channelId) {
+    const k = `${client.user.id}:${guildId}:${channelId}`;
+    const cached = this._rulesCache.get(k);
+    if (cached) return cached;
+
+    let list = [];
+    try {
+      list = this.db.listAutodeleteRulesByChannel(client.user.id, guildId, channelId);
+    } catch (err) {
+      this.logger.warn({ err, guildId }, 'autodelete: list rules failed');
+    }
+    this._rulesCache.set(k, list);
+    return list;
+  }
+
   async onEvent({ event, client, guildId, message }) {
     if (event !== 'messageCreate') return;
     if (!message?.channel || !message.guild) return;
     if (message.author.bot && message.author.id === client.user.id) return;
 
-    let rules = [];
-    try {
-      rules = this.db.listAutodeleteRulesByChannel(client.user.id, guildId, message.channel.id);
-    } catch (err) {
-      this.logger.warn({ err, guildId }, 'autodelete: list rules failed');
-      return;
-    }
+    const rules = this._getChannelRules(client, guildId, message.channel.id);
     if (!rules.length) return;
 
     const rule = rules[0];
@@ -59,7 +77,6 @@ export default class AutodeleteModule extends Module {
       return;
     }
 
-    // mode === 'after'
     const delaySec = delayToSeconds(rule.delayValue, rule.delayUnit);
     const deleteAt = Math.floor(Date.now() / 1000) + delaySec;
 
@@ -100,9 +117,8 @@ export default class AutodeleteModule extends Module {
             const msg = await channel.messages.fetch(d.messageId).catch(() => null);
             if (msg) {
               await msg.delete();
-              // Фиксируем время последнего удаления для правила канала
               try {
-                const rules = this.db.listAutodeleteRulesByChannel(inst.id, guild.id, d.channelId);
+                const rules = this._getChannelRules(inst.client, guild.id, d.channelId);
                 if (rules[0]) {
                   this.db.touchAutodeleteLastDeleted(inst.id, guild.id, rules[0].id);
                 }

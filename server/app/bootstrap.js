@@ -57,7 +57,7 @@ export async function bootstrap() {
   });
 
   logger.info(`🚀 Панель запущена: http://localhost:${config.PORT} (${config.HOST})`);
-  logger.info('   Веб-сервер работает. Боты стартуют в фоне...');
+  logger.info('   Веб-сервер работает. Бот стартует в фоне...');
 
   (async () => {
     try {
@@ -82,11 +82,17 @@ export async function bootstrap() {
     logger.info('boot: background initialization complete');
   })();
 
-  /* Фоновые задачи обслуживания */
+  /* ─── Фоновые таймеры ─── */
   const timers = [];
 
   timers.push(setInterval(() => configCache.cleanup(), 5 * 60_000));
   timers.push(setInterval(() => cleanupGuildAccessCache(), 5 * 60_000));
+
+  // ФИКС: закрытие idle-соединений guild-БД раз в 5 минут.
+  timers.push(setInterval(() => {
+    try { db.guildManager.sweepIdle(); }
+    catch (err) { logger.warn({ err }, 'sweepIdle failed'); }
+  }, 5 * 60_000));
 
   timers.push(setInterval(() => {
     try {
@@ -101,7 +107,7 @@ export async function bootstrap() {
     }
   }, 24 * 60 * 60_000));
 
-  /* Graceful shutdown */
+  /* ─── Graceful shutdown ─── */
   let shuttingDown = false;
   const stop = async (signal) => {
     if (shuttingDown) return;
@@ -111,29 +117,23 @@ export async function bootstrap() {
     timers.forEach((t) => clearInterval(t));
     server.close();
 
-    // 1) Буфер событий → SQLite.
     try { flushEventBuffer(); }
     catch (err) { logger.warn({ err }, 'flushEventBuffer failed'); }
 
-    // 2) Debounced sync'и команд → Discord.
     try { await flushPendingSyncs(); }
     catch (err) { logger.warn({ err }, 'flushPendingSyncs failed'); }
 
-    // 3) XP-буфер → SQLite.
     try {
       const levels = registry.get('levels');
       if (levels?._flushXpBuffer) await levels._flushXpBuffer();
     } catch (err) { logger.warn({ err }, 'levels._flushXpBuffer failed'); }
 
-    // 4) Боты → gateway стоп.
     try { await botManager.shutdown(); }
     catch (err) { logger.warn({ err }, 'botManager shutdown failed'); }
 
-    // 5) Модули → таймеры стоп.
     try { await registry.unregisterAll(); }
     catch (err) { logger.warn({ err }, 'registry shutdown failed'); }
 
-    // 6) БД.
     try { db.guildManager.closeAll(); } catch {}
     try { db.main.close(); } catch {}
 

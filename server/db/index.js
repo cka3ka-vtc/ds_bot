@@ -24,13 +24,11 @@ export function initDb(dbPath, logger) {
     guildManager,
     guild: g,
 
-    // ───── MAIN ─────
     ...usersRepo,
     ...botsRepo,
     ...guildsRepo,
     ...auditRepo,
 
-    // ───── GUILD ─────
     ensureModuleDefaults: (botId, guildId, mods) => g(botId, guildId).ensureModuleDefaults(mods),
     getModuleConfig: (botId, guildId, key) => g(botId, guildId).getModuleConfig(key),
     setModuleEnabled: (botId, guildId, key, enabled) => g(botId, guildId).setModuleEnabled(key, enabled),
@@ -87,7 +85,7 @@ export function initDb(dbPath, logger) {
     countLogsByLevel: (botId, guildId, level, since) => g(botId, guildId).countLogsByLevel(level, since),
     getRecentAudit: (botId, guildId, limit) => g(botId, guildId).getRecentAudit(limit),
 
-    // commands — custom
+    // commands
     getCustomCommands: (botId, guildId) => g(botId, guildId).getCustomCommands(),
     createCustomCommand: (botId, guildId, c) => g(botId, guildId).createCustomCommand(c),
     updateCustomCommand: (botId, guildId, id, data) => g(botId, guildId).updateCustomCommand(id, data),
@@ -95,7 +93,7 @@ export function initDb(dbPath, logger) {
     getCustomCommand: (botId, guildId, id) => g(botId, guildId).getCustomCommand(id),
     incrementCommandUsage: (botId, guildId, id) => g(botId, guildId).incrementCommandUsage(id),
 
-    // sticky messages
+    // sticky
     listSticky: (botId, guildId) => g(botId, guildId).listSticky(),
     getSticky: (botId, guildId, id) => g(botId, guildId).getSticky(id),
     listStickyByChannel: (botId, guildId, channelId) =>
@@ -125,8 +123,10 @@ export function initDb(dbPath, logger) {
       g(botId, guildId).popDueAutodeletions(nowSec),
     clearAutodeletePendingForChannel: (botId, guildId, channelId) =>
       g(botId, guildId).clearAutodeletePendingForChannel(channelId),
+    touchAutodeleteLastDeleted: (botId, guildId, id) =>
+      g(botId, guildId).touchAutodeleteLastDeleted(id),
 
-    // scheduled messages
+    // scheduled
     listScheduled: (botId, guildId) => g(botId, guildId).listScheduled(),
     getScheduled: (botId, guildId, id) => g(botId, guildId).getScheduled(id),
     createScheduled: (botId, guildId, data) => g(botId, guildId).createScheduled(data),
@@ -141,14 +141,6 @@ export function initDb(dbPath, logger) {
     getDueScheduled: (botId, guildId, nowSec) =>
       g(botId, guildId).getDueScheduled(nowSec),
 
-    // autodelete (дополнено)
-    touchAutodeleteLastDeleted: (botId, guildId, id) =>
-      g(botId, guildId).touchAutodeleteLastDeleted(id),
-
-    // message templates (дополнено)
-    touchMessageTemplateLastSent: (botId, guildId, id) =>
-      g(botId, guildId).touchMessageTemplateLastSent(id),
-
     // message templates
     listMessageTemplates: (botId, guildId) => g(botId, guildId).listMessageTemplates(),
     getMessageTemplate: (botId, guildId, id) => g(botId, guildId).getMessageTemplate(id),
@@ -156,8 +148,18 @@ export function initDb(dbPath, logger) {
     updateMessageTemplate: (botId, guildId, id, data) =>
       g(botId, guildId).updateMessageTemplate(id, data),
     deleteMessageTemplate: (botId, guildId, id) => g(botId, guildId).deleteMessageTemplate(id),
+    touchMessageTemplateLastSent: (botId, guildId, id) =>
+      g(botId, guildId).touchMessageTemplateLastSent(id),
 
-    // commands — builtin settings
+    // 🆕 role-buttons (per-guild)
+    getRoleButtonConfig: (botId, guildId, buttonId) =>
+      g(botId, guildId).getRoleButtonConfig(buttonId),
+    replaceRoleButtonConfigsForSource: (botId, guildId, source, buttons) =>
+      g(botId, guildId).replaceRoleButtonConfigsForSource(botId, guildId, source, buttons),
+    deleteRoleButtonConfigsForSource: (botId, guildId, source) =>
+      g(botId, guildId).deleteRoleButtonConfigsForSource(botId, guildId, source),
+
+    // builtin settings
     getBuiltinSettings: (botId, guildId, name) => g(botId, guildId).getBuiltinSettings(name),
     getAllBuiltinSettings: (botId, guildId) => g(botId, guildId).getAllBuiltinSettings(),
     upsertBuiltinSettings: (botId, guildId, name, data) => g(botId, guildId).upsertBuiltinSettings(name, data),

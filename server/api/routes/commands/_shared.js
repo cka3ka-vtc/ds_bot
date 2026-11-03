@@ -1,8 +1,13 @@
 // server/api/routes/commands/_shared.js
-// Общие помощники для подроутов /api/commands.
+//
+// Общие helper'ы для роутов /api/commands.
+// audit — ре-экспорт из единого api/_audit.js.
 
 import { sanitizeCommandName } from '../../../core/commandSync.js';
 import { isReservedCommandName } from '../../../../shared/builtin-commands.js';
+import { audit } from '../../_audit.js';
+
+export { audit };
 
 export function ctx(req) {
   return {
@@ -12,29 +17,8 @@ export function ctx(req) {
   };
 }
 
-export function audit(req, action, target, meta) {
-  req.app.locals.db.addAudit({
-    userId: req.user.id,
-    botId: req.query.botId || req.body?.botId,
-    guildId: req.query.guildId || req.body?.guildId,
-    action, target, meta,
-    ip: req.ip,
-  });
-}
-
 /**
- * Единая проверка имени команды.
- *
- * @param {object} db
- * @param {string} botId
- * @param {string} guildId
- * @param {string} rawName
- * @param {object} [opts]
- * @param {string} [opts.excludeId]
- * @param {number} [opts.minLength=1]
- * @param {boolean} [opts.includeMessage=false]
- * @param {Array} [opts.existingCommands] — предзагруженный список (избегает повторной
- *   выборки при вызове из контекста, где он уже есть, например из custom.js update).
+ * Валидация имени команды. Возвращает { ok, sanitized?, error?, message? }.
  */
 export function validateCommandName(db, botId, guildId, rawName, opts = {}) {
   const { excludeId, minLength = 1, includeMessage = false, existingCommands } = opts;

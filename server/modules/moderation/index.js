@@ -1,8 +1,4 @@
 // server/modules/moderation/index.js
-// Антирейд расширен: одиночные подозрительные аккаунты, волна, raid mode, cooldown.
-// Каждый фильтр имеет свой канал логов, шаблон ЛС/лога, карту нарушений.
-// mod_actions пишется для action !== 'delete'; logs — только для action === 'delete'.
-
 import { Module } from '../_base.js';
 import { configCache } from '../../core/config-cache.js';
 import {
@@ -17,6 +13,9 @@ import { formatMessageForLog } from '../../core/discord-text.js';
 const SPAM_MAP_TTL          = 60_000;
 const EXPIRE_BANS_INTERVAL  = 60_000;
 const PERMISSION_SEND       = 'SendMessages';
+
+// Discord лимит: timeout ≤ 28 дней (в минутах = 40320)
+const MAX_TIMEOUT_MINUTES = 40320;
 
 const ACTION_LABEL_RU = {
   delete: 'удаление',
@@ -68,9 +67,7 @@ export default class ModerationModule extends Module {
     return { enabled: raw.enabled, config: mergeModerationConfig(raw.config) };
   }
 
-  /* ══════════════════════════════════════════════════════════════
-     Dispatch
-     ══════════════════════════════════════════════════════════════ */
+  /* ─── Dispatch ─── */
 
   async onEvent({ event, client, guildId, message, member }) {
     if (event === 'guildMemberAdd') {
@@ -111,9 +108,7 @@ export default class ModerationModule extends Module {
     }
   }
 
-  /* ══════════════════════════════════════════════════════════════
-     Stateful-фильтры
-     ══════════════════════════════════════════════════════════════ */
+  /* ─── Stateful-фильтры ─── */
 
   async _runFilter(key, fc, message, ctx) {
     if (key === 'spam')       return this._checkSpam(ctx, fc.params, message);
@@ -176,9 +171,7 @@ export default class ModerationModule extends Module {
     };
   }
 
-  /* ══════════════════════════════════════════════════════════════
-     Антирейд
-     ══════════════════════════════════════════════════════════════ */
+  /* ─── Рейд: join-события ─── */
 
   async _onMemberJoin({ client, guildId, member }) {
     if (!member?.user || member.user.bot) return;
@@ -236,7 +229,7 @@ export default class ModerationModule extends Module {
     const state = this._ensureRaidState(`${botId}:${guildId}`);
 
     this._log(botId, guildId, 'warn', 'moderation',
-      `рейд: ${recentMembers.length} входов за ${p.windowSec} с`, {
+      `Рейд: ${recentMembers.length} входов за ${p.windowSec} с`, {
         details: `${recentMembers.length} входов`,
         action: 'raid_wave',
       });
@@ -290,14 +283,14 @@ export default class ModerationModule extends Module {
       alert:    'только уведомление модераторов',
       slowmode: `slowmode ${p.slowmodeSec} сек на ${p.lockdownDurationMin} мин`,
       lockdown: `lockdown на ${p.lockdownDurationMin} мин`,
-      kick_all: 'кик всех вошедших',
-      ban_all:  'бан всех вошедших',
+      kick_all: 'кик всех воефф',
+      ban_all:  'бан всех воефф',
     }[p.waveAction] || p.waveAction;
 
     await this._sendRaidAlert({
       client, fc, guildId, botId,
-      reason: `Обнаружена "**Волна входов**", для них будет предпринято действие: **${actionText}**.`,
-      message: `👥 Вошедших: **${recentMembers.length}** за **${p.windowSec} с**${raidModeNote}.`,
+      reason: `Обнаружена "**Волна входов**", для них применено действие: **${actionText}**.`,
+      message: `🚨 Действие: **${recentMembers.length}** за **${p.windowSec} с**${raidModeNote}.`,
     });
   }
 
@@ -347,8 +340,8 @@ export default class ModerationModule extends Module {
 
     await this._sendRaidAlert({
       client, fc, guildId, botId,
-      reason: `Обнаружен "**Подозрительный аккаунт**", со дня создания аккаунта прошло менее **${p.minAccountAgeDays}** дней.`,
-      message: `👤 <@${member.id}> · Возраст: **${ageText}** · Действие: **${actionText}**.`,
+      reason: `Обнаружен "**Молодой аккаунт**", его возраст прочее менее **${p.minAccountAgeDays}** дней.`,
+      message: `🚨 <@${member.id}> · Возраст: **${ageText}** · Действие: **${actionText}**.`,
     });
   }
 
@@ -470,6 +463,10 @@ export default class ModerationModule extends Module {
     state.timers.add(t);
   }
 
+  // КРИТИЧЕСКИЙ ФИКС: сохраняем и восстанавливаем фактические allow/deny bitfield-ы.
+  // Раньше при снятии lockdown выставляли [PERMISSION_SEND]: null (inherit).
+  // Если до lockdown у @everyone стоял явный SendMessages:false, то inherit
+  // мог открыть канал шире, чем было. Теперь восстанавливаем точные разрешения.
   async _applyLockdown({ client, guildId, durationMin }) {
     const guild = client.guilds.cache.get(guildId);
     if (!guild) return;
@@ -486,9 +483,12 @@ export default class ModerationModule extends Module {
       try {
         const everyone = guild.roles.everyone;
         const current = ch.permissionOverwrites.cache.get(everyone.id);
+
         snapshot.push({
           channelId: ch.id,
           hadOverwrite: !!current,
+          allow: current?.allow?.bitfield?.toString() ?? '0',
+          deny:  current?.deny?.bitfield?.toString()  ?? '0',
         });
 
         await ch.permissionOverwrites.edit(everyone, {
@@ -508,12 +508,17 @@ export default class ModerationModule extends Module {
           if (!ch) continue;
           const everyone = guild.roles.everyone;
 
-          if (snap.hadOverwrite) {
-            await ch.permissionOverwrites.edit(everyone, {
-              [PERMISSION_SEND]: null,
-            }, { reason: 'Автомодерация: снятие lockdown' }).catch(() => {});
-          } else {
+          if (!snap.hadOverwrite) {
             await ch.permissionOverwrites.delete(everyone, 'Автомодерация: снятие lockdown').catch(() => {});
+          } else {
+            try {
+              await ch.permissionOverwrites.edit(everyone, {
+                allow: BigInt(snap.allow),
+                deny:  BigInt(snap.deny),
+              }, { reason: 'Автомодерация: снятие lockdown' });
+            } catch (e) {
+              this.logger.warn({ err: e, channelId: ch.id }, 'moderation: lockdown restore failed');
+            }
           }
         }
       } catch (err) {
@@ -538,9 +543,7 @@ export default class ModerationModule extends Module {
     return s;
   }
 
-  /* ══════════════════════════════════════════════════════════════
-     Наказания
-     ══════════════════════════════════════════════════════════════ */
+  /* ─── Наказание ─── */
 
   async _applyPunishment({ botId, guildId, filterKey, filterCfg, message, client, hit }) {
     await this._deleteMessages({ client, guildId, message, hit });
@@ -580,15 +583,16 @@ export default class ModerationModule extends Module {
           filterName: FILTER_META[filterKey]?.name || filterKey,
           reason: hit.reason,
           details: hit.details,
-          // Для БД — до 500 символов, markdown-экранирован (это мета, не отправка).
           message: formatMessageForLog(message.content, message.attachments, 500),
         },
       );
     }
 
+    // КРИТИЧЕСКИЙ ФИКС: timeout >28 дней Discord отклоняет.
     try {
       if (action === 'mute') {
-        await message.member.timeout(durationMin * 60_000, `Автомодерация: ${hit.reason}`);
+        const safeMin = Math.min(durationMin, MAX_TIMEOUT_MINUTES);
+        await message.member.timeout(safeMin * 60_000, `Автомодерация: ${hit.reason}`);
       } else if (action === 'kick') {
         await message.member.kick(`Автомодерация: ${hit.reason}`);
       } else if (action === 'ban') {
@@ -615,6 +619,10 @@ export default class ModerationModule extends Module {
     await this._sendDm({ message, filterCfg, filterKey, hit, action, violation });
   }
 
+  // КРИТИЧЕСКИЙ ФИКС: bulkDelete для групп в одном канале.
+  // Раньше — поштучные fetch+delete. Discord bulkDelete быстрее в 10–50 раз
+  // и не упирается в rate-limit. Ограничение bulkDelete: окно 14 дней —
+  // старые сообщения Discord просто игнорирует.
   async _deleteMessages({ client, guildId, message, hit }) {
     try { await message.delete(); }
     catch (err) {
@@ -627,31 +635,44 @@ export default class ModerationModule extends Module {
     const list = hit.matchedMessageIds;
     if (!Array.isArray(list) || list.length <= 1) return;
 
-    let deleted = 0;
-    let failed = 0;
+    const byChannel = new Map();
     for (const { messageId, channelId } of list) {
       if (messageId === message.id) continue;
+      if (!byChannel.has(channelId)) byChannel.set(channelId, []);
+      byChannel.get(channelId).push(messageId);
+    }
+
+    for (const [channelId, ids] of byChannel) {
       try {
         const channel = client.channels.cache.get(channelId)
           || await client.channels.fetch(channelId).catch(() => null);
-        if (!channel?.isSendable?.()) { failed++; continue; }
+        if (!channel?.isSendable?.()) continue;
 
-        const msg = channel.messages.cache.get(messageId)
-          || await channel.messages.fetch(messageId).catch(() => null);
-        if (!msg) { failed++; continue; }
+        if (ids.length >= 2) {
+          try {
+            await channel.bulkDelete(ids, true);
+            continue;
+          } catch (err) {
+            this.logger.debug({ err, channelId }, 'moderation: bulkDelete failed, falling back');
+          }
+        }
 
-        await msg.delete();
-        deleted++;
+        for (const messageId of ids) {
+          try {
+            const msg = channel.messages.cache.get(messageId)
+              || await channel.messages.fetch(messageId).catch(() => null);
+            if (msg) await msg.delete();
+          } catch (err) {
+            this.logger.debug({ err, channelId, messageId }, 'moderation: batch delete item failed');
+          }
+        }
       } catch (err) {
-        failed++;
-        this.logger.debug({ err, channelId, messageId }, 'moderation: batch delete failed');
+        this.logger.debug({ err, channelId }, 'moderation: delete group failed');
       }
     }
   }
 
-  /* ══════════════════════════════════════════════════════════════
-     Планировщик: снятие временных банов
-     ══════════════════════════════════════════════════════════════ */
+  /* ─── Истечение банов ─── */
 
   async _expireBans() {
     const now = Math.floor(Date.now() / 1000);
@@ -696,9 +717,7 @@ export default class ModerationModule extends Module {
     }
   }
 
-  /* ══════════════════════════════════════════════════════════════
-     Утилиты
-     ══════════════════════════════════════════════════════════════ */
+  /* ─── Утилиты ─── */
 
   _resolveFilterAction(filterCfg, violation) {
     if (filterCfg.escalation.enabled && filterCfg.escalation.rows.length) {
@@ -746,13 +765,9 @@ export default class ModerationModule extends Module {
       action: this._actionLabel(action),
       filter: FILTER_META[filterKey]?.name || filterKey,
       violation: String(violation),
-      // {channel} — кликабельный <#id>, на mobile может показать «нет доступа».
       channel: `<#${message.channel.id}>`,
-      // {channelText} — plain «#name», всегда работает на mobile и desktop.
       channelText: message.channel.name ? `#${message.channel.name}` : '—',
       channelName: message.channel.name || '',
-      // {message} — полный текст (до 1900), markdown экранирован,
-      // вложения учитываются как «[+N вложен.]».
       message: formatMessageForLog(message.content, message.attachments),
       guild: message.guild.name,
     };
@@ -794,7 +809,6 @@ export default class ModerationModule extends Module {
       channel: `<#${message.channel.id}>`,
       channelText: message.channel.name ? `#${message.channel.name}` : '—',
       channelName: message.channel.name || '',
-      // {message} — тот же формат, что и в логе (полный текст + escape).
       message: formatMessageForLog(message.content, message.attachments),
     };
 

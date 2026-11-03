@@ -7,15 +7,13 @@ import {
 } from '../../validators/schemas.js';
 import { autodeleteToDto } from '../dto/index.js';
 import { mergeAutodeleteRule } from '../../../shared/autodelete-config.js';
+import { audit } from '../_audit.js';
 
-function audit(req, action, target, meta) {
-  req.app.locals.db.addAudit({
-    userId: req.user.id,
-    botId: req.body?.botId || req.query.botId,
-    guildId: req.body?.guildId || req.query.guildId,
-    action, target, meta,
-    ip: req.ip,
-  });
+function invalidateAutodeleteCache(req, botId, guildId, channelId) {
+  try {
+    const mod = req.app.locals.registry?.get?.('autodelete');
+    mod?.invalidateChannelCache?.(botId, guildId, channelId);
+  } catch {}
 }
 
 async function resolveChannel(inst, guildId, channelId) {
@@ -69,6 +67,8 @@ export function autodeleteRouter() {
       enabled: true,
     });
 
+    invalidateAutodeleteCache(req, botId, guildId, channelId);
+
     audit(req, 'autodelete.create', id, { name, channelId, mode: normalized.mode });
     res.json({ id });
   });
@@ -107,13 +107,17 @@ export function autodeleteRouter() {
       delayUnit: normalized.mode === 'after' ? normalized.delayUnit : null,
     });
 
-    // Очищаем pending в старом канале — при новой логике они уже неактуальны
     try {
       db.clearAutodeletePendingForChannel(botId, guildId, prev.channelId);
       if (channelId !== undefined && channelId !== prev.channelId) {
         db.clearAutodeletePendingForChannel(botId, guildId, channelId);
       }
     } catch {}
+
+    invalidateAutodeleteCache(req, botId, guildId, prev.channelId);
+    if (channelId && channelId !== prev.channelId) {
+      invalidateAutodeleteCache(req, botId, guildId, channelId);
+    }
 
     audit(req, 'autodelete.update', id, { name, channelId, mode: normalized.mode });
     res.json({ ok: true });
@@ -136,6 +140,8 @@ export function autodeleteRouter() {
       try { db.clearAutodeletePendingForChannel(botId, guildId, prev.channelId); } catch {}
     }
 
+    invalidateAutodeleteCache(req, botId, guildId, prev.channelId);
+
     audit(req, 'autodelete.toggle', id, { enabled });
     res.json({ ok: true });
   });
@@ -146,7 +152,6 @@ export function autodeleteRouter() {
     const prev = db.getAutodeleteRule(botId, guildId, req.params.id);
     if (!prev) return res.status(404).json({ error: 'not_found' });
 
-    // Копия создаётся выключенной — иначе UNIQUE constraint на канал.
     const id = db.createAutodeleteRule(botId, guildId, {
       name: `${prev.name} (копия)`,
       channelId: prev.channelId,
@@ -155,6 +160,8 @@ export function autodeleteRouter() {
       delayUnit: prev.delayUnit,
       enabled: false,
     });
+    invalidateAutodeleteCache(req, botId, guildId, prev.channelId);
+
     audit(req, 'autodelete.duplicate', id, { source: prev.id });
     res.json({ id });
   });
@@ -169,6 +176,7 @@ export function autodeleteRouter() {
 
     try { db.clearAutodeletePendingForChannel(botId, guildId, prev.channelId); } catch {}
     db.deleteAutodeleteRule(botId, guildId, id);
+    invalidateAutodeleteCache(req, botId, guildId, prev.channelId);
 
     audit(req, 'autodelete.delete', id, { name: prev.name });
     res.json({ ok: true });

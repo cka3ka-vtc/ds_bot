@@ -5,24 +5,33 @@ import { UI } from '/shared/ui-strings.js';
 import { openJoinedModal, openLeftModal, openActiveModal } from './userModals.js';
 
 /**
- * Кнопка «Обновить» — fetch + полный ре-рендер.
+ * Кнопка «Обновить». ФИКС: точечное обновление через view._autoRefresh(false)
+ * вместо полного _renderUI() — иначе сбрасывались скролл, фокус на кнопке,
+ * текущий chart-фильтр и могла закрыться открытая модалка.
  */
 export function bindRefresh(view) {
   const btn = view.container.querySelector('[data-refresh]');
   if (!btn) return;
 
   btn.addEventListener('click', async () => {
+    if (!store.get('activeBotId') || !store.get('activeGuildId')) {
+      toast(UI.common.selectServer, 'warn');
+      return;
+    }
     try {
-      view.data = await view._fetch(store.get('activeBotId'), store.get('activeGuildId'));
-      view._renderUI();
-      toast(UI.common.updated, 'success');
-    } catch {}
+      await view._autoRefresh(false);
+    } catch (err) {
+      const code = err?.data?.error;
+      if (code === 'bot_offline') {
+        toast(UI.common.botOffline, 'warn');
+      } else {
+        toast(UI.common.error, 'error');
+      }
+    }
   });
 }
 
-/**
- * Ссылки [data-nav] — переход по хэшу (например, «Все события» → #moderation).
- */
+/** Пункты навигации (карточки/ссылки с [data-nav]) → роутер по хэшу. */
 export function bindNavLinks(view) {
   view.container.querySelectorAll('[data-nav]').forEach((el) => {
     el.addEventListener('click', (e) => {
@@ -34,11 +43,8 @@ export function bindNavLinks(view) {
 
 /**
  * KPI-карточки:
- *   - action = 'joined' | 'left' | 'active' — открывают модалки;
+ *   - action = 'joined' | 'left' | 'active' — открывают модалку;
  *   - nav = 'members' — переход на раздел участников.
- *
- * Клик по иконке-подсказке (.kpi-hint) игнорируется.
- * Клавиатура: Enter/Space на карточке = клик.
  */
 export function bindKpiCards(view) {
   view.container.querySelectorAll('[data-kpi-action], [data-kpi-nav]').forEach((card) => {

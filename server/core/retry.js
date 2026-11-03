@@ -1,22 +1,16 @@
 // server/core/retry.js
-
-/**
- * Retry для вызовов Discord API с экспоненциальной задержкой.
- *
- * Что retry-ится:
- *   - HTTP 429 (rate limit) — задержка из retry_after (если есть) или backoff
- *   - HTTP 5xx (500, 502, 503, 504) — backoff
- *   - Network errors (ECONNRESET, ETIMEDOUT, ENOTFOUND, ECONNREFUSED, EAI_AGAIN, ...)
- *
- * Что НЕ retry-ится (throw сразу):
- *   - HTTP 4xx (кроме 429): 400, 401, 403, 404, 405, 422 — ошибка в запросе
- *   - Discord code 10062 (Unknown interaction), 40060 (already acknowledged) —
- *     interaction больше не валиден, retry бессмыслен
- *   - Любая не-network ошибка (TypeError, ReferenceError и т.п.)
- *
- * При 429 Discord возвращает retry_after (в секундах) в response body.
- * discord.js пробрасывает его как err.retryAfter (секунды) или err.rawError.retry_after.
- */
+//
+// Retry для вызовов Discord API с экспоненциальным backoff.
+//
+// Что retry-ится:
+//   - HTTP 429 (rate limit) — ждём ровно retry_after (НЕ обрезаем!)
+//   - HTTP 5xx — backoff
+//   - Network errors (ECONNRESET, ETIMEDOUT, ENOTFOUND, ...)
+//
+// Что НЕ retry-ится:
+//   - HTTP 4xx (кроме 429)
+//   - Discord code 10062 (Unknown interaction), 40060 (already acknowledged)
+//   - Прочие ошибки (TypeError, ReferenceError)
 
 const NETWORK_CODES = new Set([
   'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND',
@@ -29,7 +23,6 @@ const FATAL_DISCORD_CODES = new Set([10062, 40060]);
 function isNetworkError(err) {
   if (!err) return false;
   if (NETWORK_CODES.has(err.code)) return true;
-  // undici (fetch в Node 18+) кидает TypeError с cause.code
   if (err.name === 'TypeError' && err.cause && NETWORK_CODES.has(err.cause.code)) return true;
   return false;
 }
@@ -48,20 +41,14 @@ function isRetryableServerError(err) {
 export function isRetryable(err) {
   if (!err) return false;
   if (FATAL_DISCORD_CODES.has(err.code)) return false;
-
   if (isRateLimitError(err)) return true;
   if (isRetryableServerError(err)) return true;
   if (isNetworkError(err)) return true;
-
-  // 4xx (кроме 429) — окончательная ошибка, retry не поможет
   if (typeof err.status === 'number' && err.status >= 400 && err.status < 500) return false;
-
   return false;
 }
 
 function getRetryAfterMs(err) {
-  // Discord 429: retry_after в секундах (может быть float).
-  // discord.js кладёт в err.retryAfter (секунды) и в err.rawError.retry_after.
   const sec = err?.retryAfter ?? err?.rawError?.retry_after;
   if (typeof sec === 'number' && sec > 0) return Math.ceil(sec * 1000);
   return null;
@@ -70,15 +57,16 @@ function getRetryAfterMs(err) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * @param {Function} fn — async () => { ... }
+ * @param {Function} fn — async () => {...}
  * @param {object} [opts]
  * @param {number}   [opts.maxAttempts=3]
  * @param {number}   [opts.baseDelayMs=500]
- * @param {number}   [opts.maxDelayMs=15000]
- * @param {string}   [opts.label] — для логов: 'channel.send' / 'client.login' / ...
- * @param {object}   [opts.logger] — pino logger
- * @param {object}   [opts.context] — { bot_id, guild_id, user_id, ... } для логов
- * @returns {Promise<any>} — результат fn
+ * @param {number}   [opts.maxDelayMs=15000] — ограничитель для exponential backoff,
+ *                    но НЕ для retry_after от Discord (см. фикс ниже)
+ * @param {string}   [opts.label]
+ * @param {object}   [opts.logger]
+ * @param {object}   [opts.context]
+ * @returns {Promise<any>}
  */
 export async function retryDiscord(fn, opts = {}) {
   const {
@@ -124,10 +112,11 @@ export async function retryDiscord(fn, opts = {}) {
 
       let delayMs;
       if (retryAfterMs != null) {
-        // 429 — Discord явно говорит, сколько ждать. Уважаем, но не больше maxDelayMs.
-        delayMs = Math.min(retryAfterMs, maxDelayMs);
+        // КРИТИЧЕСКИЙ ФИКС: НЕ обрезаем retry_after — это интервал, который
+        // Discord явно требует выдержать до следующей попытки. Обрезка
+        // приводит к повторным 429 и лишним ретраям.
+        delayMs = retryAfterMs;
       } else {
-        // Exponential backoff с jitter: base * 2^(attempt-1) × [0.5; 1]
         const exp = baseDelayMs * Math.pow(2, attempt - 1);
         const jitter = exp * (0.5 + Math.random() * 0.5);
         delayMs = Math.min(Math.round(jitter), maxDelayMs);

@@ -13,7 +13,7 @@ import { renderModuleOffBanner, bindModuleOffBanner } from '../../components/mod
 
 const S = UI.scheduled;
 
-/* ═════════════════ Хелперы ═════════════════ */
+/* ─── Утилиты ─── */
 
 function channelName(channels, channelId) {
   const ch = channels.find((c) => c.id === channelId);
@@ -41,7 +41,7 @@ function fromLocalInputValue(str) {
   return Math.floor(d.getTime() / 1000);
 }
 
-/* ═════════════════ Список ═════════════════ */
+/* ─── Список ─── */
 
 function renderList(items, search, channels) {
   const q = (search || '').trim().toLowerCase();
@@ -72,7 +72,6 @@ function renderCard(item, channels) {
   const isSent = status === 'sent';
   const isError = status === 'error';
 
-  // Строка времени: для отправленных — время отправки, для остальных — планируемое
   let timeRow;
   if (isSent && item.lastSentAt) {
     timeRow = `
@@ -160,7 +159,7 @@ function renderCard(item, channels) {
   `;
 }
 
-/* ═════════════════ Редактор ═════════════════ */
+/* ─── Статус канала ─── */
 
 function setChannelStatus(el, status, tooltip) {
   if (!el) return;
@@ -284,7 +283,7 @@ function renderEditor(item, channels, bot) {
   `;
 }
 
-/* ═════════════════ Модуль ═════════════════ */
+/* ─── Модуль ─── */
 
 export default {
   container: null,
@@ -306,15 +305,18 @@ export default {
 
     let items = [];
     let channels = [];
+    let roles = [];   // ФИКС: роли для role-buttons в редакторе сообщений
     let moduleEnabled = true;
     try {
-      const [listRes, chsRes, modsRes] = await Promise.all([
+      const [listRes, chsRes, rlsRes, modsRes] = await Promise.all([
         api.get(`/api/scheduled?botId=${botId}&guildId=${guildId}`),
         api.get(`/api/guilds/channels?botId=${botId}&guildId=${guildId}`).catch(() => []),
+        api.get(`/api/guilds/roles?botId=${botId}&guildId=${guildId}`).catch(() => []),
         api.get(`/api/modules?botId=${botId}&guildId=${guildId}`).catch(() => []),
       ]);
       items = listRes;
       channels = chsRes;
+      roles = Array.isArray(rlsRes) ? rlsRes : [];
       const m = (modsRes || []).find((x) => x.key === 'scheduled');
       moduleEnabled = !!m?.enabled;
     } catch (err) {
@@ -326,13 +328,13 @@ export default {
     if (isNew || editId) {
       const item = editId ? items.find((x) => x.id === editId) : null;
       if (editId && !item) return this._emptyError(container, 'Сообщение не найдено');
-      this.state = { botId, guildId, bot, channels, item, isNew, moduleEnabled };
+      this.state = { botId, guildId, bot, channels, roles, item, isNew, moduleEnabled };
       container.innerHTML = renderEditor(item, channels, bot);
       this._bindEditor();
       return;
     }
 
-    this.state = { botId, guildId, items, channels, search: '', moduleEnabled };
+    this.state = { botId, guildId, items, channels, roles, search: '', moduleEnabled };
     container.innerHTML = this._renderListView();
     this._bindList();
   },
@@ -367,7 +369,7 @@ export default {
       ${moduleOff ? renderModuleOffBanner({
         moduleKey: 'scheduled',
         moduleName: 'Отложенные сообщения',
-        hint: 'Сообщения не будут отправляться, пока модуль выключен.',
+        hint: 'Сообщения не будут отправляться, пока модуль выключен в общем списке.',
       }) : ''}
 
       <div class="rule-toolbar">
@@ -528,7 +530,7 @@ export default {
   _bindEditor() {
     const c = this.container;
     const state = this.state;
-    const { botId, guildId, channels, item, bot } = state;
+    const { botId, guildId, channels, roles, item, bot } = state;
     const draft = item || { name: '', channelId: '', scheduledAt: null, messageConfig: null };
 
     const nameEl = c.querySelector('#scheduledName');
@@ -579,8 +581,15 @@ export default {
     const initial = draft.messageConfig
       ? mergeScheduledMessageConfig(draft.messageConfig)
       : mergeScheduledMessageConfig(emptyMessageConfig());
+
+    // ФИКС: roles из state вместо захардкоженного пустого массива.
     const editor = new MessageEditor(editorContainer, initial, {
-      bot, roles: [], context: 'scheduled', presetKey: null, guildId, botId,
+      bot,
+      roles: roles || [],
+      context: 'scheduled',
+      presetKey: null,
+      guildId,
+      botId,
     });
     editor.mount();
     state.editor = editor;

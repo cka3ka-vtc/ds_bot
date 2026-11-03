@@ -1,13 +1,14 @@
-// server/modules/birthdays/stuck-role-checker.js
-// Safety net:
-//   1. Каждые 30 минут (на гильдию) сканируем участников с ролью именинника
-//      и снимаем её у тех, у кого ДР ≠ сегодня или отключены поздравления.
-//      Закрывает кейсы: рестарт бота, ручная выдача, gateway не догрузил.
-//   2. Мгновенно реагируем на guildMemberUpdate — снимаем при ошибочной
-//      выдаче в реальном времени.
+// server/modules/birthdays/stuck-role-check.js
+//
+// Safety net для «залипших» ролей именинника:
+//   1. Раз в 30 мин (плановое сканирование) снимает роль, если её день не сегодня.
+//   2. Мгновенно при guildMemberUpdate — если роль только что навесили, а день не сегодня.
+//
+// Рутинные сканы пишут debug-лог (не видно в дашборде), а вот мгновенное
+// снятие после ручного добавления роли — это warn (видно).
 
-const TICK_MS = 5 * 60_000;           // как часто тикаем
-const SCAN_INTERVAL_MS = 30 * 60_000; // как часто сканируем гильдию (не чаще)
+const TICK_MS = 5 * 60_000;
+const SCAN_INTERVAL_MS = 30 * 60_000;
 
 const ymd = (d) => {
   const y = d.getFullYear();
@@ -29,15 +30,13 @@ export class StuckRoleChecker {
     this.botManager = botManager;
     this.getConfig = getConfig;
     this._interval = null;
-    this._lastScanAt = new Map(); // `${botId}:${guildId}` → timestamp последнего успешного скана
+    this._lastScanAt = new Map();
   }
 
   start() {
     if (this._interval) return;
     this._interval = setInterval(() => this._tick().catch(() => {}), TICK_MS);
     this._interval.unref?.();
-    // при старте сканируем сразу, игнорируя _lastScanAt — чтобы поймать
-    // роли, выданные пока бот был офлайн
     this._tick({ force: true }).catch(() => {});
   }
 
@@ -46,10 +45,6 @@ export class StuckRoleChecker {
     this._interval = null;
     this._lastScanAt.clear();
   }
-
-  /* ═════════════════════════════════════════════════════════════
-     Периодическое сканирование
-     ═════════════════════════════════════════════════════════════ */
 
   async _tick({ force = false } = {}) {
     const now = Date.now();
@@ -64,7 +59,6 @@ export class StuckRoleChecker {
 
         try {
           await this._checkGuild(inst, guild, todayDdMm);
-          // ставим _lastScanAt только после успешной проверки
           this._lastScanAt.set(key, now);
         } catch (err) {
           this.logger.warn(
@@ -87,7 +81,6 @@ export class StuckRoleChecker {
       || await guild.roles.fetch(config.birthdayRoleId).catch(() => null);
     if (!role) return;
 
-    // role.members может быть пуст — точечно подтягиваем
     let members = role.members;
     if (!members || members.size === 0) {
       members = await guild.members.fetch({ role: role.id }).catch(() => role.members);
@@ -117,9 +110,12 @@ export class StuckRoleChecker {
         { botId, guildId, removed, total: members.size },
         'birthdays: stuck roles cleaned',
       );
+      // ФИКС: routine cleanup — debug-уровень, НЕ показывается в «Последних событиях».
+      // Раньше был level:'info' — и в дашборде каждая такая запись отображалась
+      // как «Празднует сегодня день рождения», что путало пользователей.
       try {
         this.db.addLog(botId, guildId, {
-          level: 'info',
+          level: 'debug',
           module: 'birthdays',
           message: `Снято зависших ролей именинника: ${removed}`,
           meta: { removed, total: members.size, todayDdMm },
@@ -127,10 +123,6 @@ export class StuckRoleChecker {
       } catch {}
     }
   }
-
-  /* ═════════════════════════════════════════════════════════════
-     Мгновенная реакция на выдачу роли (guildMemberUpdate)
-     ═════════════════════════════════════════════════════════════ */
 
   async checkMemberOnRoleChange({ client, oldMember, newMember }) {
     const guild = newMember?.guild;
@@ -145,7 +137,6 @@ export class StuckRoleChecker {
 
     const roleId = config.birthdayRoleId;
 
-    // Реагируем только на ПОЯВЛЕНИЕ роли
     const hadRole = oldMember?.roles?.cache?.has(roleId) ?? false;
     const hasRole = newMember.roles?.cache?.has(roleId) ?? false;
     if (hadRole || !hasRole) return;
@@ -156,7 +147,7 @@ export class StuckRoleChecker {
     if (keep) return;
 
     try {
-      await newMember.roles.remove(roleId, 'Роль именинника: ДР не сегодня');
+      await newMember.roles.remove(roleId, 'Роль именинника: день не сегодня');
       try { this.db.clearBirthdayRoleUntil(botId, guildId, newMember.id); } catch {}
 
       this.logger.info(
@@ -169,14 +160,20 @@ export class StuckRoleChecker {
         'birthdays: role removed on member update (wrong day)',
       );
 
+      // Оставляем warn — это значимое событие, но с корректным текстом.
+      // Дашборд покажет: «Зависшая роль именинника — день не сегодня»
+      // вместе с именем и аватаром пользователя.
       try {
         this.db.addLog(botId, guildId, {
           level: 'warn',
           module: 'birthdays',
-          message: 'Снята роль именинника — ДР не сегодня',
+          message: 'Роль именинника снята: день не сегодня',
           userId: newMember.id,
           meta: {
             userId: newMember.id,
+            username: newMember.user.username,
+            displayName: newMember.displayName || newMember.user.globalName || newMember.user.username,
+            avatarUrl: newMember.user.displayAvatarURL?.({ size: 128 }) || null,
             storedBirthday: bday?.birthday || null,
             todayDdMm,
           },

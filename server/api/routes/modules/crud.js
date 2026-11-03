@@ -5,12 +5,19 @@ import { moduleToggleBody, moduleConfigBody } from '../../../validators/schemas.
 import { configCache } from '../../../core/config-cache.js';
 import { scheduleGuildCommandsSync } from '../../../core/commandSync.js';
 import { BUILTIN_COMMANDS } from '../../../../shared/builtin-commands.js';
+import { persistMessagesRoleButtons } from '../../../core/role-buttons-persist.js';
 import { audit, channelBelongs } from './_shared.js';
+
+async function clearModerationRegexCache() {
+  try {
+    const mod = await import('../../../modules/moderation/filters.js');
+    mod?.clearCompiledCache?.();
+  } catch {}
+}
 
 export function createCrudRouter(manifest) {
   const router = Router();
 
-  /* ─── GET /api/modules ─── */
   router.get('/', (req, res) => {
     const { botId, guildId } = req.query;
     const db = req.app.locals.db;
@@ -37,7 +44,6 @@ export function createCrudRouter(manifest) {
     })));
   });
 
-  /* ─── POST /api/modules/:key/toggle ─── */
   router.post('/:key/toggle', validateBody(moduleToggleBody), async (req, res) => {
     const { botId, guildId, enabled } = req.body;
     const { key } = req.params;
@@ -47,10 +53,12 @@ export function createCrudRouter(manifest) {
 
     req.app.locals.db.setModuleEnabled(botId, guildId, key, !!enabled);
 
-    // Точечная инвалидация: enabled-кэш гильдии + конфиг самого модуля.
-    // НЕ трогаем конфиги других модулей (они не изменились).
     configCache.invalidateEnabled(botId, guildId);
     configCache.invalidateModule(botId, guildId, key);
+
+    if (key === 'moderation') {
+      await clearModerationRegexCache();
+    }
 
     audit(req, 'module.toggle', { key, enabled: !!enabled });
 
@@ -65,22 +73,19 @@ export function createCrudRouter(manifest) {
     res.json({ ok: true });
   });
 
-  /* ─── GET /api/modules/:key/config ─── */
   router.get('/:key/config', (req, res) => {
     const { botId, guildId } = req.query;
     const { key } = req.params;
     res.json(req.app.locals.db.getModuleConfig(botId, guildId, key));
   });
 
-  /* ─── PUT /api/modules/:key/config ─── */
-  router.put('/:key/config', validateBody(moduleConfigBody), (req, res) => {
+  router.put('/:key/config', validateBody(moduleConfigBody), async (req, res) => {
     const { botId, guildId, config } = req.body;
     const { key } = req.params;
 
     const db = req.app.locals.db;
     const logger = req.app.locals.logger;
 
-    // Валидация каналов
     const inst = req.app.locals.botManager.get(botId);
     if (inst?.client?.isReady?.()) {
       const guild = inst.client.guilds.cache.get(guildId);
@@ -101,16 +106,23 @@ export function createCrudRouter(manifest) {
     }
 
     db.setModuleConfig(botId, guildId, key, config || {});
-
-    // Точечная инвалидация: только конфиг этого модуля.
-    // enabled-кэш НЕ трогаем — он не изменился.
     configCache.invalidateModule(botId, guildId, key);
+
+    // 🆕 сохраняем role-buttons из сообщений модуля
+    if (key === 'greetings' || key === 'levels' || key === 'birthdays') {
+      try {
+        persistMessagesRoleButtons(db, botId, guildId, key, config?.messages);
+      } catch (err) {
+        logger.warn({ err, botId, guildId, key }, 'crud: persist role-buttons failed');
+      }
+    }
+
+    if (key === 'moderation') {
+      await clearModerationRegexCache();
+    }
 
     audit(req, 'module.config.update', { key });
 
-    /* Синхронизация daily ↔ levels.config.dailyEnabled.
-       Меняем только builtin_command_settings.daily, значит и сбрасываем
-       только конфиг 'daily', а не всю гильдию. */
     if (key === 'levels' && config && typeof config === 'object') {
       const dailyEnabled = config.dailyEnabled !== false;
       try {
@@ -127,18 +139,13 @@ export function createCrudRouter(manifest) {
             ephemeral: cur?.ephemeral !== false,
           });
 
-          // Конфиг daily изменился — инвалидируем только его.
-          // enabled-кэш уровней не менялся (там ключ levels, а не daily).
           configCache.invalidateModule(botId, guildId, 'daily');
 
           scheduleGuildCommandsSync(
             { db, botManager: req.app.locals.botManager, logger },
             botId, guildId,
           );
-          logger.info(
-            { botId, guildId, dailyEnabled },
-            'levels: daily command synced with dailyEnabled',
-          );
+          logger.info({ botId, guildId, dailyEnabled }, 'levels: daily command synced with dailyEnabled');
         }
       } catch (err) {
         logger.warn({ err, botId, guildId }, 'daily sync from levels.config failed');

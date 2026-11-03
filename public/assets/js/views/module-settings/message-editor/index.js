@@ -30,15 +30,15 @@ export class MessageEditor {
     this._dragSrcIndex = -1;
     this._abort = null;
 
+    // 🆕 Скрытые типы блоков (например, для вложенных редакторов,
+    // чтобы не было рекурсии role-buttons → role-buttons).
+    this._hiddenBlockTypes = new Set(opts.hideBlockTypes || []);
+
     this._collapseKey = `msg_editor_collapsed_${opts.guildId || 'x'}_${opts.context || 'default'}`;
     this._settingsCollapseKey = `msg_editor_settings_collapsed_${opts.guildId || 'x'}_${opts.context || 'default'}`;
     this._templatesCollapseKey = `msg_editor_templates_collapsed_${opts.guildId || 'x'}_${opts.context || 'default'}`;
 
     this._ctx = getTokensFor(opts.context);
-
-    // previewTokens — статичный «контекст» для превью, накладывается поверх
-    // ctx.preview. Позволяет передать актуальное значение {filter} для
-    // конкретного фильтра автомодерации (иначе preview всегда показывал «Антиспам»).
     this._previewTokens = { ...this._ctx.preview, ...(opts.previewTokens || {}) };
 
     this._botAvatarUrl = opts.bot?.avatarUrl || '';
@@ -48,6 +48,11 @@ export class MessageEditor {
   }
 
   mount() {
+    // 🆕 Убираем блоки скрытых типов на случай загрузки старого конфига
+    if (this._hiddenBlockTypes.size > 0) {
+      this.config.blocks = (this.config.blocks || [])
+        .filter((b) => !this._hiddenBlockTypes.has(b.type));
+    }
     this._render();
     this._bind();
     this._loadPreviewTokens();
@@ -73,12 +78,9 @@ export class MessageEditor {
       const tokens = await api.get(`/api/preview/tokens?botId=${botId}&guildId=${guildId}`);
       this._previewTokens = { ...this._previewTokens, ...tokens };
       this._renderPreview();
-    } catch {
-      // silent — используем fallback
-    }
+    } catch {}
   }
 
-  /* ─── Collapse state ─── */
   _loadCollapseState() {
     try { const raw = localStorage.getItem(this._collapseKey); return raw ? JSON.parse(raw) : {}; }
     catch { return {}; }
@@ -97,7 +99,6 @@ export class MessageEditor {
   _isTemplatesCollapsed() { try { return localStorage.getItem(this._templatesCollapseKey) === '1'; } catch { return false; } }
   _saveTemplatesCollapse(v) { try { localStorage.setItem(this._templatesCollapseKey, v ? '1' : '0'); } catch {} }
 
-  /* ─── Textarea ─── */
   _autoResize(el) {
     if (!el || el.tagName !== 'TEXTAREA') return;
     const isSmall = el.matches('[data-title-input], [data-subtitle-input]');
@@ -109,7 +110,6 @@ export class MessageEditor {
     this.container.querySelectorAll('textarea').forEach((t) => this._autoResize(t));
   }
 
-  /* ─── Confirm ─── */
   async _confirm({ title, text, ctaLabel }) {
     const result = await openModal({
       title,

@@ -10,15 +10,17 @@ import { mergeStickyConfig } from '../../../shared/sticky-config.js';
 import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../../core/componentsBuilder.js';
 import { buildAllowedMentions } from '../../core/mentions.js';
 import { retryDiscord } from '../../core/retry.js';
+import { audit } from '../_audit.js';
+import {
+  persistRoleButtonsFromConfig,
+  deleteRoleButtonsForSource,
+} from '../../core/role-buttons-persist.js';
 
-function audit(req, action, target, meta) {
-  req.app.locals.db.addAudit({
-    userId: req.user.id,
-    botId: req.body?.botId || req.query.botId,
-    guildId: req.body?.guildId || req.query.guildId,
-    action, target, meta,
-    ip: req.ip,
-  });
+function invalidateStickyCache(req, botId, guildId, channelId) {
+  try {
+    const mod = req.app.locals.registry?.get?.('sticky');
+    mod?.invalidateChannelCache?.(botId, guildId, channelId);
+  } catch {}
 }
 
 async function resolveChannel(inst, guildId, channelId) {
@@ -104,6 +106,13 @@ export function stickyRouter() {
       enabled: true,
     });
 
+    // 🆕 сохраняем role-buttons из сообщения
+    try {
+      persistRoleButtonsFromConfig(db, botId, guildId, `sticky.${id}`, normalized);
+    } catch (err) {
+      req.app.locals.logger.warn({ err, id }, 'sticky: persist role-buttons failed');
+    }
+
     let messageId = null;
     try {
       const sent = await buildAndSendSticky(inst.client, channel.guild, channel, normalized);
@@ -114,6 +123,8 @@ export function stickyRouter() {
     } catch (err) {
       req.app.locals.logger.warn({ err, id }, 'sticky: initial send failed');
     }
+
+    invalidateStickyCache(req, botId, guildId, channelId);
 
     audit(req, 'sticky.create', id, { name, channelId, messageId });
     res.json({ id, lastMessageId: messageId });
@@ -130,7 +141,6 @@ export function stickyRouter() {
     const inst = req.app.locals.botManager.get(botId);
     if (!inst?.client?.isReady()) return res.status(503).json({ error: 'bot_offline' });
 
-    // Если меняется канал — проверяем новый
     let newChannel = null;
     if (channelId !== undefined && channelId !== prev.channelId) {
       newChannel = await resolveChannel(inst, guildId, channelId);
@@ -146,20 +156,22 @@ export function stickyRouter() {
       : prev.messageConfig;
 
     db.updateSticky(botId, guildId, id, {
-      name,
-      channelId,
-      messageConfig: nextMessageConfig,
+      name, channelId, messageConfig: nextMessageConfig,
     });
 
-    // Пересобираем сообщение (в старом или новом канале)
+    // 🆕 сохраняем role-buttons
+    try {
+      persistRoleButtonsFromConfig(db, botId, guildId, `sticky.${id}`, nextMessageConfig);
+    } catch (err) {
+      req.app.locals.logger.warn({ err, id }, 'sticky: persist role-buttons failed');
+    }
+
     try {
       const targetChannelId = channelId ?? prev.channelId;
-      // Удалить старое
       await deleteStickyMessage(inst.client, prev.channelId, prev.lastMessageId);
 
       if (prev.enabled) {
-        const targetChannel = newChannel
-          || await resolveChannel(inst, guildId, targetChannelId);
+        const targetChannel = newChannel || await resolveChannel(inst, guildId, targetChannelId);
         if (targetChannel) {
           const sent = await buildAndSendSticky(
             inst.client, targetChannel.guild, targetChannel, nextMessageConfig,
@@ -173,6 +185,11 @@ export function stickyRouter() {
       }
     } catch (err) {
       req.app.locals.logger.warn({ err, id }, 'sticky: resend after update failed');
+    }
+
+    invalidateStickyCache(req, botId, guildId, prev.channelId);
+    if (channelId && channelId !== prev.channelId) {
+      invalidateStickyCache(req, botId, guildId, channelId);
     }
 
     audit(req, 'sticky.update', id, { name, channelId });
@@ -217,6 +234,7 @@ export function stickyRouter() {
       }
     }
 
+    invalidateStickyCache(req, botId, guildId, prev.channelId);
     audit(req, 'sticky.toggle', id, { enabled });
     res.json({ ok: true });
   });
@@ -227,13 +245,18 @@ export function stickyRouter() {
     const prev = db.getSticky(botId, guildId, req.params.id);
     if (!prev) return res.status(404).json({ error: 'not_found' });
 
-    // Копия создаётся выключенной, чтобы не нарушить UNIQUE(channel_id) для enabled.
     const id = db.createSticky(botId, guildId, {
       name: `${prev.name} (копия)`,
       channelId: prev.channelId,
       messageConfig: prev.messageConfig,
       enabled: false,
     });
+
+    try {
+      persistRoleButtonsFromConfig(db, botId, guildId, `sticky.${id}`, prev.messageConfig);
+    } catch {}
+
+    invalidateStickyCache(req, botId, guildId, prev.channelId);
     audit(req, 'sticky.duplicate', id, { source: prev.id });
     res.json({ id });
   });
@@ -255,7 +278,10 @@ export function stickyRouter() {
       }
     }
 
+    try { deleteRoleButtonsForSource(db, botId, guildId, `sticky.${id}`); } catch {}
     db.deleteSticky(botId, guildId, id);
+    invalidateStickyCache(req, botId, guildId, prev.channelId);
+
     audit(req, 'sticky.delete', id, { name: prev.name });
     res.json({ ok: true });
   });

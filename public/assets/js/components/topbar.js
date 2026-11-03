@@ -75,7 +75,8 @@ function updateTitle(container) {
 
 function openPanelTour() {
   const s = UI.topbar.tourSections;
-  const rows = ['overview', 'modules', 'moderation', 'commands', 'members', 'settings']
+  // ФИКС: убран `settings` — раздела больше нет.
+  const rows = ['overview', 'modules', 'moderation', 'commands', 'members']
     .map((key) => {
       const row = s[key];
       if (!row) return '';
@@ -85,7 +86,6 @@ function openPanelTour() {
         moderation: 'fa-shield-halved',
         commands: 'fa-terminal',
         members: 'fa-user-group',
-        settings: 'fa-gear',
       };
       return `
         <div class="contact-link" style="cursor:default;">

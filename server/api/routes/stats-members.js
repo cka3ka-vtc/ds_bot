@@ -1,28 +1,35 @@
 // server/api/routes/stats-members.js
-// Списки участников по событиям за 7 дней.
-
 import { Router } from 'express';
 import { requireAuth, requireBotAccess } from '../auth-middleware.js';
+import { runWithConcurrency } from '../../core/concurrency.js';
 
+/**
+ * Догружает профили (username/displayName/avatarUrl) из Discord cache/REST.
+ * ФИКС: параллелизм через runWithConcurrency(5) — раньше был последовательный
+ * цикл по maxFetches (до 3 сек на 30 пользователей).
+ */
 async function enrichProfilesFromDiscord({ db, botManager, botId, guildId, rows, maxFetches = 30 }) {
   const inst = botManager.get(botId);
   if (!inst?.client?.isReady()) return rows;
 
-  let fetched = 0;
+  // Собираем подмножество для fetch (первые N без username/avatar_url)
+  const toFetch = [];
   for (const row of rows) {
     if (row.username && row.avatar_url) continue;
-    if (fetched >= maxFetches) break;
+    if (toFetch.length >= maxFetches) break;
+    toFetch.push(row);
+  }
 
+  await runWithConcurrency(toFetch, 5, async (row) => {
     let user = inst.client.users.cache.get(row.user_id);
     if (!user) {
       try {
         user = await inst.client.users.fetch(row.user_id, { force: false, cache: true });
-        fetched++;
       } catch {
-        continue;
+        return;
       }
     }
-    if (!user) continue;
+    if (!user) return;
 
     const snap = {
       username: user.username || row.username || null,
@@ -37,7 +44,8 @@ async function enrichProfilesFromDiscord({ db, botManager, botId, guildId, rows,
     try {
       db.upsertUserProfile({ botId, guildId, userId: row.user_id, ...snap });
     } catch {}
-  }
+  });
+
   return rows;
 }
 

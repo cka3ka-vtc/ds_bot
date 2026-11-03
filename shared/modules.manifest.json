@@ -3,7 +3,7 @@
     {
       "key": "greetings",
       "name": "Приветствия",
-      "description": "Автоматически приветствует новых участников и прощается с ушедшими",
+      "description": "Автоматические приветствия новых участников и прощание с ушедшими",
       "icon": "fa-hand",
       "color": "green",
       "category": "engagement",
@@ -40,22 +40,6 @@
       }
     },
     {
-      "key": "events",
-      "name": "События",
-      "description": "Планирование ивентов и автоматические напоминания",
-      "icon": "fa-calendar-check",
-      "color": "blue",
-      "category": "engagement",
-      "version": "1.0.0",
-      "defaultEnabled": false,
-      "events": [],
-      "configSchema": {
-        "announceChannelId": { "type": "text",   "label": "ID канала анонсов" },
-        "reminderMinutes":   { "type": "number", "label": "Напоминание за (мин)", "default": 60 },
-        "template":          { "type": "textarea","label": "Шаблон анонса" }
-      }
-    },
-    {
       "key": "birthdays",
       "name": "Дни рождения",
       "description": "Поздравления и роль именинника на 24 часа",
@@ -68,7 +52,7 @@
       "configSchema": {
         "announceChannelId": { "type": "text", "label": "Канал объявлений" },
         "birthdayRoleId":    { "type": "text", "label": "Роль именинника" },
-        "sendTime":          { "type": "text", "label": "Время отправки (HH:MM)" },
+        "sendTime":          { "type": "text", "label": "Время оправки (HH:MM)" },
         "messages":          { "type": "json", "label": "Сообщения" }
       }
     },
@@ -87,7 +71,7 @@
     {
       "key": "moderation",
       "name": "Автомодерация",
-      "description": "Фильтры, карта нарушений и автоматические наказания",
+      "description": "Фильтры, кара на нарушения и автоматические наказания",
       "icon": "fa-shield-halved",
       "color": "red",
       "category": "moderation",
@@ -98,7 +82,7 @@
         "logChannelId":             { "type": "text",    "label": "Канал логов" },
         "defaultAction":            { "type": "text",    "label": "Действие по умолчанию" },
         "filters":                  { "type": "json",    "label": "Настройки фильтров" },
-        "escalation":               { "type": "json",    "label": "Карта нарушений" },
+        "escalation":               { "type": "json",    "label": "Шкала наказаний" },
         "globalExcludedChannels":   { "type": "json",    "label": "Глобально исключённые каналы"},
         "globalExcludedRoles":      { "type": "json",    "label": "Глобально исключённые роли" },
         "templateDm":               { "type": "textarea","label": "Шаблон ЛС" },
@@ -106,25 +90,9 @@
       }
     },
     {
-      "key": "autoroles",
-      "name": "Автороли",
-      "description": "Выдача ролей при входе или по реакциям",
-      "icon": "fa-user-tag",
-      "color": "red",
-      "category": "moderation",
-      "version": "1.0.0",
-      "defaultEnabled": false,
-      "events": ["guildMemberAdd"],
-      "configSchema": {
-        "joinRoleId":        { "type": "text",    "label": "ID роли при входе" },
-        "reactionChannelId": { "type": "text",    "label": "ID канала с реакциями" },
-        "removeOnLeave":     { "type": "boolean", "label": "Снимать роль при выходе", "default": false }
-      }
-    },
-    {
       "key": "autodelete",
       "name": "Автоудаление",
-      "description": "Правила автоудаления сообщений в выбранных каналах",
+      "description": "Автоматическое удаление сообщений в выбранных каналах",
       "icon": "fa-trash",
       "color": "red",
       "category": "moderation",
@@ -136,7 +104,7 @@
     {
       "key": "scheduled",
       "name": "Отложенные сообщения",
-      "description": "Автоматическая отправка сообщений в заданную дату и время",
+      "description": "Запланировать отправку сообщений в заданное время",
       "icon": "fa-clock",
       "color": "pink",
       "category": "utility",
@@ -146,23 +114,9 @@
       "configSchema": {}
     },
     {
-      "key": "messages",
-      "name": "Интерактивные сообщения",
-      "description": "Кнопки-роли из редактора сообщений",
-      "icon": "fa-hand-pointer",
-      "color": "purple",
-      "category": "utility",
-      "version": "1.1.0",
-      "defaultEnabled": false,
-      "events": ["interactionCreate"],
-      "configSchema": {
-        "templates": { "type": "json", "label": "Шаблоны сообщений" }
-      }
-    },
-    {
       "key": "message-templates",
       "name": "Сообщения",
-      "description": "Заготовленные сообщения — отправляйте в канал в любой момент",
+      "description": "Заготовленные сообщения — отправьте в канал в любой момент",
       "icon": "fa-message",
       "color": "blue",
       "category": "utility",
@@ -170,23 +124,6 @@
       "defaultEnabled": false,
       "events": [],
       "configSchema": {}
-    },
-    {
-      "key": "tickets",
-      "name": "Тикеты",
-      "description": "Система поддержки с приватными каналами",
-      "icon": "fa-ticket",
-      "color": "blue",
-      "category": "support",
-      "version": "1.0.0",
-      "defaultEnabled": false,
-      "events": ["interactionCreate"],
-      "configSchema": {
-        "categoryId":         { "type": "text",   "label": "ID категории Discord" },
-        "supportRoleId":      { "type": "text",   "label": "ID роли поддержки" },
-        "welcomeMessage":     { "type": "textarea","label": "Приветствие в тикете" },
-        "autoCloseHours":     { "type": "number", "label": "Автозакрытие (ч)", "default": 24 }
-      }
     }
   ]
 }

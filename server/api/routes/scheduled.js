@@ -10,16 +10,11 @@ import { mergeScheduledMessageConfig } from '../../../shared/scheduled-config.js
 import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../../core/componentsBuilder.js';
 import { buildAllowedMentions } from '../../core/mentions.js';
 import { retryDiscord } from '../../core/retry.js';
-
-function audit(req, action, target, meta) {
-  req.app.locals.db.addAudit({
-    userId: req.user.id,
-    botId: req.body?.botId || req.query.botId,
-    guildId: req.body?.guildId || req.query.guildId,
-    action, target, meta,
-    ip: req.ip,
-  });
-}
+import { audit } from '../_audit.js';
+import {
+  persistRoleButtonsFromConfig,
+  deleteRoleButtonsForSource,
+} from '../../core/role-buttons-persist.js';
 
 async function resolveChannel(inst, guildId, channelId) {
   const guild = inst?.client?.guilds?.cache?.get(guildId);
@@ -46,9 +41,7 @@ async function sendScheduledMessage(inst, guild, channel, messageConfig) {
       allowedMentions: buildAllowedMentions(components, { ping: false }),
     }),
     {
-      maxAttempts: 3,
-      baseDelayMs: 800,
-      maxDelayMs: 8000,
+      maxAttempts: 3, baseDelayMs: 800, maxDelayMs: 8000,
       label: 'scheduled.send',
       logger: null,
       context: { bot_id: inst.client.user?.id, guild_id: guild.id },
@@ -96,6 +89,12 @@ export function scheduledRouter() {
       enabled: true,
     });
 
+    try {
+      persistRoleButtonsFromConfig(db, botId, guildId, `scheduled.${id}`, normalized);
+    } catch (err) {
+      req.app.locals.logger.warn({ err, id }, 'scheduled: persist role-buttons failed');
+    }
+
     audit(req, 'scheduled.create', id, { name, channelId, scheduledAt });
     res.json({ id });
   });
@@ -123,10 +122,15 @@ export function scheduledRouter() {
       ? mergeScheduledMessageConfig(messageConfig)
       : undefined;
 
-    db.updateScheduled(botId, guildId, id, {
-      name, channelId, scheduledAt,
-      messageConfig: nextCfg,
-    });
+    db.updateScheduled(botId, guildId, id, { name, channelId, scheduledAt, messageConfig: nextCfg });
+
+    if (nextCfg) {
+      try {
+        persistRoleButtonsFromConfig(db, botId, guildId, `scheduled.${id}`, nextCfg);
+      } catch (err) {
+        req.app.locals.logger.warn({ err, id }, 'scheduled: persist role-buttons failed');
+      }
+    }
 
     audit(req, 'scheduled.update', id, { name, channelId, scheduledAt });
     res.json({ ok: true });
@@ -153,13 +157,15 @@ export function scheduledRouter() {
     const id = db.createScheduled(botId, guildId, {
       name: `${prev.name} (копия)`,
       channelId: prev.channelId,
-      scheduledAt: Math.max(
-        prev.scheduledAt,
-        Math.floor(Date.now() / 1000) + 3600,
-      ),
+      scheduledAt: Math.max(prev.scheduledAt, Math.floor(Date.now() / 1000) + 3600),
       messageConfig: prev.messageConfig,
       enabled: false,
     });
+
+    try {
+      persistRoleButtonsFromConfig(db, botId, guildId, `scheduled.${id}`, prev.messageConfig);
+    } catch {}
+
     audit(req, 'scheduled.duplicate', id, { source: prev.id });
     res.json({ id });
   });
@@ -198,7 +204,9 @@ export function scheduledRouter() {
     const prev = db.getScheduled(botId, guildId, req.params.id);
     if (!prev) return res.status(404).json({ error: 'not_found' });
 
+    try { deleteRoleButtonsForSource(db, botId, guildId, `scheduled.${req.params.id}`); } catch {}
     db.deleteScheduled(botId, guildId, req.params.id);
+
     audit(req, 'scheduled.delete', req.params.id, { name: prev.name });
     res.json({ ok: true });
   });

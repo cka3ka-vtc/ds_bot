@@ -239,13 +239,10 @@ export const GUILD_MIGRATIONS = [
             AND channel_id IS NULL
             AND json_extract(meta, '$.channelId') IS NOT NULL;
         `);
-      } catch {
-        // json_extract может упасть на битом JSON — не блокируем миграцию.
-      }
+      } catch {}
     },
   },
   {
-    // v8: user_id для logs — чтобы JOIN с user_profiles давал username/displayName/avatarUrl.
     version: 8,
     up(db) {
       const cols = new Set(
@@ -253,9 +250,7 @@ export const GUILD_MIGRATIONS = [
       );
       if (!cols.has('user_id')) {
         db.exec('ALTER TABLE logs ADD COLUMN user_id TEXT');
-        db.exec(
-          'CREATE INDEX IF NOT EXISTS idx_logs_user ON logs(user_id, created_at DESC)',
-        );
+        db.exec('CREATE INDEX IF NOT EXISTS idx_logs_user ON logs(user_id, created_at DESC)');
       }
 
       try {
@@ -266,15 +261,10 @@ export const GUILD_MIGRATIONS = [
             AND user_id IS NULL
             AND json_extract(meta, '$.userId') IS NOT NULL
         `);
-      } catch {
-        // старый битый JSON — пропускаем
-      }
+      } catch {}
     },
   },
   {
-    // v9: soft-delete для mod_actions — снятие/истечение бана больше не удаляет
-    // запись из БД, а помечает её. Появилась колонка removed_at / removed_by,
-    // а также индексы под фильтры журнала.
     version: 9,
     up(db) {
       const cols = new Set(
@@ -300,9 +290,6 @@ export const GUILD_MIGRATIONS = [
     },
   },
   {
-    // v10: filter_key + violation в mod_actions — для структурированного
-    // отображения в журнале («по правилу «Фильтр мата» · нарушение №3»).
-    // Backfill переводит старые auto-записи (reason = 'мат'/'спам'/...) в новый формат.
     version: 10,
     up(db) {
       const cols = new Set(
@@ -319,51 +306,9 @@ export const GUILD_MIGRATIONS = [
         CREATE INDEX IF NOT EXISTS idx_mod_actions_filter
           ON mod_actions(filter_key, created_at DESC);
       `);
-
-      try {
-        db.exec(`
-          UPDATE mod_actions
-          SET filter_key = CASE reason
-            WHEN 'мат'         THEN 'profanity'
-            WHEN 'спам'        THEN 'spam'
-            WHEN 'капс'        THEN 'caps'
-            WHEN 'дубликат'    THEN 'duplicates'
-            WHEN 'ссылка'      THEN 'links'
-            WHEN 'инвайт'      THEN 'invites'
-            WHEN 'упоминания'  THEN 'mentions'
-            WHEN 'рейд'        THEN 'raid'
-            WHEN 'залго'       THEN 'zalgo'
-            WHEN 'эмодзи'      THEN 'emoji'
-          END
-          WHERE moderator_id IS NULL
-            AND filter_key IS NULL
-            AND reason IN ('мат','спам','капс','дубликат','ссылка','инвайт','упоминания','рейд','залго','эмодзи');
-        `);
-
-        db.exec(`
-          UPDATE mod_actions
-          SET reason = CASE filter_key
-            WHEN 'profanity'  THEN 'Фильтр мата'
-            WHEN 'spam'       THEN 'Антиспам'
-            WHEN 'caps'       THEN 'Фильтр капса'
-            WHEN 'duplicates' THEN 'Дубликаты'
-            WHEN 'links'      THEN 'Блокировка ссылок'
-            WHEN 'invites'    THEN 'Блокировка инвайтов'
-            WHEN 'mentions'   THEN 'Массовые упоминания'
-            WHEN 'raid'       THEN 'Антирейд'
-            WHEN 'zalgo'      THEN 'Анти-залго'
-            WHEN 'emoji'      THEN 'Эмодзи-спам'
-          END
-          WHERE filter_key IS NOT NULL
-            AND moderator_id IS NULL;
-        `);
-      } catch {
-        // backfill — best-effort, при ошибке не блокируем миграцию
-      }
     },
   },
   {
-    // v11: sticky_messages, autodelete_rules, autodelete_pending
     version: 11,
     up(db) {
       db.exec(`
@@ -409,7 +354,6 @@ export const GUILD_MIGRATIONS = [
     },
   },
   {
-    // v12: scheduled_messages, message_templates
     version: 12,
     up(db) {
       db.exec(`
@@ -441,7 +385,6 @@ export const GUILD_MIGRATIONS = [
     },
   },
   {
-    // v13: default_channel_id для message_templates
     version: 13,
     up(db) {
       const tables = new Set(
@@ -458,7 +401,6 @@ export const GUILD_MIGRATIONS = [
     },
   },
   {
-    // v14: last_sent_at для message_templates, last_deleted_at для autodelete_rules
     version: 14,
     up(db) {
       const tables = new Set(
@@ -482,6 +424,56 @@ export const GUILD_MIGRATIONS = [
           db.exec('ALTER TABLE autodelete_rules ADD COLUMN last_deleted_at INTEGER');
         }
       }
+    },
+  },
+  {
+    // v15: 🆕 role_button_configs — конфигурация кнопок-ролей.
+    // Хранит role_id, label, style, emoji и настраиваемые ответы для каждой кнопки.
+    version: 15,
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS role_button_configs (
+          bot_id TEXT NOT NULL,
+          guild_id TEXT NOT NULL,
+          button_id TEXT NOT NULL,
+          source TEXT NOT NULL,
+          role_id TEXT NOT NULL,
+          label TEXT,
+          style TEXT,
+          emoji TEXT,
+          success_response TEXT NOT NULL DEFAULT '{}',
+          error_response TEXT NOT NULL DEFAULT '{}',
+          updated_at INTEGER DEFAULT (unixepoch()),
+          PRIMARY KEY (bot_id, guild_id, button_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_rbc_source
+          ON role_button_configs(bot_id, guild_id, source);
+      `);
+    },
+  },
+  {
+    // v16: раздельные ответы на выдачу / снятие роли.
+    // success_response → success_add_response + success_remove_response.
+    // Старое значение копируется в оба новых поля — не теряем данные.
+    version: 16,
+    up(db) {
+      const cols = new Set(
+        db.prepare('PRAGMA table_info(role_button_configs)').all().map((r) => r.name),
+      );
+      if (!cols.has('success_add_response')) {
+        db.exec('ALTER TABLE role_button_configs ADD COLUMN success_add_response TEXT');
+      }
+      if (!cols.has('success_remove_response')) {
+        db.exec('ALTER TABLE role_button_configs ADD COLUMN success_remove_response TEXT');
+      }
+      try {
+        db.exec(`
+          UPDATE role_button_configs
+          SET success_add_response = COALESCE(success_add_response, success_response),
+              success_remove_response = COALESCE(success_remove_response, success_response)
+          WHERE success_add_response IS NULL OR success_remove_response IS NULL;
+        `);
+      } catch {}
     },
   },
 ];
