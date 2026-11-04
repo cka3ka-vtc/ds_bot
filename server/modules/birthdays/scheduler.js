@@ -1,9 +1,8 @@
 // server/modules/birthdays/scheduler.js
-import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../../core/componentsBuilder.js';
 import { mergeBirthdaysConfig } from '../../../shared/birthdays-config.js';
 import { hasMessageContent } from '../../../shared/message-presets.js';
 import { retryDiscord } from '../../core/retry.js';
-import { mentionUser, buildAllowedMentions } from '../../core/mentions.js';
+import { sendMessageConfig } from '../../core/message-sender.js';
 import {
   todayDdMm,
   isLeapYear,
@@ -132,18 +131,9 @@ export function mountSchedulerMethods(BirthdaysModule) {
         if (!member) continue;
 
         if (excludedRoles.size > 0 && member.roles.cache.some((r) => excludedRoles.has(r.id))) {
-          this.logger.debug(
-            { userId: row.user_id, guildId: guild.id },
-            'birthdays: skip due to excluded role',
-          );
           continue;
         }
-
         if (requiredRoles.size > 0 && !member.roles.cache.some((r) => requiredRoles.has(r.id))) {
-          this.logger.debug(
-            { userId: row.user_id, guildId: guild.id },
-            'birthdays: skip due to missing required role',
-          );
           continue;
         }
 
@@ -165,9 +155,10 @@ export function mountSchedulerMethods(BirthdaysModule) {
         const cfgMsg = config.messages?.announce;
         if (hasMessageContent(cfgMsg)) {
           const age = ageOnNextBirthday(row.birthday_year);
+
           const tokens = {
-            user: mentionUser(member.id),
-            mention: mentionUser(member.id),
+            user: `<@${member.id}>`,
+            mention: `<@${member.id}>`,
             username: member.user.username,
             displayName: member.displayName || member.user.globalName || member.user.username,
             avatarUrl: member.user.displayAvatarURL?.({ size: 128 }) || '',
@@ -182,30 +173,18 @@ export function mountSchedulerMethods(BirthdaysModule) {
           };
 
           try {
-            const components = buildComponentsFromConfig(cfgMsg, tokens);
-            if (components?.length) {
-              const sent = await retryDiscord(
-                () => channel.send({
-                  flags: FLAG_COMPONENTS_V2,
-                  components,
-                  allowedMentions: buildAllowedMentions(components, { ping: true }),
-                }),
-                {
-                  maxAttempts: 3,
-                  baseDelayMs: 800,
-                  maxDelayMs: 8000,
-                  label: 'birthdays.announce',
-                  logger: this.logger,
-                  context: { bot_id: inst.id, guild_id: guild.id, user_id: row.user_id },
-                },
-              );
+            const sent = await sendMessageConfig(channel, cfgMsg, tokens, {
+              ping: true,
+              label: 'birthdays.announce',
+              logger: this.logger,
+              context: { bot_id: inst.id, guild_id: guild.id, user_id: row.user_id },
+            });
 
-              if (sent?.id) {
-                this.db.setBirthdayAnnounceMessage(
-                  inst.id, guild.id, row.user_id, channel.id, sent.id,
-                  Math.floor(Date.now() / 1000),
-                );
-              }
+            if (sent?.id) {
+              this.db.setBirthdayAnnounceMessage(
+                inst.id, guild.id, row.user_id, channel.id, sent.id,
+                Math.floor(Date.now() / 1000),
+              );
             }
           } catch (err) {
             this.logger.warn({ err, userId: row.user_id }, 'birthdays: announce send failed');
@@ -214,11 +193,8 @@ export function mountSchedulerMethods(BirthdaysModule) {
 
         this.db.setLastBirthdayAnnounced(inst.id, guild.id, row.user_id, Math.floor(Date.now() / 1000));
 
-        // ФИКС: добавлены userId и meta — дашборд покажет КОГО поздравили
-        // (через блок пользователя), а в message убран username, чтобы не дублировать.
         this.db.addLog(inst.id, guild.id, {
-          level: 'info',
-          module: 'birthdays',
+          level: 'info', module: 'birthdays',
           message: 'Поздравление с днём рождения',
           userId: row.user_id,
           meta: {

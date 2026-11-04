@@ -5,17 +5,13 @@ import {
   mergeModerationConfig, FILTER_KEYS, FILTER_META,
 } from '../../../shared/moderation-config.js';
 import { checkFilter } from './filters.js';
-import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../../core/componentsBuilder.js';
-import { v2ConfigToEmbed, embedHasContent } from '../../core/v2-to-embed.js';
-import { mentionUser, buildAllowedMentions } from '../../core/mentions.js';
+import { sendMessageConfig } from '../../core/message-sender.js';
 import { formatMessageForLog } from '../../core/discord-text.js';
 
 const SPAM_MAP_TTL          = 60_000;
 const EXPIRE_BANS_INTERVAL  = 60_000;
 const PERMISSION_SEND       = 'SendMessages';
-
-// Discord лимит: timeout ≤ 28 дней (в минутах = 40320)
-const MAX_TIMEOUT_MINUTES = 40320;
+const MAX_TIMEOUT_MINUTES   = 40320;
 
 const ACTION_LABEL_RU = {
   delete: 'удаление',
@@ -41,21 +37,17 @@ export default class ModerationModule extends Module {
   async register() {
     this._cleanupInterval = setInterval(() => this._cleanup(), SPAM_MAP_TTL);
     this._cleanupInterval.unref?.();
-
     this._expireBansInterval = setInterval(() => this._expireBans(), EXPIRE_BANS_INTERVAL);
     this._expireBansInterval.unref?.();
-
     this.logger.info({ module: 'moderation' }, 'moderation: registered');
   }
 
   async unregister() {
     if (this._cleanupInterval) clearInterval(this._cleanupInterval);
     if (this._expireBansInterval) clearInterval(this._expireBansInterval);
-
     for (const [, state] of this._raidState) {
       for (const t of state.timers || []) clearTimeout(t);
     }
-
     this._spamMap.clear();
     this._dupMap.clear();
     this._joinMap.clear();
@@ -66,8 +58,6 @@ export default class ModerationModule extends Module {
     const raw = await configCache.getModuleConfig(this.db, botId, guildId, this.key);
     return { enabled: raw.enabled, config: mergeModerationConfig(raw.config) };
   }
-
-  /* ─── Dispatch ─── */
 
   async onEvent({ event, client, guildId, message, member }) {
     if (event === 'guildMemberAdd') {
@@ -101,14 +91,11 @@ export default class ModerationModule extends Module {
       );
 
       await this._applyPunishment({
-        botId, guildId, filterKey: key, filterCfg: fc,
-        message, client, hit,
+        botId, guildId, filterKey: key, filterCfg: fc, message, client, hit,
       });
       return;
     }
   }
-
-  /* ─── Stateful-фильтры ─── */
 
   async _runFilter(key, fc, message, ctx) {
     if (key === 'spam')       return this._checkSpam(ctx, fc.params, message);
@@ -165,13 +152,11 @@ export default class ModerationModule extends Module {
 
     return {
       reason: 'дубликат',
-      details: `${sameText.length} повторов за ${p.windowSec} с`,
+      details: `${sameText.length} повторова за ${p.windowSec} с`,
       filter: 'duplicates',
       matchedMessageIds,
     };
   }
-
-  /* ─── Рейд: join-события ─── */
 
   async _onMemberJoin({ client, guildId, member }) {
     if (!member?.user || member.user.bot) return;
@@ -198,9 +183,7 @@ export default class ModerationModule extends Module {
     if (p.checkAccountAge) {
       const ageDays = (Date.now() - member.user.createdTimestamp) / 86_400_000;
       if (ageDays < p.minAccountAgeDays) {
-        await this._applyAgeAction({
-          botId, guildId, fc, member, client, ageDays,
-        });
+        await this._applyAgeAction({ botId, guildId, fc, member, client, ageDays });
         return;
       }
     }
@@ -230,8 +213,7 @@ export default class ModerationModule extends Module {
 
     this._log(botId, guildId, 'warn', 'moderation',
       `Рейд: ${recentMembers.length} входов за ${p.windowSec} с`, {
-        details: `${recentMembers.length} входов`,
-        action: 'raid_wave',
+        details: `${recentMembers.length} входов`, action: 'raid_wave',
       });
 
     try {
@@ -272,25 +254,23 @@ export default class ModerationModule extends Module {
 
     if (p.cooldownMin > 0) {
       state.cooldownUntil = Date.now() + p.cooldownMin * 60_000;
-      const t = setTimeout(() => {
-        state.cooldownUntil = null;
-      }, p.cooldownMin * 60_000);
+      const t = setTimeout(() => { state.cooldownUntil = null; }, p.cooldownMin * 60_000);
       t.unref?.();
       state.timers.add(t);
     }
 
     const actionText = {
-      alert:    'только уведомление модераторов',
+      alert: 'только уведомление модераторов',
       slowmode: `slowmode ${p.slowmodeSec} сек на ${p.lockdownDurationMin} мин`,
       lockdown: `lockdown на ${p.lockdownDurationMin} мин`,
-      kick_all: 'кик всех воефф',
-      ban_all:  'бан всех воефф',
+      kick_all: 'кик всех вовшед',
+      ban_all:  'бан всех вовшед',
     }[p.waveAction] || p.waveAction;
 
     await this._sendRaidAlert({
       client, fc, guildId, botId,
       reason: `Обнаружена "**Волна входов**", для них применено действие: **${actionText}**.`,
-      message: `🚨 Действие: **${recentMembers.length}** за **${p.windowSec} с**${raidModeNote}.`,
+      message: `Всего действий: **${recentMembers.length}** за **${p.windowSec} с**${raidModeNote}.`,
     });
   }
 
@@ -300,9 +280,7 @@ export default class ModerationModule extends Module {
 
     this._log(botId, guildId, 'warn', 'moderation',
       `новый аккаунт (${ageText}) · ${p.ageAction}`, {
-        userId: member.id,
-        action: 'raid_age',
-        details: ageText,
+        userId: member.id, action: 'raid_age', details: ageText,
       });
 
     try {
@@ -313,35 +291,23 @@ export default class ModerationModule extends Module {
           reason: `Автомодерация: аккаунт моложе ${p.minAccountAgeDays} дн.`,
           deleteMessageSeconds: 0,
         });
-
         if (p.ageBanDurationMin > 0) {
           try {
             this.db.addModAction(botId, guildId, {
-              userId: member.id,
-              moderatorId: null,
-              kind: 'ban',
+              userId: member.id, moderatorId: null, kind: 'ban',
               reason: 'новый аккаунт',
               expiresAt: Math.floor(Date.now() / 1000) + p.ageBanDurationMin * 60,
             });
-          } catch (err) {
-            this.logger.warn({ err, guildId }, 'moderation: age ban record failed');
-          }
+          } catch (err) { this.logger.warn({ err, guildId }, 'moderation: age ban record failed'); }
         }
       }
-    } catch (err) {
-      this.logger.warn({ err, guildId, ageAction: p.ageAction }, 'moderation: age action failed');
-    }
+    } catch (err) { this.logger.warn({ err, guildId, ageAction: p.ageAction }, 'moderation: age action failed'); }
 
-    const actionText = {
-      alert: 'только уведомление модераторов',
-      kick:  'кик',
-      ban:   'бан',
-    }[p.ageAction] || p.ageAction;
-
+    const actionText = { alert: 'только уведомление модераторов', kick: 'кик', ban: 'бан' }[p.ageAction] || p.ageAction;
     await this._sendRaidAlert({
       client, fc, guildId, botId,
-      reason: `Обнаружен "**Молодой аккаунт**", его возраст прочее менее **${p.minAccountAgeDays}** дней.`,
-      message: `🚨 <@${member.id}> · Возраст: **${ageText}** · Действие: **${actionText}**.`,
+      reason: `Обнаружен "**Молодой аккаунт**", его возраст меньше **${p.minAccountAgeDays}** дней.`,
+      message: `<@${member.id}> · Возраст: **${ageText}** · Действие: **${actionText}**.`,
     });
   }
 
@@ -349,9 +315,7 @@ export default class ModerationModule extends Module {
     const p = fc.params;
     this._log(botId, guildId, 'warn', 'moderation',
       `raid mode · ${p.raidModeAction}`, {
-        userId: member.id,
-        action: 'raid_mode',
-        details: reason,
+        userId: member.id, action: 'raid_mode', details: reason,
       });
 
     try {
@@ -359,27 +323,19 @@ export default class ModerationModule extends Module {
         await member.kick(`Автомодерация: ${reason}`);
       } else if (p.raidModeAction === 'ban') {
         await member.ban({
-          reason: `Автомодерация: ${reason}`,
-          deleteMessageSeconds: 0,
+          reason: `Автомодерация: ${reason}`, deleteMessageSeconds: 0,
         });
-
         if (p.raidModeBanDurationMin > 0) {
           try {
             this.db.addModAction(botId, guildId, {
-              userId: member.id,
-              moderatorId: null,
-              kind: 'ban',
+              userId: member.id, moderatorId: null, kind: 'ban',
               reason: 'raid mode',
               expiresAt: Math.floor(Date.now() / 1000) + p.raidModeBanDurationMin * 60,
             });
-          } catch (err) {
-            this.logger.warn({ err, guildId }, 'moderation: raid mode ban record failed');
-          }
+          } catch (err) { this.logger.warn({ err, guildId }, 'moderation: raid mode ban record failed'); }
         }
       }
-    } catch (err) {
-      this.logger.warn({ err, guildId, raidModeAction: p.raidModeAction }, 'moderation: raid mode entry failed');
-    }
+    } catch (err) { this.logger.warn({ err, guildId, raidModeAction: p.raidModeAction }, 'moderation: raid mode entry failed'); }
   }
 
   async _kickAll(members, client, reason) {
@@ -387,143 +343,97 @@ export default class ModerationModule extends Module {
       try {
         const m = member?.guild?.members?.cache.get(member.id) || member;
         if (m?.kick) await m.kick(reason);
-      } catch (err) {
-        this.logger.debug({ err, userId: member?.id }, 'moderation: kickAll item failed');
-      }
+      } catch (err) { this.logger.debug({ err, userId: member?.id }, 'moderation: kickAll item failed'); }
     }
   }
 
   async _banAll(members, client, guildId, reason, durationMin, botId) {
     const guild = client.guilds.cache.get(guildId);
     if (!guild) return;
-
     for (const member of members) {
       try {
         const userId = member?.id;
         if (!userId) continue;
-
-        await guild.members.ban(userId, {
-          reason: `Автомодерация: ${reason}`,
-          deleteMessageSeconds: 0,
-        });
-
+        await guild.members.ban(userId, { reason: `Автомодерация: ${reason}`, deleteMessageSeconds: 0 });
         if (durationMin > 0) {
           try {
             this.db.addModAction(botId, guildId, {
-              userId,
-              moderatorId: null,
-              kind: 'ban',
-              reason: 'рейд',
+              userId, moderatorId: null, kind: 'ban', reason: 'рейд',
               expiresAt: Math.floor(Date.now() / 1000) + durationMin * 60,
             });
-          } catch (err) {
-            this.logger.warn({ err, guildId }, 'moderation: banAll record failed');
-          }
+          } catch (err) { this.logger.warn({ err, guildId }, 'moderation: banAll record failed'); }
         }
-      } catch (err) {
-        this.logger.debug({ err, userId: member?.id }, 'moderation: banAll item failed');
-      }
+      } catch (err) { this.logger.debug({ err, userId: member?.id }, 'moderation: banAll item failed'); }
     }
   }
 
   async _applySlowmode({ client, guildId, seconds, durationMin }) {
     const guild = client.guilds.cache.get(guildId);
     if (!guild) return;
-
     const me = guild.members.me;
     const textChannels = guild.channels.cache.filter((c) =>
-      c.isTextBased?.() && c.permissionsFor(me)?.has('ManageChannels'),
-    );
-
+      c.isTextBased?.() && c.permissionsFor(me)?.has('ManageChannels'));
     const state = this._ensureRaidState(`${client.user.id}:${guildId}`);
     const snapshot = [];
-
     for (const [, ch] of textChannels) {
       try {
         snapshot.push({ channelId: ch.id, prev: ch.rateLimitPerUser || 0 });
         await ch.setRateLimitPerUser(seconds, 'Автомодерация: антирейд');
-      } catch (err) {
-        this.logger.debug({ err, channelId: ch.id }, 'moderation: slowmode set failed');
-      }
+      } catch (err) { this.logger.debug({ err, channelId: ch.id }, 'moderation: slowmode set failed'); }
     }
-
     state.restore.push({ type: 'slowmode', snapshot });
-
     const t = setTimeout(async () => {
       try {
         for (const { channelId, prev } of snapshot) {
           const ch = guild.channels.cache.get(channelId);
           if (ch) await ch.setRateLimitPerUser(prev, 'Автомодерация: снятие').catch(() => {});
         }
-      } catch (err) {
-        this.logger.warn({ err, guildId }, 'moderation: slowmode auto-clear failed');
-      }
+      } catch (err) { this.logger.warn({ err, guildId }, 'moderation: slowmode auto-clear failed'); }
     }, durationMin * 60_000);
     t.unref?.();
     state.timers.add(t);
   }
 
-  // КРИТИЧЕСКИЙ ФИКС: сохраняем и восстанавливаем фактические allow/deny bitfield-ы.
-  // Раньше при снятии lockdown выставляли [PERMISSION_SEND]: null (inherit).
-  // Если до lockdown у @everyone стоял явный SendMessages:false, то inherit
-  // мог открыть канал шире, чем было. Теперь восстанавливаем точные разрешения.
   async _applyLockdown({ client, guildId, durationMin }) {
     const guild = client.guilds.cache.get(guildId);
     if (!guild) return;
-
     const me = guild.members.me;
     const textChannels = guild.channels.cache.filter((c) =>
-      c.isTextBased?.() && c.permissionsFor(me)?.has('ManageChannels'),
-    );
-
+      c.isTextBased?.() && c.permissionsFor(me)?.has('ManageChannels'));
     const state = this._ensureRaidState(`${client.user.id}:${guildId}`);
     const snapshot = [];
-
     for (const [, ch] of textChannels) {
       try {
         const everyone = guild.roles.everyone;
         const current = ch.permissionOverwrites.cache.get(everyone.id);
-
         snapshot.push({
-          channelId: ch.id,
-          hadOverwrite: !!current,
+          channelId: ch.id, hadOverwrite: !!current,
           allow: current?.allow?.bitfield?.toString() ?? '0',
           deny:  current?.deny?.bitfield?.toString()  ?? '0',
         });
-
         await ch.permissionOverwrites.edit(everyone, {
           [PERMISSION_SEND]: false,
         }, { reason: 'Автомодерация: антирейд' });
-      } catch (err) {
-        this.logger.debug({ err, channelId: ch.id }, 'moderation: lockdown set failed');
-      }
+      } catch (err) { this.logger.debug({ err, channelId: ch.id }, 'moderation: lockdown set failed'); }
     }
-
     state.restore.push({ type: 'lockdown', snapshot });
-
     const t = setTimeout(async () => {
       try {
         for (const snap of snapshot) {
           const ch = guild.channels.cache.get(snap.channelId);
           if (!ch) continue;
           const everyone = guild.roles.everyone;
-
           if (!snap.hadOverwrite) {
             await ch.permissionOverwrites.delete(everyone, 'Автомодерация: снятие lockdown').catch(() => {});
           } else {
             try {
               await ch.permissionOverwrites.edit(everyone, {
-                allow: BigInt(snap.allow),
-                deny:  BigInt(snap.deny),
+                allow: BigInt(snap.allow), deny: BigInt(snap.deny),
               }, { reason: 'Автомодерация: снятие lockdown' });
-            } catch (e) {
-              this.logger.warn({ err: e, channelId: ch.id }, 'moderation: lockdown restore failed');
-            }
+            } catch (e) { this.logger.warn({ err: e, channelId: ch.id }, 'moderation: lockdown restore failed'); }
           }
         }
-      } catch (err) {
-        this.logger.warn({ err, guildId }, 'moderation: lockdown auto-clear failed');
-      }
+      } catch (err) { this.logger.warn({ err, guildId }, 'moderation: lockdown auto-clear failed'); }
     }, durationMin * 60_000);
     t.unref?.();
     state.timers.add(t);
@@ -532,63 +442,40 @@ export default class ModerationModule extends Module {
   _ensureRaidState(key) {
     let s = this._raidState.get(key);
     if (!s) {
-      s = {
-        cooldownUntil: null,
-        raidModeUntil: null,
-        restore: [],
-        timers: new Set(),
-      };
+      s = { cooldownUntil: null, raidModeUntil: null, restore: [], timers: new Set() };
       this._raidState.set(key, s);
     }
     return s;
   }
 
-  /* ─── Наказание ─── */
-
   async _applyPunishment({ botId, guildId, filterKey, filterCfg, message, client, hit }) {
     await this._deleteMessages({ client, guildId, message, hit });
-
     const esc = filterCfg.escalation;
     const since = esc.resetEnabled
-      ? Math.floor(Date.now() / 1000) - esc.resetDays * 86_400
-      : 0;
+      ? Math.floor(Date.now() / 1000) - esc.resetDays * 86_400 : 0;
     const prev = this.db.countEvents(botId, guildId, `automod_${filterKey}`, since);
     const violation = prev + 1;
-
     const { action, durationMin } = this._resolveFilterAction(filterCfg, violation);
 
     if (action !== 'delete') {
       try {
         this.db.addModAction(botId, guildId, {
-          userId: message.author.id,
-          moderatorId: null,
+          userId: message.author.id, moderatorId: null,
           kind: this._actionToKind(action),
           reason: FILTER_META[filterKey]?.name || filterKey,
-          filterKey,
-          violation,
-          expiresAt: durationMin > 0
-            ? Math.floor(Date.now() / 1000) + durationMin * 60
-            : null,
+          filterKey, violation,
+          expiresAt: durationMin > 0 ? Math.floor(Date.now() / 1000) + durationMin * 60 : null,
         });
-      } catch (err) {
-        this.logger.warn({ err, guildId }, 'moderation: addModAction failed');
-      }
+      } catch (err) { this.logger.warn({ err, guildId }, 'moderation: addModAction failed'); }
     } else {
-      this._log(
-        botId, guildId, 'warn', 'moderation',
-        'Сообщение удалено', {
-          userId: message.author.id,
-          action: 'delete',
-          filterKey,
-          filterName: FILTER_META[filterKey]?.name || filterKey,
-          reason: hit.reason,
-          details: hit.details,
-          message: formatMessageForLog(message.content, message.attachments, 500),
-        },
-      );
+      this._log(botId, guildId, 'warn', 'moderation', 'сообщение удалено', {
+        userId: message.author.id, action: 'delete', filterKey,
+        filterName: FILTER_META[filterKey]?.name || filterKey,
+        reason: hit.reason, details: hit.details,
+        message: formatMessageForLog(message.content, message.attachments, 500),
+      });
     }
 
-    // КРИТИЧЕСКИЙ ФИКС: timeout >28 дней Discord отклоняет.
     try {
       if (action === 'mute') {
         const safeMin = Math.min(durationMin, MAX_TIMEOUT_MINUTES);
@@ -596,14 +483,9 @@ export default class ModerationModule extends Module {
       } else if (action === 'kick') {
         await message.member.kick(`Автомодерация: ${hit.reason}`);
       } else if (action === 'ban') {
-        await message.member.ban({
-          reason: `Автомодерация: ${hit.reason}`,
-          deleteMessageSeconds: 0,
-        });
+        await message.member.ban({ reason: `Автомодерация: ${hit.reason}`, deleteMessageSeconds: 0 });
       }
-    } catch (err) {
-      this.logger.warn({ err, guildId, action }, 'moderation: discord action failed');
-    }
+    } catch (err) { this.logger.warn({ err, guildId, action }, 'moderation: discord action failed'); }
 
     try {
       this.db.addEvent({
@@ -611,139 +493,84 @@ export default class ModerationModule extends Module {
         type: `automod_${filterKey}`,
         meta: { reason: hit.reason, details: hit.details, violation, action },
       });
-    } catch (err) {
-      this.logger.warn({ err, guildId }, 'moderation: addEvent failed');
-    }
+    } catch (err) { this.logger.warn({ err, guildId }, 'moderation: addEvent failed'); }
 
     await this._sendLog({ message, client, filterCfg, filterKey, hit, action, violation });
     await this._sendDm({ message, filterCfg, filterKey, hit, action, violation });
   }
 
-  // КРИТИЧЕСКИЙ ФИКС: bulkDelete для групп в одном канале.
-  // Раньше — поштучные fetch+delete. Discord bulkDelete быстрее в 10–50 раз
-  // и не упирается в rate-limit. Ограничение bulkDelete: окно 14 дней —
-  // старые сообщения Discord просто игнорирует.
   async _deleteMessages({ client, guildId, message, hit }) {
     try { await message.delete(); }
-    catch (err) {
-      this.logger.warn(
-        { err, guildId, msgId: message.id },
-        'moderation: delete failed (check Manage Messages)',
-      );
-    }
+    catch (err) { this.logger.warn({ err, guildId, msgId: message.id }, 'moderation: delete failed'); }
 
     const list = hit.matchedMessageIds;
     if (!Array.isArray(list) || list.length <= 1) return;
-
     const byChannel = new Map();
     for (const { messageId, channelId } of list) {
       if (messageId === message.id) continue;
       if (!byChannel.has(channelId)) byChannel.set(channelId, []);
       byChannel.get(channelId).push(messageId);
     }
-
     for (const [channelId, ids] of byChannel) {
       try {
         const channel = client.channels.cache.get(channelId)
           || await client.channels.fetch(channelId).catch(() => null);
         if (!channel?.isSendable?.()) continue;
-
         if (ids.length >= 2) {
-          try {
-            await channel.bulkDelete(ids, true);
-            continue;
-          } catch (err) {
-            this.logger.debug({ err, channelId }, 'moderation: bulkDelete failed, falling back');
-          }
+          try { await channel.bulkDelete(ids, true); continue; }
+          catch (err) { this.logger.debug({ err, channelId }, 'moderation: bulkDelete failed, falling back'); }
         }
-
         for (const messageId of ids) {
           try {
             const msg = channel.messages.cache.get(messageId)
               || await channel.messages.fetch(messageId).catch(() => null);
             if (msg) await msg.delete();
-          } catch (err) {
-            this.logger.debug({ err, channelId, messageId }, 'moderation: batch delete item failed');
-          }
+          } catch (err) { this.logger.debug({ err, channelId, messageId }, 'moderation: batch delete item failed'); }
         }
-      } catch (err) {
-        this.logger.debug({ err, channelId }, 'moderation: delete group failed');
-      }
+      } catch (err) { this.logger.debug({ err, channelId }, 'moderation: delete group failed'); }
     }
   }
 
-  /* ─── Истечение банов ─── */
-
   async _expireBans() {
     const now = Math.floor(Date.now() / 1000);
-
     for (const inst of this.botManager.all()) {
       if (!inst?.client?.isReady?.()) continue;
-
       for (const guild of inst.client.guilds.cache.values()) {
         let bans = [];
-        try {
-          bans = this.db.getExpiredBans(inst.id, guild.id, now);
-        } catch (err) {
-          this.logger.debug({ err, guildId: guild.id }, 'moderation: getExpiredBans failed');
-          continue;
-        }
-
+        try { bans = this.db.getExpiredBans(inst.id, guild.id, now); }
+        catch (err) { this.logger.debug({ err, guildId: guild.id }, 'moderation: getExpiredBans failed'); continue; }
         for (const b of bans) {
-          try {
-            await guild.bans.remove(b.user_id, 'Автомодерация: срок бана истёк');
-          } catch (err) {
+          try { await guild.bans.remove(b.user_id, 'Автомодерация: срок бана истёк'); }
+          catch (err) {
             if (err?.code !== 10026) {
-              this.logger.warn(
-                { err, guildId: guild.id, userId: b.user_id },
-                'moderation: unban failed',
-              );
+              this.logger.warn({ err, guildId: guild.id, userId: b.user_id }, 'moderation: unban failed');
             }
           }
-
           try {
             this.db.markModActionRemoved(inst.id, guild.id, b.id, 'system');
             this.db.addLog(inst.id, guild.id, {
               level: 'info', module: 'moderation',
-              userId: b.user_id,
-              message: 'Срок бана истёк',
+              userId: b.user_id, message: 'Срок бана истёк',
               meta: { banId: b.id, userId: b.user_id, expiresAt: b.expires_at },
             });
-          } catch (err) {
-            this.logger.debug({ err, banId: b.id }, 'moderation: expire record failed');
-          }
+          } catch (err) { this.logger.debug({ err, banId: b.id }, 'moderation: expire record failed'); }
         }
       }
     }
   }
-
-  /* ─── Утилиты ─── */
 
   _resolveFilterAction(filterCfg, violation) {
     if (filterCfg.escalation.enabled && filterCfg.escalation.rows.length) {
       const row = filterCfg.escalation.rows[
         Math.min(violation, filterCfg.escalation.rows.length) - 1
       ];
-      if (row) {
-        return {
-          action: row.action,
-          durationMin: row.durationMin,
-        };
-      }
+      if (row) return { action: row.action, durationMin: row.durationMin };
     }
-    return {
-      action: filterCfg.action,
-      durationMin: filterCfg.durationMin,
-    };
+    return { action: filterCfg.action, durationMin: filterCfg.durationMin };
   }
 
   _actionToKind(action) {
-    return {
-      warn: 'warn',
-      mute: 'mute',
-      kick: 'kick',
-      ban:  'ban',
-    }[action] || 'auto';
+    return { warn: 'warn', mute: 'mute', kick: 'kick', ban: 'ban' }[action] || 'auto';
   }
 
   _actionLabel(action) {
@@ -752,14 +579,14 @@ export default class ModerationModule extends Module {
 
   async _sendLog({ message, client, filterCfg, filterKey, hit, action, violation }) {
     if (!filterCfg.logChannelId) return;
-
     const channel = await client.channels.fetch(filterCfg.logChannelId).catch(() => null);
     if (!channel?.isSendable?.() || channel.guild.id !== message.guild.id) return;
 
     const tokens = {
-      user: mentionUser(message.author.id),
+      user: `<@${message.author.id}>`,
+      mention: `<@${message.author.id}>`,
       username: message.author.username,
-      displayName: message.member?.displayName || message.author.username,
+      displayName: message.member?.displayName || message.author.globalName || message.author.username,
       userId: message.author.id,
       reason: hit.reason,
       action: this._actionLabel(action),
@@ -772,20 +599,12 @@ export default class ModerationModule extends Module {
       guild: message.guild.name,
     };
 
-    let components;
     try {
-      components = buildComponentsFromConfig(filterCfg.templateLog, tokens);
-    } catch (err) {
-      this.logger.warn({ err }, 'moderation: log buildComponents failed');
-      return;
-    }
-    if (!components?.length) return;
-
-    try {
-      await channel.send({
-        flags: FLAG_COMPONENTS_V2,
-        components,
-        allowedMentions: buildAllowedMentions(components, { ping: false }),
+      await sendMessageConfig(channel, filterCfg.templateLog, tokens, {
+        ping: false,
+        label: 'moderation.log',
+        logger: this.logger,
+        context: { bot_id: client.user.id, guild_id: message.guild.id },
       });
     } catch (err) {
       this.logger.warn({ err, guildId: message.guild.id }, 'moderation: log send failed');
@@ -797,9 +616,10 @@ export default class ModerationModule extends Module {
     if (!filterCfg.templateDm) return;
 
     const tokens = {
-      user: mentionUser(message.author.id),
+      user: `<@${message.author.id}>`,
+      mention: `<@${message.author.id}>`,
       username: message.author.username,
-      displayName: message.member?.displayName || message.author.username,
+      displayName: message.member?.displayName || message.author.globalName || message.author.username,
       reason: hit.reason,
       action: this._actionLabel(action),
       filter: FILTER_META[filterKey]?.name || filterKey,
@@ -812,21 +632,23 @@ export default class ModerationModule extends Module {
       message: formatMessageForLog(message.content, message.attachments),
     };
 
-    let embed;
-    try {
-      embed = v2ConfigToEmbed(filterCfg.templateDm, tokens);
-    } catch (err) {
-      this.logger.warn({ err }, 'moderation: dm buildEmbed failed');
-      return;
-    }
-    if (!embedHasContent(embed)) return;
+    const dmChannel = await message.author.createDM().catch(() => null);
+    if (!dmChannel) return;
 
-    message.author.send({ embeds: [embed] }).catch(() => {});
+    try {
+      await sendMessageConfig(dmChannel, filterCfg.templateDm, tokens, {
+        ping: false,
+        label: 'moderation.dm',
+        logger: this.logger,
+        context: { bot_id: message.client.user.id, guild_id: message.guild?.id },
+      });
+    } catch (err) {
+      this.logger.debug({ err, userId: message.author.id }, 'moderation: dm send failed');
+    }
   }
 
   async _sendRaidAlert({ client, fc, guildId, botId, reason, message }) {
     if (!fc.logChannelId) return;
-
     const channel = await client.channels.fetch(fc.logChannelId).catch(() => null);
     if (!channel?.isSendable?.() || channel.guild.id !== guildId) return;
 
@@ -837,20 +659,12 @@ export default class ModerationModule extends Module {
       guild: channel.guild.name,
     };
 
-    let components;
     try {
-      components = buildComponentsFromConfig(fc.templateLog, tokens);
-    } catch (err) {
-      this.logger.warn({ err }, 'moderation: raid alert build failed');
-      return;
-    }
-    if (!components?.length) return;
-
-    try {
-      await channel.send({
-        flags: FLAG_COMPONENTS_V2,
-        components,
-        allowedMentions: buildAllowedMentions(components, { ping: false }),
+      await sendMessageConfig(channel, fc.templateLog, tokens, {
+        ping: false,
+        label: 'moderation.raid',
+        logger: this.logger,
+        context: { bot_id: botId, guild_id: guildId },
       });
     } catch (err) {
       this.logger.warn({ err, guildId }, 'moderation: raid alert send failed');
@@ -866,34 +680,25 @@ export default class ModerationModule extends Module {
   _log(botId, guildId, level, module, message, meta) {
     try {
       this.db.addLog(botId, guildId, {
-        level,
-        module,
-        message,
-        userId: meta?.userId || null,
-        meta,
+        level, module, message,
+        userId: meta?.userId || null, meta,
       });
-    } catch (err) {
-      this.logger.warn({ err, guildId }, 'moderation: addLog failed');
-    }
+    } catch (err) { this.logger.warn({ err, guildId }, 'moderation: addLog failed'); }
   }
 
   _cleanup() {
     const cutoff = Date.now() - SPAM_MAP_TTL;
-
     for (const [k, arr] of this._spamMap) {
       const fresh = arr.filter((x) => x.ts > cutoff);
-      if (!fresh.length) this._spamMap.delete(k);
-      else this._spamMap.set(k, fresh);
+      if (!fresh.length) this._spamMap.delete(k); else this._spamMap.set(k, fresh);
     }
     for (const [k, arr] of this._dupMap) {
       const fresh = arr.filter((x) => x.ts > cutoff);
-      if (!fresh.length) this._dupMap.delete(k);
-      else this._dupMap.set(k, fresh);
+      if (!fresh.length) this._dupMap.delete(k); else this._dupMap.set(k, fresh);
     }
     for (const [k, arr] of this._joinMap) {
       const fresh = arr.filter((x) => x.ts > cutoff);
-      if (!fresh.length) this._joinMap.delete(k);
-      else this._joinMap.set(k, fresh);
+      if (!fresh.length) this._joinMap.delete(k); else this._joinMap.set(k, fresh);
     }
   }
 }

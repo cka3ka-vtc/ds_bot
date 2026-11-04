@@ -95,9 +95,9 @@ export function mountBlockMethods(MessageEditor) {
       switch (block.type) {
         case 'text':
           return `
-            ${this._toolbarHTML()}
+            ${this._toolbarHTML('rich')}
             <textarea class="input" data-field="content" data-token-context="rich"
-                      rows="3" maxlength="${LIMITS.maxText}">${escapeHtml(block.content || '')}</textarea>
+            rows="3" maxlength="${LIMITS.maxText}">${escapeHtml(block.content || '')}</textarea>
             <div class="char-counter" data-counter>${(block.content || '').length} / ${LIMITS.maxText}</div>
           `;
 
@@ -223,9 +223,9 @@ export function mountBlockMethods(MessageEditor) {
 
         case 'footer':
           return `
-            ${this._toolbarHTML()}
+            ${this._toolbarHTML('footer')}
             <input class="input" data-field="content" data-token-context="footer"
-                   placeholder="${B.footerPlaceholder}" value="${escapeHtml(block.content || '')}">
+            placeholder="${B.footerPlaceholder}" value="${escapeHtml(block.content || '')}">
           `;
 
         default: return '';

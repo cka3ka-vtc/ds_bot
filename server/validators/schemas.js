@@ -180,7 +180,7 @@ const messageBlockSchema = z.object({
 }).passthrough();
 
 const messageConfigSchema = z.object({
-  displayMode: z.enum(['flat', 'embed', 'embed-color']).optional(),
+  displayMode: z.enum(['context', 'flat', 'embed', 'embed-color']).optional(),
   accentColor: hexColor.optional(),
   title: z.string().max(4000).optional(),
   subtitle: z.string().max(4000).optional(),

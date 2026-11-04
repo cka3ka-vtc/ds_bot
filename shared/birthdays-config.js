@@ -1,9 +1,7 @@
 // shared/birthdays-config.js
-// Единый источник дефолтов и нормализации конфига модуля «Дни рождения».
-
 function defaultMessageConfig() {
   return {
-    displayMode: 'embed-color',
+    displayMode: 'context',
     accentColor: '#ec4899',
     title: '',
     subtitle: '',
@@ -18,10 +16,7 @@ export function defaultBirthdaysConfig() {
     birthdayRoleId: '',
     sendTime: '09:00',
     deleteOldAnnouncements: true,
-    // Исключённые роли — если у участника есть любая, не поздравляем.
     excludedRoles: [],
-    // Разрешённые роли — если список непустой, поздравляем только тех,
-    // у кого есть хотя бы одна из этих ролей. Excluded побеждает required.
     requiredRoles: [],
     messages: {
       announce:  defaultMessageConfig(),

@@ -1,8 +1,6 @@
 // server/modules/scheduled.js
 import { Module } from './_base.js';
-import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../core/componentsBuilder.js';
-import { buildAllowedMentions } from '../core/mentions.js';
-import { retryDiscord } from '../core/retry.js';
+import { sendMessageConfig } from '../core/message-sender.js';
 
 const TICK_INTERVAL_MS = 30_000;
 
@@ -21,7 +19,6 @@ export default class ScheduledModule extends Module {
       });
     }, TICK_INTERVAL_MS);
     this._tickInterval.unref?.();
-
     this.logger.info({ module: 'scheduled', tickMs: TICK_INTERVAL_MS }, 'scheduled: registered');
   }
 
@@ -40,17 +37,14 @@ export default class ScheduledModule extends Module {
 
       for (const guild of inst.client.guilds.cache.values()) {
         let due = [];
-        try {
-          due = this.db.getDueScheduled(inst.id, guild.id, now);
-        } catch (err) {
+        try { due = this.db.getDueScheduled(inst.id, guild.id, now); }
+        catch (err) {
           this.logger.debug({ err, guildId: guild.id }, 'scheduled: fetch due failed');
           continue;
         }
         if (!due.length) continue;
 
-        for (const item of due) {
-          await this._sendItem(inst, guild, item);
-        }
+        for (const item of due) await this._sendItem(inst, guild, item);
       }
     }
   }
@@ -71,34 +65,22 @@ export default class ScheduledModule extends Module {
       guildIconUrl: guild.iconURL?.({ size: 128 }) || '',
       count: guild.memberCount || 0,
     };
-    const components = buildComponentsFromConfig(messageConfig, tokens);
-    if (!components?.length) {
-      this.db.markScheduledError(botId, guild.id, id, 'empty_message');
-      return;
-    }
 
     try {
-      const msg = await retryDiscord(
-        () => channel.send({
-          flags: FLAG_COMPONENTS_V2,
-          components,
-          allowedMentions: buildAllowedMentions(components, { ping: false }),
-        }),
-        {
-          maxAttempts: 3,
-          baseDelayMs: 800,
-          maxDelayMs: 8000,
-          label: 'scheduled.auto.send',
-          logger: this.logger,
-          context: { bot_id: botId, guild_id: guild.id, scheduled_id: id },
-        },
-      );
+      const msg = await sendMessageConfig(channel, messageConfig, tokens, {
+        ping: false,
+        label: 'scheduled.auto.send',
+        logger: this.logger,
+        context: { bot_id: botId, guild_id: guild.id, scheduled_id: id },
+      });
+
+      if (!msg) {
+        this.db.markScheduledError(botId, guild.id, id, 'empty_message');
+        return;
+      }
 
       this.db.markScheduledSent(botId, guild.id, id, Math.floor(Date.now() / 1000));
-      this.logger.info(
-        { botId, guildId: guild.id, scheduledId: id, messageId: msg.id },
-        'scheduled: sent',
-      );
+      this.logger.info({ botId, guildId: guild.id, scheduledId: id, messageId: msg.id }, 'scheduled: sent');
     } catch (err) {
       this.db.markScheduledError(botId, guild.id, id, err.message);
       this.logger.warn({ err, scheduledId: id }, 'scheduled: auto send failed');

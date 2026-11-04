@@ -8,6 +8,106 @@ export function mountPreviewMethods(MessageEditor) {
 
     _renderPreview() {
       if (!this._previewEl) return;
+      const mode = this.config.displayMode || 'context';
+      if (mode === 'context') {
+        this._renderPreviewContent();
+      } else {
+        this._renderPreviewV2();
+      }
+    },
+
+    /* ============ Content (markdown, отрендеренный как сообщение) ============ */
+
+    _renderPreviewContent() {
+      const markdown = this._buildMarkdownForPreview(this.config);
+      const emptyText = `<div class="dp-empty">${UI.msgEditor.preview.empty}</div>`;
+
+      if (!markdown.trim()) {
+        this._previewEl.innerHTML = emptyText;
+        return;
+      }
+      this._previewEl.innerHTML = `<div class="dp-content">${this._md(markdown, { blockMode: true })}</div>`;
+    },
+
+    _buildMarkdownForPreview(config) {
+      if (!config || typeof config !== 'object') return '';
+      const parts = [];
+
+      if (config.title) {
+        const t = String(config.title).trim();
+        if (t) parts.push(`## ${t}`);
+      }
+      if (config.subtitle) {
+        const s = String(config.subtitle).trim();
+        if (s) parts.push(s);
+      }
+
+      for (const block of config.blocks || []) {
+        switch (block.type) {
+          case 'text':
+          case 'section':
+            if (block.content) {
+              const t = String(block.content).trim();
+              if (t) parts.push(t);
+            }
+            break;
+
+          case 'sections': {
+            const lines = [];
+            if (block.title) {
+              const t = String(block.title).trim();
+              if (t) lines.push(`**${t}**`);
+            }
+            if (Array.isArray(block.items)) {
+              block.items.forEach((item, i) => {
+                const resolved = String(item || '').trim();
+                if (!resolved) return;
+                const prefix = block.listStyle === 'dot' ? '•' : `${i + 1}.`;
+                lines.push(`${prefix} ${resolved}`);
+              });
+            }
+            if (lines.length) parts.push(lines.join('\n'));
+            break;
+          }
+
+          case 'separator':
+            if (block.spacing === 2) {
+              parts.push('');
+              parts.push('━━━━━━━━━━━━━');
+              parts.push('');
+            } else {
+              parts.push('━━━━━━━━━━━━━');
+            }
+            break;
+
+          case 'footer':
+            if (block.content) {
+              const t = String(block.content).trim();
+              if (t) parts.push(`-# ${t}`);
+            }
+            break;
+
+          case 'buttons': {
+            if (Array.isArray(block.buttons)) {
+              const links = block.buttons
+                .filter((b) => b.url && /^https?:\/\//i.test(b.url))
+                .map((b) => {
+                  const label = String(b.label || 'Ссылка').trim();
+                  return `[${label}](${b.url})`;
+                });
+              if (links.length) parts.push(links.join(' · '));
+            }
+            break;
+          }
+        }
+      }
+
+      return parts.join('\n\n').trim();
+    },
+
+    /* ============ V2 / embed ============ */
+
+    _renderPreviewV2() {
       const inner = this._buildPreviewInner(this.config);
       const emptyText = `<div class="dp-empty">${UI.msgEditor.preview.empty}</div>`;
 
@@ -108,9 +208,6 @@ export function mountPreviewMethods(MessageEditor) {
       return html;
     },
 
-    // КРИТИЧЕСКИЙ ФИКС: пропускаем только http(s). Раньше `javascript:alert(1)`
-    // попадал в <img src>, что безопасно в браузере, но лучше не пускать вовсе.
-    // Также {avatarUrl}/{guildIconUrl} резолвятся из previewTokens.
     _resolveUrl(url) {
       if (!url) return '';
       const t = String(url).trim();
@@ -120,16 +217,16 @@ export function mountPreviewMethods(MessageEditor) {
       return t;
     },
 
-    _md(text) {
+    /* ============ Markdown → HTML ============ */
+
+    _md(text, { blockMode = false } = {}) {
       if (!text) return '';
       let html = escapeHtml(text);
 
-      // <t:UNIX:CODE> — Discord timestamp
       html = html.replace(/&lt;t:(\d+):([RrFfDdTt])&gt;/g, (_, u, c) =>
         `<span class="dp-time-tag">${escapeHtml(formatDateByCode(new Date(parseInt(u, 10) * 1000), c))}</span>`
       );
 
-      // {time} / {time:CODE} — события форматкат
       html = html.replace(/\{time(?::([RrFfDdTt]))?\}/g, (_, c) =>
         `<span class="dp-time-tag">${escapeHtml(formatDateByCode(new Date(), c || 'f'))}</span>`
       );
@@ -192,7 +289,6 @@ export function mountPreviewMethods(MessageEditor) {
 
       html = html.replace(/\{streakDays\}/g, t.streakDays != null ? String(t.streakDays) : '');
 
-      /* Birthdays */
       html = html.replace(/\{birthdayFull\}/g, t.birthdayFull != null ? escapeHtml(String(t.birthdayFull)) : '');
       html = html.replace(/\{birthday\}/g, t.birthday != null ? escapeHtml(String(t.birthday)) : '');
       html = html.replace(/\{birthdaysCount\}/g, t.birthdaysCount != null ? escapeHtml(String(t.birthdaysCount)) : '');
@@ -202,7 +298,6 @@ export function mountPreviewMethods(MessageEditor) {
         return escapeHtml(String(age));
       });
 
-      /* Moderation (log / dm / raid) */
       html = html.replace(/\{reason\}/g,    () => (t.reason    != null ? esc(t.reason)    : ''));
       html = html.replace(/\{message\}/g,   () => (t.message   != null ? esc(t.message)   : ''));
       html = html.replace(/\{filter\}/g,    () => (t.filter    != null ? esc(t.filter)    : ''));
@@ -217,18 +312,101 @@ export function mountPreviewMethods(MessageEditor) {
       html = html.replace(/\{avatarUrl\}/g, '<span class="dp-mention">[avatar]</span>');
       html = html.replace(/\{guildIconUrl\}/g, '<span class="dp-mention">[icon]</span>');
 
-      // Markdown
+      // Inline markdown
       html = html.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="dp-link">$1</a>');
       html = html.replace(/\|\|(.+?)\|\|/g, '<span class="dp-spoiler">$1</span>');
+      html = html.replace(/```([\s\S]+?)```/g, '<pre class="dp-code">$1</pre>');
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
       html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
       html = html.replace(/__(.+?)__/g, '<u>$1</u>');
       html = html.replace(/~~(.+?)~~/g, '<s>$1</s>');
       html = html.replace(/\*(.+?)\*/g, '<i>$1</i>');
-      html = html.replace(/```([\s\S]+?)```/g, '<code style="display:block;padding:8px;border-radius:4px;background:#1e1f22;margin:4px 0;">$1</code>');
-      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-      html = html.replace(/^&gt; (.+)$/gm, '<div class="dp-quote">$1</div>');
-      html = html.replace(/\n/g, '<br>');
+
+      if (blockMode) {
+        html = this._applyBlockMarkdown(html);
+      } else {
+        html = html.replace(/^&gt; (.+)$/gm, '<div class="dp-quote">$1</div>');
+        html = html.replace(/\n/g, '<br>');
+      }
+
       return html;
+    },
+
+    _applyBlockMarkdown(html) {
+      const lines = html.split('\n');
+      const out = [];
+      let list = null;
+      let inlineBuffer = [];
+
+      const flushList = () => {
+        if (list) {
+          const cls = list.type === 'ol' ? 'dp-list dp-ol' : 'dp-list dp-ul';
+          out.push(`<${list.type} class="${cls}">${list.items.map((i) => `<li>${i}</li>`).join('')}</${list.type}>`);
+          list = null;
+        }
+      };
+
+      const flushInline = () => {
+        let trailingBlankLines = 0;
+        for (let i = inlineBuffer.length - 1; i >= 0; i--) {
+          if (inlineBuffer[i].trim()) break;
+          trailingBlankLines++;
+        }
+        while (inlineBuffer.length && !inlineBuffer[0].trim()) inlineBuffer.shift();
+        while (inlineBuffer.length && !inlineBuffer[inlineBuffer.length - 1].trim()) inlineBuffer.pop();
+        if (inlineBuffer.length) {
+          out.push(inlineBuffer.join('<br>'));
+        }
+        inlineBuffer = [];
+        return { trailingBlankLines };
+      };
+
+      for (const rawLine of lines) {
+        let m;
+
+        if ((m = rawLine.match(/^### (.+)$/))) { flushList(); flushInline(); out.push(`<div class="dp-h3">${m[1]}</div>`); continue; }
+        if ((m = rawLine.match(/^## (.+)$/)))  { flushList(); flushInline(); out.push(`<div class="dp-h2">${m[1]}</div>`); continue; }
+        if ((m = rawLine.match(/^# (.+)$/)))   { flushList(); flushInline(); out.push(`<div class="dp-h1">${m[1]}</div>`); continue; }
+
+        if ((m = rawLine.match(/^-# (.+)$/)))  { flushList(); flushInline(); out.push(`<div class="dp-subtext">${m[1]}</div>`); continue; }
+
+        if ((m = rawLine.match(/^&gt; (.+)$/))) { flushList(); flushInline(); out.push(`<div class="dp-quote">${m[1]}</div>`); continue; }
+
+        if (/^━+$/.test(rawLine)) {
+          flushList();
+          const { trailingBlankLines } = flushInline();
+          const isLarge = trailingBlankLines >= 2;
+          const margin = isLarge ? '18px 0' : '8px 0';
+          const cls = isLarge ? 'dp-hr dp-hr--large' : 'dp-hr';
+          out.push(
+            `<hr class="${cls}" data-spacing="${isLarge ? 'large' : 'small'}" ` +
+            `style="border:none;border-top:1px solid rgba(255,255,255,.08);margin:${margin}">`
+          );
+          continue;
+        }
+
+        if ((m = rawLine.match(/^\d+\. (.+)$/))) {
+          flushInline();
+          if (!list || list.type !== 'ol') { flushList(); list = { type: 'ol', items: [] }; }
+          list.items.push(m[1]);
+          continue;
+        }
+
+        if ((m = rawLine.match(/^[•\-] (.+)$/))) {
+          flushInline();
+          if (!list || list.type !== 'ul') { flushList(); list = { type: 'ul', items: [] }; }
+          list.items.push(m[1]);
+          continue;
+        }
+
+        flushList();
+        inlineBuffer.push(rawLine);
+      }
+
+      flushList();
+      flushInline();
+
+      return out.join('');
     },
 
   });

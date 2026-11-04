@@ -30,8 +30,13 @@ export class MessageEditor {
     this._dragSrcIndex = -1;
     this._abort = null;
 
-    // 🆕 Скрытые типы блоков (например, для вложенных редакторов,
-    // чтобы не было рекурсии role-buttons → role-buttons).
+    // Скрыть displayMode-селектор (mode/accent/thumbnail) в UI.
+    // Используется в модулях, где сообщение уходит как content (v2ConfigToMarkdown)
+    // или как embed-без-опций (moderation DM). В V2-модулях (sticky, scheduled,
+    // message-templates, commands) НЕ передаётся — там mode работает как раньше.
+    this._hideDisplayMode = !!opts.hideDisplayMode;
+
+    // Скрытие отдельных типов блоков (напр. role-buttons в moderation DM).
     this._hiddenBlockTypes = new Set(opts.hideBlockTypes || []);
 
     this._collapseKey = `msg_editor_collapsed_${opts.guildId || 'x'}_${opts.context || 'default'}`;
@@ -48,7 +53,6 @@ export class MessageEditor {
   }
 
   mount() {
-    // 🆕 Убираем блоки скрытых типов на случай загрузки старого конфига
     if (this._hiddenBlockTypes.size > 0) {
       this.config.blocks = (this.config.blocks || [])
         .filter((b) => !this._hiddenBlockTypes.has(b.type));

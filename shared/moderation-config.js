@@ -83,7 +83,7 @@ const DM_TEXTS = {
 
 export function filterDmDefault(key) {
   return {
-    displayMode: 'embed-color',
+    displayMode: 'context',
     accentColor: FILTER_ACCENT[key] || '#5865F2',
     title: 'Сообщение удалено',
     subtitle: '',
@@ -106,7 +106,7 @@ export function filterDmDefault(key) {
  */
 function raidLogDefault() {
   return {
-    displayMode: 'embed-color',
+    displayMode: 'context',
     accentColor: '#dc2626',
     title: 'Антирейд',
     subtitle: '',
@@ -132,10 +132,9 @@ function raidLogDefault() {
  */
 export function filterLogDefault(key) {
   if (key === 'raid') return raidLogDefault();
-
   const meta = FILTER_META[key];
   return {
-    displayMode: 'embed-color',
+    displayMode: 'context',
     accentColor: FILTER_ACCENT[key] || '#5865F2',
     title: meta?.name || key,
     subtitle: '',
@@ -285,12 +284,14 @@ export function mergeMessageConfig(raw) {
   const d = defaultMessageConfig();
   if (!raw || typeof raw !== 'object') return d;
   return {
-    displayMode: ['flat', 'embed', 'embed-color'].includes(raw.displayMode) ? raw.displayMode : d.displayMode,
+    displayMode: ['context', 'flat', 'embed', 'embed-color'].includes(raw.displayMode)
+      ? raw.displayMode
+      : d.displayMode,
     accentColor: typeof raw.accentColor === 'string' ? raw.accentColor : d.accentColor,
-    title:    typeof raw.title === 'string' ? raw.title : '',
-    subtitle: typeof raw.subtitle === 'string' ? raw.subtitle : '',
+    title:     typeof raw.title === 'string' ? raw.title : '',
+    subtitle:  typeof raw.subtitle === 'string' ? raw.subtitle : '',
     thumbnail: typeof raw.thumbnail === 'string' ? raw.thumbnail : '',
-    blocks:   Array.isArray(raw.blocks) ? raw.blocks : [],
+    blocks:    Array.isArray(raw.blocks) ? raw.blocks : [],
   };
 }
 

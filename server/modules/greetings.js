@@ -1,9 +1,7 @@
 // server/modules/greetings.js
 import { Module } from './_base.js';
-import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../core/componentsBuilder.js';
 import { getNonBotMemberCount } from '../core/guildCounts.js';
-import { retryDiscord } from '../core/retry.js';
-import { mentionUser, buildAllowedMentions } from '../core/mentions.js';
+import { sendMessageConfig } from '../core/message-sender.js';
 
 export default class GreetingsModule extends Module {
   get key() { return 'greetings'; }
@@ -25,24 +23,18 @@ export default class GreetingsModule extends Module {
 
     const channel = await client.channels.fetch(config.channelId).catch(() => null);
     if (!channel?.isTextBased?.() || channel.guild.id !== guildId) {
-      this.logger.warn(
-        { guildId, channelId: config.channelId },
-        'greetings: channel invalid or foreign guild',
-      );
+      this.logger.warn({ guildId, channelId: config.channelId }, 'greetings: channel invalid');
       return;
     }
 
     let nonBotCount = 0;
     if (/\{count\}/.test(JSON.stringify(msgConfig))) {
-      nonBotCount = await getNonBotMemberCount(member.guild, {
-        force: true,
-        timeout: 2000,
-      }).catch(() => 0);
+      nonBotCount = await getNonBotMemberCount(member.guild, { force: true, timeout: 2000 }).catch(() => 0);
     }
 
     const tokens = {
-      user: mentionUser(member.id),
-      mention: mentionUser(member.id),
+      user: `<@${member.id}>`,
+      mention: `<@${member.id}>`,
       username: member.user.username,
       displayName: member.displayName || member.user.globalName || member.user.username,
       avatarUrl: member.user.displayAvatarURL?.({ size: 128 }) || '',
@@ -52,32 +44,13 @@ export default class GreetingsModule extends Module {
       section: 'greetings',
     };
 
-    let components;
     try {
-      components = buildComponentsFromConfig(msgConfig, tokens);
-    } catch (err) {
-      this.logger.warn({ err, guildId }, 'greetings: build failed');
-      return;
-    }
-    if (!components?.length) return;
-
-    try {
-      await retryDiscord(
-        () => channel.send({
-          flags: FLAG_COMPONENTS_V2,
-          components,
-          // Пинг нового участника — часть UX приветствия.
-          allowedMentions: buildAllowedMentions(components, { ping: true }),
-        }),
-        {
-          maxAttempts: 3,
-          baseDelayMs: 800,
-          maxDelayMs: 8000,
-          label: 'greetings.send',
-          logger: this.logger,
-          context: { bot_id: client.user.id, guild_id: guildId, user_id: member.id },
-        },
-      );
+      await sendMessageConfig(channel, msgConfig, tokens, {
+        ping: true,
+        label: 'greetings.send',
+        logger: this.logger,
+        context: { bot_id: client.user.id, guild_id: guildId, user_id: member.id },
+      });
     } catch (err) {
       this.logger.warn({ err, guildId }, 'greetings: failed to send');
     }

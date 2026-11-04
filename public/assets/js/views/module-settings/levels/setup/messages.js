@@ -1,10 +1,4 @@
 // public/assets/js/views/module-settings/levels/setup/messages.js
-//
-// Настройка «Сообщения»:
-//   - 4 таба: levelUp / rank / leaderboard / daily;
-//   - каждый таб → свой MessageEditor;
-//   - кнопка «Тест» → POST /api/modules/levels/test.
-
 import { MessageEditor, emptyMessageConfig } from '../../message-editor.js';
 
 const MSG_TABS = ['levelUp', 'rank', 'leaderboard', 'daily'];
@@ -20,7 +14,8 @@ export function setupMessages(ctx) {
     if (prev) { try { prev.destroy(); } catch {} }
 
     editorContainer.innerHTML = '';
-    const initial = cfg.messages[tabKey] || emptyMessageConfig();
+    const initial = cfg.messages[tabKey]
+      || { ...emptyMessageConfig(), displayMode: 'context' };
     const presetKey = `levels.${tabKey}`;
 
     const editor = new MessageEditor(editorContainer, initial, {
@@ -70,8 +65,6 @@ export function setupMessages(ctx) {
     btn.disabled = true;
     btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${UI.common.sending}`;
     try {
-      // ФИКС: /api/modules/levels/test вместо /api/levels/test.
-      // Старый URL работал через deprecated-alias — убираем зависимость.
       await api.post('/api/modules/levels/test', {
         botId,
         guildId,

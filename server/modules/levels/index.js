@@ -14,15 +14,12 @@ export default class LevelsModule extends Module {
 
   constructor(ctx) {
     super(ctx);
-
     this._cooldowns = new Map();
     this._useCooldowns = new Map();
     this._memberCache = new Map();
     this._MEMBER_CACHE_TTL = 30_000;
-
     this._xpBuffer = new Map();
     this._xpFlushTimer = null;
-
     this._tickInterval = null;
     this._inactivityInterval = null;
     this._cleanupInterval = null;
@@ -33,8 +30,6 @@ export default class LevelsModule extends Module {
     this._inactivityInterval = setInterval(() => this._inactivityTick().catch(() => {}), 60 * 60_000);
     this._cleanupInterval = setInterval(() => this._cleanup(), 10 * 60_000);
 
-    // КРИТИЧЕСКИЙ ФИКС: первый _inactivityTick через 60с после старта.
-    // Раньше после рестарта неактивные не обрабатывались целый час.
     const firstInactivityTick = setTimeout(() => {
       this._inactivityTick().catch(() => {});
     }, 60_000);
@@ -90,20 +85,10 @@ export default class LevelsModule extends Module {
   clearGuildCooldowns(guildId) {
     if (!guildId) return;
     const gid = String(guildId);
-
-    for (const k of this._cooldowns.keys()) {
-      if (k.startsWith(`${gid}:`)) this._cooldowns.delete(k);
-    }
-    for (const k of this._useCooldowns.keys()) {
-      if (k.startsWith(`${gid}:`)) this._useCooldowns.delete(k);
-    }
-    for (const k of this._memberCache.keys()) {
-      if (k.includes(`:${gid}:`)) this._memberCache.delete(k);
-    }
-    for (const k of this._xpBuffer.keys()) {
-      if (k.includes(`:${gid}:`)) this._xpBuffer.delete(k);
-    }
-
+    for (const k of this._cooldowns.keys()) if (k.startsWith(`${gid}:`)) this._cooldowns.delete(k);
+    for (const k of this._useCooldowns.keys()) if (k.startsWith(`${gid}:`)) this._useCooldowns.delete(k);
+    for (const k of this._memberCache.keys()) if (k.includes(`:${gid}:`)) this._memberCache.delete(k);
+    for (const k of this._xpBuffer.keys()) if (k.includes(`:${gid}:`)) this._xpBuffer.delete(k);
     this.logger.debug({ guildId: gid }, 'levels: cleared guild cooldowns + xp buffer');
   }
 }

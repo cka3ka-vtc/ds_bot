@@ -1,8 +1,6 @@
 // server/modules/sticky.js
 import { Module } from './_base.js';
-import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../core/componentsBuilder.js';
-import { buildAllowedMentions } from '../core/mentions.js';
-import { retryDiscord } from '../core/retry.js';
+import { sendMessageConfig } from '../core/message-sender.js';
 import { TtlCache } from '../core/ttl-cache.js';
 
 const STICKY_CACHE_TTL = 60_000;
@@ -13,9 +11,6 @@ export default class StickyModule extends Module {
   constructor(ctx) {
     super(ctx);
     this._deletingIds = new Set();
-    // ФИКС: кэш правил канала. Раньше db.listStickyByChannel() вызывался на
-    // каждое сообщение в канале — при 100+ сообщений/сек и ≥1 sticky это O(N)
-    // SQLite-запросов. TTL 60s + инвалидация из API-роутов.
     this._rulesCache = new TtlCache({ ttl: STICKY_CACHE_TTL, maxSize: 5000 });
   }
 
@@ -23,10 +18,6 @@ export default class StickyModule extends Module {
     this.logger.info({ module: 'sticky' }, 'sticky: registered');
   }
 
-  /**
-   * Публичный метод для инвалидации кэша из API-роутов.
-   * Вызывается после create / update / delete / toggle.
-   */
   invalidateChannelCache(botId, guildId, channelId) {
     this._rulesCache.delete(`${botId}:${guildId}:${channelId}`);
   }
@@ -107,27 +98,18 @@ export default class StickyModule extends Module {
       count: guild.memberCount || 0,
     };
 
-    const components = buildComponentsFromConfig(sticky.messageConfig, tokens);
-    if (!components?.length) return;
-
-    const sent = await retryDiscord(
-      () => channel.send({
-        flags: FLAG_COMPONENTS_V2,
-        components,
-        allowedMentions: buildAllowedMentions(components, { ping: false }),
-      }),
-      {
-        maxAttempts: 3,
-        baseDelayMs: 800,
-        maxDelayMs: 8000,
+    try {
+      const sent = await sendMessageConfig(channel, sticky.messageConfig, tokens, {
+        ping: false,
         label: 'sticky.refresh',
         logger: this.logger,
         context: { bot_id: client.user.id, guild_id: guild.id, sticky_id: sticky.id },
-      },
-    );
-
-    if (sent?.id) {
-      this.db.setStickyLastMessage(client.user.id, guild.id, sticky.id, sent.id);
+      });
+      if (sent?.id) {
+        this.db.setStickyLastMessage(client.user.id, guild.id, sticky.id, sent.id);
+      }
+    } catch (err) {
+      this.logger.warn({ err, stickyId: sticky.id }, 'sticky: refresh failed');
     }
   }
 }

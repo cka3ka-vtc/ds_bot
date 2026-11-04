@@ -23,7 +23,6 @@ export function mountBindMethods(MessageEditor) {
   };
 }
 
-/* ─── Settings card: collapse ─── */
 function bindSettingsCard(editor, root, signal) {
   const card = root.querySelector('[data-settings-card]');
   const toggle = root.querySelector('[data-settings-toggle]');
@@ -53,7 +52,6 @@ function bindSettingsCard(editor, root, signal) {
   }, { signal });
 }
 
-/* ─── Templates card: collapse ─── */
 function bindTemplatesCard(editor, root, signal) {
   const card = root.querySelector('[data-templates-card]');
   const toggle = root.querySelector('[data-templates-toggle]');
@@ -78,7 +76,6 @@ function bindTemplatesCard(editor, root, signal) {
   }, { signal });
 }
 
-/* ─── Presets + actions bar (reset / clear) ─── */
 function bindPresets(editor, root, signal) {
   root.querySelectorAll('[data-preset]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -99,7 +96,11 @@ function bindPresets(editor, root, signal) {
   }
 }
 
-/* ─── Режим отображения ─── */
+/**
+ * При смене displayMode перерисовываем блоки и тулбары в настройках —
+ * хотя кнопки активны всегда, это полезно для отрисовки превью-тулбаров
+ * и для возможного пересчёта отображения (например, color picker).
+ */
 function bindModeSeg(editor, root, signal) {
   root.querySelectorAll('[data-mode-seg] .seg-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -107,13 +108,14 @@ function bindModeSeg(editor, root, signal) {
         b.classList.toggle('active', b === btn));
       editor.config.displayMode = btn.dataset.value;
       editor._updateColorVisibility();
+      editor._renderBlocks();
+      editor._refreshSettingsToolbars();
       editor._renderPreview();
       editor._markDirty();
     }, { signal });
   });
 }
 
-/* ─── Accent color ─── */
 function bindColorInput(editor, root, signal) {
   const colorInput = root.querySelector('[data-accent-color]');
   if (colorInput) {
@@ -125,7 +127,6 @@ function bindColorInput(editor, root, signal) {
   }
 }
 
-/* ─── Title/subtitle/thumbnail inputs ─── */
 function bindTextInputs(editor, root, signal) {
   const bind = (sel, key) => {
     const el = root.querySelector(sel);
@@ -141,7 +142,6 @@ function bindTextInputs(editor, root, signal) {
   bind('[data-thumbnail-input]', 'thumbnail');
 }
 
-/* ─── Add block menu ─── */
 function bindAddMenu(editor, root, signal) {
   const addMenu = root.querySelector('[data-add-menu]');
   if (!addMenu) return;
@@ -162,15 +162,12 @@ function bindAddMenu(editor, root, signal) {
   }, { signal });
 }
 
-/* ─── Тулбар в корне (вне блоков): format и tokens ─── */
 function bindRootToolbar(editor, root, signal) {
   root.addEventListener('click', (e) => {
-    /* tokens */
     const tokensBtn = e.target.closest('[data-tokens-btn]');
     if (tokensBtn && tokensBtn.closest('.editor-toolbar')) {
       e.preventDefault();
       e.stopPropagation();
-      // Ищем textarea/input в том же родителе (тулбар — sibling до поля)
       const parent = tokensBtn.closest('.editor-toolbar')?.parentElement;
       const target = parent?.querySelector('textarea, input.input[data-token-context]')
         || parent?.querySelector('textarea, input.input');
@@ -178,7 +175,6 @@ function bindRootToolbar(editor, root, signal) {
       return;
     }
 
-    /* format */
     const fmtBtn = e.target.closest('[data-format]');
     if (!fmtBtn || !fmtBtn.closest('.editor-toolbar')) return;
     e.preventDefault();
@@ -191,8 +187,6 @@ function bindRootToolbar(editor, root, signal) {
   }, { signal });
 }
 
-/* ─── Компактные кнопки «{x}» в блоках ─── */
-// data-tokens-for — маркер; target — input в том же .sub-item-row.
 function bindCompactTokenButtons(editor, root, signal) {
   root.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-tokens-for]');
@@ -205,27 +199,23 @@ function bindCompactTokenButtons(editor, root, signal) {
   }, { signal });
 }
 
-/* ─── Auto-resize textarea при вводе ─── */
 function bindTextareaAutoResize(editor, root, signal) {
   root.addEventListener('input', (e) => {
     if (e.target.tagName === 'TEXTAREA') editor._autoResize(e.target);
   }, { signal });
 }
 
-/* ─── Blocks: клики, input, drag&drop ─── */
 function bindBlocks(editor, signal) {
   const blocksEl = editor._blocksEl;
   if (!blocksEl) return;
 
   blocksEl.addEventListener('click', (e) => {
-    // кнопки {x} в блоках обрабатывает bindCompactTokenButtons, не мешаем
     if (e.target.closest('[data-tokens-for]')) return;
     editor._handleBlockClick(e);
   }, { signal });
   blocksEl.addEventListener('input', (e) => editor._handleBlockInput(e), { signal });
   blocksEl.addEventListener('change', (e) => editor._handleBlockInput(e), { signal });
 
-  /* Drag & drop */
   blocksEl.addEventListener('dragstart', (e) => {
     const handle = e.target.closest('[data-drag-handle]');
     if (!handle) { e.preventDefault(); return; }

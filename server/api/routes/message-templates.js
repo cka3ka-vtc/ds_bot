@@ -7,9 +7,7 @@ import {
 } from '../../validators/schemas.js';
 import { messageTemplateToDto } from '../dto/index.js';
 import { mergeTemplateMessageConfig } from '../../../shared/message-templates-config.js';
-import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../../core/componentsBuilder.js';
-import { buildAllowedMentions } from '../../core/mentions.js';
-import { retryDiscord } from '../../core/retry.js';
+import { sendMessageConfig } from '../../core/message-sender.js';
 import { audit } from '../_audit.js';
 import {
   persistRoleButtonsFromConfig,
@@ -146,23 +144,15 @@ export function messageTemplatesRouter() {
       guildIconUrl: guild.iconURL?.({ size: 128 }) || '',
       count: guild.memberCount || 0,
     };
-    const components = buildComponentsFromConfig(prev.messageConfig, tokens);
-    if (!components?.length) return res.status(400).json({ error: 'empty_message' });
 
     try {
-      const msg = await retryDiscord(
-        () => channel.send({
-          flags: FLAG_COMPONENTS_V2,
-          components,
-          allowedMentions: buildAllowedMentions(components, { ping: false }),
-        }),
-        {
-          maxAttempts: 3, baseDelayMs: 800, maxDelayMs: 8000,
-          label: 'template.send',
-          logger: req.app.locals.logger,
-          context: { bot_id: botId, guild_id: guildId, template_id: id },
-        },
-      );
+      const msg = await sendMessageConfig(channel, prev.messageConfig, tokens, {
+        ping: false,
+        label: 'template.send',
+        logger: req.app.locals.logger,
+        context: { bot_id: botId, guild_id: guildId, template_id: id },
+      });
+      if (!msg) return res.status(400).json({ error: 'empty_message' });
 
       try { db.touchMessageTemplateLastSent(botId, guildId, id); } catch {}
       audit(req, 'template.send', id, { channelId: targetChannelId, messageId: msg.id });

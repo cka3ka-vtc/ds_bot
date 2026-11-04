@@ -1,5 +1,4 @@
 // shared/sticky-config.js
-
 export function defaultStickyConfig() {
   return {
     displayMode: 'embed-color',
@@ -15,7 +14,7 @@ export function mergeStickyConfig(raw) {
   const d = defaultStickyConfig();
   if (!raw || typeof raw !== 'object') return d;
   return {
-    displayMode: ['flat', 'embed', 'embed-color'].includes(raw.displayMode)
+    displayMode: ['context', 'flat', 'embed', 'embed-color'].includes(raw.displayMode)
       ? raw.displayMode
       : d.displayMode,
     accentColor: typeof raw.accentColor === 'string' ? raw.accentColor : d.accentColor,

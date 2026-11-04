@@ -1,9 +1,7 @@
 // shared/greetings-config.js
-// Единый источник дефолтов и нормализации конфига модуля «Приветствия».
-
 export function defaultMessageConfig() {
   return {
-    displayMode: 'embed-color',
+    displayMode: 'context',
     accentColor: '#5865F2',
     title: '',
     subtitle: '',
@@ -33,10 +31,9 @@ export function mergeGreetingsConfig(raw) {
 
   if (raw.channelId) cfg.channelId = String(raw.channelId);
 
-  // Миграция старого формата: { message, sendEmbed }
   if (raw.message && !raw.messages) {
     cfg.messages.join.blocks = [{ id: uid(), type: 'text', content: String(raw.message) }];
-    if (raw.sendEmbed) cfg.messages.join.displayMode = 'embed-color';
+    if (raw.sendEmbed) cfg.messages.join.displayMode = 'context';
   }
 
   if (raw.events && typeof raw.events === 'object') {

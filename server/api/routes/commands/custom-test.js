@@ -1,25 +1,15 @@
 // server/api/routes/commands/custom-test.js
-import { Router } from 'express';
 import { EmbedBuilder } from 'discord.js';
+import { Router } from 'express';
 import { requireBotAccess } from '../../auth-middleware.js';
 import { validateBody } from '../../validate.js';
 import { commandTestBody } from '../../../validators/schemas.js';
 import { testMessageLimiter } from '../../middleware/rate-limit.js';
 import { getNonBotMemberCount } from '../../../core/guildCounts.js';
 import { audit } from './_shared.js';
-import {
-  resolveTestChannel,
-  resolveTestUser,
-  sendV2OrEmbed,
-} from '../_test-common.js';
+import { resolveTestChannel, resolveTestUser } from '../_test-common.js';
+import { sendMessageConfig } from '../../../core/message-sender.js';
 
-/**
- * POST /api/commands/:id/test
- *
- * Отправляет тестовое сообщение кастомной команды в указанный канал:
- *   1. Если у команды есть messageConfig с блоками → V2 (fallback embed);
- *   2. Иначе — legacy path (response text / embed).
- */
 export function createCustomTestRouter() {
   const router = Router();
 
@@ -68,31 +58,34 @@ export function createCustomTestRouter() {
       };
 
       try {
-        /* 1) Новый путь: messageConfig → V2 или embed */
         const cfgObj = cmd.messageConfig || {};
         const hasBlocks = cfgObj && typeof cfgObj === 'object' &&
           (cfgObj.title || cfgObj.subtitle || (Array.isArray(cfgObj.blocks) && cfgObj.blocks.length));
 
         if (hasBlocks) {
-          const result = await sendV2OrEmbed(channel, cfgObj, tokens);
-          if (result) {
-            audit(req, 'command.test', cmd.id, { channelId, mode: result.mode });
-            return res.json({ ok: true, messageId: result.msg.id });
+          const msg = await sendMessageConfig(channel, cfgObj, tokens, {
+            ping: false,
+            label: 'command.test',
+            logger: req.app.locals.logger,
+            context: { bot_id: botId, guild_id: guildId, command_id: cmd.id },
+          });
+          if (msg) {
+            audit(req, 'command.test', cmd.id, { channelId, mode: cfgObj.displayMode || 'context' });
+            return res.json({ ok: true, messageId: msg.id });
           }
         }
 
-        /* 2) Legacy path: response text / embed */
         if (cmd.responseMode === 'embed') {
           const embed = new EmbedBuilder()
             .setColor(cmd.responseEmbedColor || '#5865F2')
-            .setDescription(cmd.response || '✅ Команда выполнена');
+            .setDescription(cmd.response || '⚙ Команда выполняется');
           const msg = await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
           audit(req, 'command.test', cmd.id, { channelId, mode: 'legacy-embed' });
           return res.json({ ok: true, messageId: msg.id });
         }
 
         const msg = await channel.send({
-          content: cmd.response || '✅ Команда выполнена',
+          content: cmd.response || '⚙ Команда выполняется',
           allowedMentions: { parse: [] },
         });
         audit(req, 'command.test', cmd.id, { channelId, mode: 'legacy-text' });

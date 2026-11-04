@@ -1,7 +1,8 @@
 /* ============================================================
    Module settings · message-editor
    Редактор сообщений (Components v2) + Discord-preview.
-   Используется в greetings и levels.
+   Поддерживает в контексты: greetings и levels, birthdays, moderation, sticky,
+   scheduled, message-templates, commands.
    ============================================================ */
 
 .msg-editor {
@@ -98,7 +99,7 @@
   color: var(--orange);
 }
 
-/* ─── Blocks (V2 editor) ─── */
+/* ----- Blocks (V2 editor) ----- */
 .blocks-list {
   display: flex;
   flex-direction: column;
@@ -237,9 +238,7 @@
   color: var(--orange);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   Toolbar — квадратные кнопки, единая высота
-   ═══════════════════════════════════════════════════════════ */
+/* ----- Toolbar ----- */
 .editor-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -308,6 +307,14 @@
   align-self: center;
 }
 
+/* Disabled-состояние кнопок тулбара */
+.editor-toolbar button:disabled,
+.editor-toolbar button[disabled] {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* Auto-grow textarea */
 .msg-editor textarea {
   resize: none;
@@ -343,7 +350,7 @@
   background: var(--accent-soft);
 }
 
-/* ─── Discord preview ─── */
+/* ----- Discord preview (V2) ----- */
 .discord-preview {
   background: #313338;
   border-radius: 8px;
@@ -547,10 +554,185 @@
   font-size: 12px;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   Шаблоны сообщений (пресеты)
-   ═══════════════════════════════════════════════════════════ */
+/* ----- Content preview (markdown, отрендеренный как сообщение) ----- */
+.dp-content {
+  font-size: 14px;
+  color: #dbdee1;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+.dp-content b { color: #f2f3f5; font-weight: 700; }
+.dp-content i { font-style: italic; }
+.dp-content u { text-decoration: underline; }
+.dp-content s { text-decoration: line-through; }
 
+.dp-content code {
+  background: #1e1f22;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: 'SF Mono', monospace;
+  font-size: 12.5px;
+}
+.dp-content .dp-code {
+  display: block;
+  background: #1e1f22;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-family: 'SF Mono', monospace;
+  font-size: 12.5px;
+  margin: 4px 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* Заголовки — как в Discord */
+.dp-content .dp-h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #f2f3f5;
+  margin: 12px 0 6px;
+  line-height: 1.3;
+  letter-spacing: -.3px;
+}
+.dp-content .dp-h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f2f3f5;
+  margin: 12px 0 6px;
+  line-height: 1.3;
+  letter-spacing: -.2px;
+}
+.dp-content .dp-h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f2f3f5;
+  margin: 10px 0 4px;
+  line-height: 1.3;
+}
+
+/* Subtext (-# text) */
+.dp-content .dp-subtext {
+  font-size: 12px;
+  color: #949ba4;
+  margin: 4px 0;
+  line-height: 1.4;
+}
+
+/* Списки */
+.dp-content .dp-list {
+  margin: 4px 0;
+  padding-left: 24px;
+  line-height: 1.5;
+}
+.dp-content .dp-list.dp-ul { list-style: disc outside; }
+.dp-content .dp-list.dp-ol { list-style: decimal outside; }
+.dp-content .dp-list li { margin: 2px 0; color: #dbdee1; }
+.dp-content .dp-list li::marker { color: #949ba4; }
+
+/* Horizontal separator (━━━) — small spacing (default) */
+.dp-content .dp-hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+  margin: 8px 0;
+}
+
+/* Horizontal separator — large spacing (block.spacing === 2) */
+.dp-content .dp-hr.dp-hr--large {
+  margin: 18px 0;
+}
+
+/* Mentions/timestamps в content-превью */
+.dp-content .dp-mention {
+  background: rgba(88, 101, 242, .25);
+  color: #c9cdfb;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+.dp-content .dp-mention.role {
+  background: rgba(88, 101, 242, .2);
+  border: 1px solid rgba(88, 101, 242, .4);
+}
+.dp-content .dp-time-tag {
+  background: rgba(88, 101, 242, .14);
+  color: #c9cdfb;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.dp-content .dp-spoiler {
+  background: #1e1f22;
+  color: transparent;
+  border-radius: 3px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.dp-content .dp-spoiler:hover,
+.dp-content .dp-spoiler.revealed {
+  color: inherit;
+  background: rgba(255, 255, 255, .08);
+}
+.dp-content .dp-link {
+  color: #00a8fc;
+  text-decoration: none;
+}
+.dp-content .dp-link:hover { text-decoration: underline; }
+.dp-content .dp-quote {
+  border-left: 3px solid #4e5058;
+  padding-left: 10px;
+  margin: 4px 0;
+  color: #b5bac1;
+}
+
+/* ----- Note о content-режиме в настройках редактора ----- */
+.editor-info-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+.editor-info-note i {
+  color: var(--accent);
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ----- Выравнивание color-picker по высоте segmented-control (40px) ----- */
+.msg-editor .compact-grid {
+  align-items: end;
+}
+.msg-editor .compact-grid > .form-field {
+  min-width: 0;
+}
+.msg-editor .compact-grid .segmented-control {
+  height: 40px;
+  box-sizing: border-box;
+  padding: 3px;
+}
+.msg-editor .compact-grid .seg-btn {
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+}
+.msg-editor .compact-grid .color-picker-compact {
+  height: 40px;
+  display: flex;
+  align-items: center;
+}
+.msg-editor .compact-grid .color-picker-compact input[type="color"] {
+  width: 40px;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 3px;
+}
+
+/* ----- Templates ----- */
 .msg-templates-card {
   margin-bottom: 12px;
 }
@@ -676,10 +858,7 @@
   border-top: 1px solid var(--border);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   Переменные (выпадающее меню в тулбаре)
-   ═══════════════════════════════════════════════════════════ */
-
+/* ----- Tokens dropdown ----- */
 .tokens-dropdown {
   background: var(--surface);
   border: 1px solid var(--border-strong);
@@ -754,7 +933,7 @@
   white-space: nowrap;
 }
 
-/* ─── Кнопка {x} в полях блоков ─── */
+/* Кнопка {x} в полях блоков */
 .block-act[data-tokens-for] {
   flex-shrink: 0;
 }
@@ -762,7 +941,7 @@
   font-size: 11px;
 }
 
-/* ─── Плашка «нет переменных для поля» ─── */
+/* Плашка «нет переменных для поля» */
 .tokens-empty {
   display: flex;
   gap: 10px;
@@ -789,7 +968,7 @@
   color: var(--muted);
 }
 
-/* ─── Подсказка сверху списка токенов ─── */
+/* Подсказка сверху списка токенов */
 .tokens-hint {
   display: flex;
   gap: 8px;

@@ -1,24 +1,18 @@
 // server/modules/levels/xp.js
-import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../../core/componentsBuilder.js';
 import { xpForLevel, getLevelFromXp, progressOf } from '../../core/formulas.js';
 import { getTitleForLevel } from '../../../shared/titles.js';
 import { mergeLevelsConfig } from '../../../shared/levels-config.js';
 import { getNonBotMemberCount } from '../../core/guildCounts.js';
-import { retryDiscord } from '../../core/retry.js';
-import { mentionUser, buildAllowedMentions } from '../../core/mentions.js';
+import { sendMessageConfig } from '../../core/message-sender.js';
 
 export function mountXpMethods(LevelsModule) {
   Object.assign(LevelsModule.prototype, {
-
-    /* ═══════════════════ Cache helpers ═══════════════════ */
 
     _getMemberDataCached(botId, guildId, userId) {
       const k = `${botId}:${guildId}:${userId}`;
       const now = Date.now();
       const cached = this._memberCache.get(k);
-      if (cached && now - cached.ts < this._MEMBER_CACHE_TTL) {
-        return cached.data;
-      }
+      if (cached && now - cached.ts < this._MEMBER_CACHE_TTL) return cached.data;
       const data = this.db.getMemberData(botId, guildId, userId)
         || { xp: 0, level: 0, auto_roles: '[]' };
       this._memberCache.set(k, { data, ts: now });
@@ -32,8 +26,6 @@ export function mountXpMethods(LevelsModule) {
     _invalidateMemberCache(botId, guildId, userId) {
       this._memberCache.delete(`${botId}:${guildId}:${userId}`);
     },
-
-    /* ═══════════════════ Public API ═══════════════════ */
 
     async awardCommandXp(interaction, opts = {}) {
       if (!interaction?.isChatInputCommand?.()) return;
@@ -70,8 +62,6 @@ export function mountXpMethods(LevelsModule) {
       }
     },
 
-    /* ═══════════════════ Cooldown ═══════════════════ */
-
     _passCooldown(guildId, userId, type, minutes) {
       if (!minutes || minutes <= 0) return true;
       const k = `${guildId}:${userId}:${type}`;
@@ -81,8 +71,6 @@ export function mountXpMethods(LevelsModule) {
       this._cooldowns.set(k, now);
       return true;
     },
-
-    /* ═══════════════════ XP buffer ═══════════════════ */
 
     _awardXpBuffered({ botId, guildId, member, config, amount, source = 'message' }) {
       if (!amount || amount <= 0) return;
@@ -94,17 +82,12 @@ export function mountXpMethods(LevelsModule) {
         existing.amount += amount;
         existing.member = member;
         existing.updatedAt = now;
-        // Источник последнего XP — сохраняем для лога (для UI)
         existing.source = source;
       } else {
         this._xpBuffer.set(k, {
           botId, guildId, userId: member.id,
-          member,
-          config,
-          amount,
-          source,
-          createdAt: now,
-          updatedAt: now,
+          member, config, amount, source,
+          createdAt: now, updatedAt: now,
         });
       }
     },
@@ -171,18 +154,13 @@ export function mountXpMethods(LevelsModule) {
             level: 'info',
             module: 'levels',
             userId: member?.id || userId,
-            message: `Достигает ${newLevel} уровня`,
+            message: `Уровень ${newLevel} достигнут`,
             meta: {
               userId: member?.id || userId,
               username: member?.user?.username || null,
               displayName: member?.displayName || member?.user?.globalName || member?.user?.username || null,
               avatarUrl: member?.user?.displayAvatarURL?.({ size: 128 }) || null,
-              level: newLevel,
-              oldLevel,
-              xp: newXp,
-              // ФИКС: источник XP — 'message' | 'voice' | 'command' | 'daily'.
-              // UI покажет «за голосовую активность» / «за сообщение» / «за /daily»,
-              // чтобы не было вопроса «откуда XP без активности».
+              level: newLevel, oldLevel, xp: newXp,
               source,
             },
           });
@@ -232,95 +210,12 @@ export function mountXpMethods(LevelsModule) {
       await Promise.allSettled(entries.map((entry) =>
         this._applyXpBatch(entry).catch((err) => {
           this.logger.error({
-            err,
-            event: 'xp_batch_apply_failed',
-            bot_id: entry.botId,
-            guild_id: entry.guildId,
-            user_id: entry.userId,
-            amount: entry.amount,
+            err, event: 'xp_batch_apply_failed',
+            bot_id: entry.botId, guild_id: entry.guildId,
+            user_id: entry.userId, amount: entry.amount,
           }, 'levels: xp batch apply failed — xp lost');
         }),
       ));
-    },
-
-    /* ═══════════════════ Core apply ═══════════════════ */
-
-    async _applyXpBatch({ botId, guildId, userId, member, config, amount }) {
-      if (!amount || amount <= 0) return;
-
-      const data = this._getMemberDataCached(botId, guildId, userId);
-      const oldXp = data.xp | 0;
-      const oldLevel = data.level | 0;
-
-      const boost = member?.premiumSince ? config.boostMultiplier : 1;
-      const gained = Math.round(amount * boost);
-
-      const maxXp = xpForLevel(config.maxLevel, config.formula, config);
-      const newXp = Math.min(oldXp + gained, maxXp);
-      const newLevel = getLevelFromXp(newXp, config.formula, config, config.maxLevel);
-
-      const currentAuto = new Set(this._parseAutoRoles(data.auto_roles));
-      const granted = [];
-
-      if (config.rewards.enabled && member) {
-        const desired = new Set();
-        for (const r of config.rewards.entries) {
-          if (Number(r.level) <= newLevel && r.roleId) desired.add(r.roleId);
-        }
-        for (const roleId of desired) {
-          const memberHasIt = member.roles.cache.has(roleId);
-          const alreadyMarked = currentAuto.has(roleId);
-          if (memberHasIt && alreadyMarked) continue;
-          if (memberHasIt && !alreadyMarked) { currentAuto.add(roleId); continue; }
-          try {
-            await member.roles.add(roleId);
-            granted.push(roleId);
-            currentAuto.add(roleId);
-          } catch (err) {
-            this.logger.warn({ err, roleId, userId }, 'levels: role grant failed');
-          }
-        }
-      }
-
-      this.db.updateXp(botId, guildId, userId, {
-        xp: newXp, level: newLevel, autoRoles: [...currentAuto],
-      });
-
-      this._setMemberCache(botId, guildId, userId, {
-        ...data,
-        xp: newXp,
-        level: newLevel,
-        auto_roles: JSON.stringify([...currentAuto]),
-      });
-
-      if (newLevel > oldLevel) {
-        try {
-          this.db.addLog(botId, guildId, {
-            level: 'info',
-            module: 'levels',
-            userId: member.id,
-            message: `достиг ${newLevel} уровня`,
-            meta: {
-              userId: member.id,
-              username: member.user.username,
-              displayName: member.displayName || member.user.globalName || member.user.username,
-              avatarUrl: member.user.displayAvatarURL?.({ size: 128 }) || null,
-              level: newLevel,
-              oldLevel,
-              xp: newXp,
-            },
-          });
-        } catch (err) {
-          this.logger.warn({ err, userId }, 'levels: level-up log failed');
-        }
-
-        if (member && config.announceChannelId && config.messages?.levelUp) {
-          await this._sendLevelUp({
-            botId, guildId, member, config,
-            oldLevel, newLevel, newXp, grantedRoles: granted,
-          });
-        }
-      }
     },
 
     async _sendLevelUp({ botId, guildId, member, config, oldLevel, newLevel, newXp, grantedRoles }) {
@@ -346,8 +241,8 @@ export function mountXpMethods(LevelsModule) {
         .map((id) => `<@&${id}>`);
 
       const tokens = {
-        user: mentionUser(member.id),
-        mention: mentionUser(member.id),
+        user: `<@${member.id}>`,
+        mention: `<@${member.id}>`,
         username: member.user.username,
         displayName: member.displayName || member.user.globalName || member.user.username,
         avatarUrl: member.user.displayAvatarURL?.({ size: 128 }) || '',
@@ -355,44 +250,23 @@ export function mountXpMethods(LevelsModule) {
         count,
         guildIconUrl: member.guild.iconURL?.({ size: 128 }) || '',
         section: 'levels',
-        level: newLevel,
-        oldLevel,
-        title,
+        level: newLevel, oldLevel, title,
         xp: newXp,
         nextLevelXp: nextLevelTotalXp,
         xpToNext: progress.toNext,
         progress: `${progress.current} / ${progress.total}`,
         progressPercent: progress.percent,
-        position,
-        rank: position,
+        position, rank: position,
         rewardRole: granted.join(', '),
       };
 
-      let components;
       try {
-        components = buildComponentsFromConfig(config.messages.levelUp, tokens);
-      } catch (err) {
-        this.logger.warn({ err, botId, guildId }, 'levels: announce build failed');
-        return;
-      }
-      if (!components?.length) return;
-
-      try {
-        await retryDiscord(
-          () => channel.send({
-            flags: FLAG_COMPONENTS_V2,
-            components,
-            allowedMentions: buildAllowedMentions(components, { ping: true }),
-          }),
-          {
-            maxAttempts: 3,
-            baseDelayMs: 800,
-            maxDelayMs: 8000,
-            label: 'levels.sendLevelUp',
-            logger: this.logger,
-            context: { bot_id: botId, guild_id: guildId, user_id: member.id },
-          },
-        );
+        await sendMessageConfig(channel, config.messages.levelUp, tokens, {
+          ping: true,
+          label: 'levels.sendLevelUp',
+          logger: this.logger,
+          context: { bot_id: botId, guild_id: guildId, user_id: member.id },
+        });
       } catch (err) {
         this.logger.warn({ err, guildId }, 'levels: announce failed');
       }

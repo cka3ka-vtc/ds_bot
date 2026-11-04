@@ -91,6 +91,7 @@ function openTemplateModal(ctx, kind) {
         presetKey: null,
         guildId,
         botId,
+        hideDisplayMode: true,
       });
       editor.mount();
       modal._editor = editor;

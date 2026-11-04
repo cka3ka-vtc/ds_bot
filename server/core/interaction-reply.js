@@ -2,18 +2,20 @@
 import { v2ConfigToEmbed, embedHasContent } from './v2-to-embed.js';
 import { hasMessageContent } from '../../shared/message-presets.js';
 import { retryDiscord } from './retry.js';
+import { editReplyWithMessageConfig } from './message-sender.js';
 
 /**
- * Пытается ответить на interaction через messageConfig:
- *   1. Есть контент? → embed (V2→embed-конвертация).
- *   2. Retry при 429/5xx — interaction после deferReply живёт 15 минут,
- *      успеть повторить безопасно.
- *   3. 40060/10062 (interaction dead) — не retry'ится, вернёт false.
+ * Универсальная отправка MessageConfig через interaction.editReply.
  *
- * Возвращает Promise<boolean>: true — отправлено; false — конфиг пуст / ошибка.
+ * Порядок:
+ *   1) editReplyWithMessageConfig() — по displayMode (context/V2).
+ *   2) Fallback на embed через v2ConfigToEmbed() — если V2 не сработал
+ *      (несовместимость с эфемерным ответом и т.п.).
  */
 export async function tryReplyWithMessageConfig(interaction, cfgMsg, tokens) {
   if (!hasMessageContent(cfgMsg)) return false;
+
+  if (await editReplyWithMessageConfig(interaction, cfgMsg, tokens)) return true;
 
   const embed = v2ConfigToEmbed(cfgMsg, tokens);
   if (!embedHasContent(embed)) return false;
@@ -28,7 +30,7 @@ export async function tryReplyWithMessageConfig(interaction, cfgMsg, tokens) {
         maxAttempts: 2,
         baseDelayMs: 500,
         maxDelayMs: 3000,
-        label: 'interaction.editReply',
+        label: 'interaction.editReply.embed',
       },
     );
     return true;
@@ -38,8 +40,7 @@ export async function tryReplyWithMessageConfig(interaction, cfgMsg, tokens) {
 }
 
 /**
- * Ответ через messageConfig, если возможно; иначе — текстом.
- * Гарантированно отправляет что-то.
+ * Отправляет MessageConfig или fallback-текст.
  */
 export async function replyWithConfig(interaction, cfgMsg, tokens, fallbackText) {
   const sent = await tryReplyWithMessageConfig(interaction, cfgMsg, tokens);
@@ -49,7 +50,7 @@ export async function replyWithConfig(interaction, cfgMsg, tokens, fallbackText)
     await retryDiscord(
       () => interaction.editReply({
         content: fallbackText,
-        allowedMentions: { parse: ['users'] },
+        allowedMentions: { parse: [] },
       }),
       {
         maxAttempts: 2,
@@ -58,7 +59,5 @@ export async function replyWithConfig(interaction, cfgMsg, tokens, fallbackText)
         label: 'interaction.editReply.fallback',
       },
     );
-  } catch {
-    // уже ничего не сделать — interaction dead
-  }
+  } catch {}
 }

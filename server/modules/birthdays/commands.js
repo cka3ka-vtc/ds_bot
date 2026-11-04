@@ -1,22 +1,11 @@
 // server/modules/birthdays/commands.js
 import { mergeBirthdaysConfig } from '../../../shared/birthdays-config.js';
 import { handleBuiltinCommand } from '../../core/builtin-command.js';
-import { replyWithConfig } from '../../core/interaction-reply.js';
+import { editReplyWithMessageConfig } from '../../core/message-sender.js';
 import {
-  parseBirthday,
-  daysUntilBirthday,
-  humanDaysLeft,
-  ageOnNextBirthday,
-  fullDate,
+  parseBirthday, daysUntilBirthday, humanDaysLeft, ageOnNextBirthday, fullDate,
 } from './helpers.js';
 
-/**
- * Slash-команды модуля «Дни рождения»:
- *   - handleCommand(interaction, opts) — общий каркас (core/builtin-command.js);
- *   - dispatch — switch по конкретным командам;
- *   - _cmdSet / _cmdToggle / _cmdList — реализации;
- *   - ответ через core/interaction-reply.js → replyWithConfig(...).
- */
 export function mountCommandMethods(BirthdaysModule) {
   Object.assign(BirthdaysModule.prototype, {
 
@@ -26,15 +15,10 @@ export function mountCommandMethods(BirthdaysModule) {
         logger: this.logger,
         logScope: 'birthdays',
         useCooldowns: this._useCooldowns,
-
         fetchModuleConfig: async (botId, guildId) => {
           const r = await this.getConfig(botId, guildId);
-          return {
-            enabled: r.enabled,
-            config: mergeBirthdaysConfig(r.config || {}),
-          };
+          return { enabled: r.enabled, config: mergeBirthdaysConfig(r.config || {}) };
         },
-
         dispatch: async (ctx) => {
           switch (ctx.interaction.commandName) {
             case 'birthday_set':    return this._cmdSet(ctx);
@@ -47,17 +31,14 @@ export function mountCommandMethods(BirthdaysModule) {
       });
     },
 
-    /* ─── /birthday_set <DD.MM или DD.MM.YYYY> ─── */
-
     async _cmdSet({ botId, guildId, config, interaction }) {
       const raw = interaction.options.getString('date');
       const parsed = parseBirthday(raw);
       if (!parsed) {
         return interaction.editReply({
-          content: '⚠ Неверный формат. Введите **ДД.ММ** или **ДД.ММ.ГГГГ**, например **15.06** или **15.06.1995**.',
+          content: 'Неверный формат. Введите **ДД.ММ** или **ДД.ММ.ГГГГ**, например **15.06** или **15.06.1995**.',
         });
       }
-
       this.db.setBirthday(botId, guildId, interaction.user.id, parsed.ddmm, parsed.year);
 
       const age = ageOnNextBirthday(parsed.year);
@@ -68,7 +49,7 @@ export function mountCommandMethods(BirthdaysModule) {
         user: `<@${interaction.user.id}>`,
         mention: `<@${interaction.user.id}>`,
         username: interaction.user.username,
-        displayName: interaction.member?.displayName || interaction.user.username,
+        displayName: interaction.member?.displayName || interaction.user.globalName || interaction.user.username,
         avatarUrl: interaction.user.displayAvatarURL?.({ size: 128 }) || '',
         guild: interaction.guild.name,
         guildIconUrl: interaction.guild.iconURL?.({ size: 128 }) || '',
@@ -80,25 +61,24 @@ export function mountCommandMethods(BirthdaysModule) {
         section: 'birthdays',
       };
 
-      const ageText = age != null ? ` (${age} лет)` : '';
-      return replyWithConfig(
-        interaction,
-        config.messages?.cmdSet,
-        tokens,
-        `✅ Твой день рождения сохранён: **${full}**${ageText}. Я поздравлю тебя в этот день!`,
-      );
-    },
+      if (await editReplyWithMessageConfig(interaction, config.messages?.cmdSet, tokens)) return;
 
-    /* ─── /birthday_toggle ─── */
+      return interaction.editReply({
+        content:
+          `День рождения <@${interaction.user.id}> сохранён: **${full}**` +
+          (age != null ? ` (${age} лет)` : '') +
+          `.\nЯ поздравлю в этот день!`,
+        allowedMentions: { parse: [] },
+      });
+    },
 
     async _cmdToggle({ botId, guildId, config, interaction }) {
       const row = this.db.getBirthday(botId, guildId, interaction.user.id);
       if (!row.birthday) {
         return interaction.editReply({
-          content: '⚠ Сначала установите день рождения командой **/birthday_set**.',
+          content: 'Сначала укажите день рождения командой **/birthday_set**.',
         });
       }
-
       const next = !row.birthday_public;
       this.db.setBirthdayPublic(botId, guildId, interaction.user.id, next);
       const stateLabel = next ? 'включены' : 'отключены';
@@ -110,7 +90,7 @@ export function mountCommandMethods(BirthdaysModule) {
         user: `<@${interaction.user.id}>`,
         mention: `<@${interaction.user.id}>`,
         username: interaction.user.username,
-        displayName: interaction.member?.displayName || interaction.user.username,
+        displayName: interaction.member?.displayName || interaction.user.globalName || interaction.user.username,
         avatarUrl: interaction.user.displayAvatarURL?.({ size: 128 }) || '',
         guild: interaction.guild.name,
         guildIconUrl: interaction.guild.iconURL?.({ size: 128 }) || '',
@@ -123,17 +103,15 @@ export function mountCommandMethods(BirthdaysModule) {
         section: 'birthdays',
       };
 
-      return replyWithConfig(
-        interaction,
-        config.messages?.cmdToggle,
-        tokens,
-        next
-          ? `🔔 Поздравления **включены**. Я поздравлю тебя ${full}.`
-          : `🔕 Поздравления **отключены**. Ты не будешь получать поздравления.`,
-      );
-    },
+      if (await editReplyWithMessageConfig(interaction, config.messages?.cmdToggle, tokens)) return;
 
-    /* ─── /birthdays ─── */
+      return interaction.editReply({
+        content: next
+          ? `Поздравления <@${interaction.user.id}> **включены**. Я поздравлю ${full}.`
+          : `Поздравления <@${interaction.user.id}> **отключены**.`,
+        allowedMentions: { parse: [] },
+      });
+    },
 
     async _cmdList({ botId, guildId, config, interaction }) {
       const all = this.db.getUpcomingBirthdays(botId, guildId);
@@ -171,16 +149,16 @@ export function mountCommandMethods(BirthdaysModule) {
 
       if (enriched.length === 0) {
         return interaction.editReply({
-          content: '📅 Пока никто не указал день рождения. Используйте **/birthday_set**.',
+          content: 'Пока никто не указал день рождения. Используйте **/birthday_set**.',
         });
       }
 
-      return replyWithConfig(
-        interaction,
-        config.messages?.cmdList,
-        tokens,
-        `📅 **Ближайшие дни рождения:**\n\n${topUsersText}`,
-      );
+      if (await editReplyWithMessageConfig(interaction, config.messages?.cmdList, tokens)) return;
+
+      return interaction.editReply({
+        content: `**Ближайшие дни рождения:**\n\n${topUsersText}`,
+        allowedMentions: { parse: [] },
+      });
     },
 
   });

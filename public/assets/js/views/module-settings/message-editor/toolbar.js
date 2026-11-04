@@ -5,18 +5,32 @@ import { positionPopup } from '../pickers.js';
 import { TIME_FORMAT_CODES } from './helpers.js';
 import { isTokenAllowed } from '../message-editor-tokens.js';
 
+/**
+ * Тулбар markdown-форматирования.
+ *
+ * Все кнопки активны во всех контекстах (title / rich / footer) и во всех
+ * режимах отображения (Обычный / Блок / Цветной):
+ *   - Discord парсит markdown (**bold**, *italic*, __underline__, ~~strike~~,
+ *     `code`, ||spoiler||, > цитата) и в embed title, и в embed description,
+ *     и в embed footer, и в обычном content;
+ *   - Timestamp <t:...> и переменные {user}, {guild} и т.д. также работают
+ *     везде — их подставляет либо сам Discord (timestamp), либо builder
+ *     (переменные) на сервере при отправке.
+ *
+ * Поэтому никаких disabled-состояний для кнопок нет.
+ */
 export function mountToolbarMethods(MessageEditor) {
   Object.assign(MessageEditor.prototype, {
 
-    _toolbarHTML() {
+    _toolbarHTML(context = 'rich') {
       const T = UI.msgEditor.toolbar;
       return `
-        <div class="editor-toolbar">
+        <div class="editor-toolbar" data-toolbar-context="${context}">
           <button type="button" data-format="bold" title="${T.bold}"><b>B</b></button>
           <button type="button" data-format="italic" title="${T.italic}"><i>I</i></button>
           <button type="button" data-format="underline" title="${T.underline}"><u>U</u></button>
           <button type="button" data-format="strike" title="${T.strike}"><s>S</s></button>
-          <button type="button" data-format="quote" title="${T.quote}">❝</button>
+          <button type="button" data-format="quote" title="${T.quote}">❞</button>
           <button type="button" data-format="code" title="${T.code}">&lt;/&gt;</button>
           <button type="button" data-format="spoiler" title="${T.spoiler}">▮</button>
           <div class="toolbar-sep"></div>
@@ -27,6 +41,14 @@ export function mountToolbarMethods(MessageEditor) {
       `;
     },
 
+    /**
+     * Toggle-логика: если текст уже обёрнут — снимаем wrap, а не дублируем.
+     *
+     *   **bold**  + клик Bold         →  bold
+     *   |bold|    + клик Bold         →  **bold**
+     *   **|bold|** (курсор снаружи)   + клик Bold → bold
+     *   |bold| (обёрнуто, выделено)   + клик Bold → bold
+     */
     _handleFormat(btn, target) {
       if (!target) return;
       const format = btn.dataset.format;
@@ -41,17 +63,55 @@ export function mountToolbarMethods(MessageEditor) {
       }[format];
 
       if (format === 'quote') {
-        const text = selected || 'цитата';
-        const quoted = text.split('\n').map((l) => '> ' + l).join('\n');
-        target.value = value.substring(0, start) + quoted + value.substring(end);
-        target.selectionStart = start;
-        target.selectionEnd = start + quoted.length;
+        const beforeStart = value.substring(0, start);
+        const afterEnd = value.substring(end);
+        const lines = (selected || 'цитата').split('\n');
+        const allQuoted = lines.length > 0 && lines.every((l) => l.startsWith('> '));
+
+        if (selected && allQuoted) {
+          const unquoted = lines.map((l) => l.replace(/^> /, '')).join('\n');
+          target.value = beforeStart + unquoted + afterEnd;
+          target.selectionStart = start;
+          target.selectionEnd = start + unquoted.length;
+        } else {
+          const text = selected || 'цитата';
+          const quoted = text.split('\n').map((l) => '> ' + l).join('\n');
+          target.value = beforeStart + quoted + afterEnd;
+          target.selectionStart = start;
+          target.selectionEnd = start + quoted.length;
+        }
       } else if (wrap) {
-        const insert = selected || format;
-        target.value = value.substring(0, start) + wrap + insert + wrap + value.substring(end);
-        target.selectionStart = start + wrap.length;
-        target.selectionEnd = start + wrap.length + insert.length;
+        const wrapLen = wrap.length;
+        const beforeStart = value.substring(0, start);
+        const afterEnd = value.substring(end);
+
+        const alreadyWrappedOutside =
+          beforeStart.endsWith(wrap) && afterEnd.startsWith(wrap);
+
+        const alreadyWrappedInside =
+          selected.length > wrapLen * 2
+          && selected.startsWith(wrap)
+          && selected.endsWith(wrap);
+
+        if (alreadyWrappedInside) {
+          const inner = selected.substring(wrapLen, selected.length - wrapLen);
+          target.value = beforeStart + inner + afterEnd;
+          target.selectionStart = start;
+          target.selectionEnd = start + inner.length;
+        } else if (alreadyWrappedOutside) {
+          const newStart = start - wrapLen;
+          const newEnd = end + wrapLen;
+          target.value = value.substring(0, newStart) + selected + value.substring(newEnd);
+          target.selectionStart = newStart;
+          target.selectionEnd = newStart + selected.length;
+        } else {
+          const insert = selected || format;
+          target.value = beforeStart + wrap + insert + wrap + afterEnd;
+          target.selectionStart = start + wrapLen;
+          target.selectionEnd = start + wrapLen + insert.length;
+        }
       }
+
       target.focus();
       target.dispatchEvent(new Event('input', { bubbles: true }));
     },
@@ -92,7 +152,6 @@ export function mountToolbarMethods(MessageEditor) {
       const isV2 = this.config.displayMode === 'flat';
       const H = UI.msgEditor.tokensMenu;
 
-      /* Фильтруем категории и токены по контексту поля + displayMode. */
       const categories = this._ctx.categories
         .map((cat) => ({
           label: cat.label,
@@ -126,7 +185,6 @@ export function mountToolbarMethods(MessageEditor) {
           </div>
         `).join('');
 
-        /* Подсказка сверху — почему список короткий */
         const hint = fieldContext === 'title' ? H.titleOnlyHint
           : fieldContext === 'url' ? H.urlOnlyHint
           : fieldContext === 'label' ? H.labelHint

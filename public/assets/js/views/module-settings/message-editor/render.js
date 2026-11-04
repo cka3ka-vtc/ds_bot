@@ -93,6 +93,7 @@ export function mountRenderMethods(MessageEditor) {
                   <div class="form-field" style="margin-bottom:0;">
                     <label>${S.displayMode}</label>
                     <div class="segmented-control" data-mode-seg>
+                      <button type="button" data-value="context" class="seg-btn">${S.modeContext}</button>
                       <button type="button" data-value="flat" class="seg-btn">${S.modeFlat}</button>
                       <button type="button" data-value="embed" class="seg-btn">${S.modeEmbed}</button>
                       <button type="button" data-value="embed-color" class="seg-btn">${S.modeColor}</button>
@@ -106,13 +107,13 @@ export function mountRenderMethods(MessageEditor) {
                 </div>
                 <div class="form-field" style="margin-top:14px;">
                   <label>${S.titleLabel}</label>
-                  ${this._toolbarHTML()}
+                  <div data-toolbar-slot="title"></div>
                   <textarea class="input" data-title-input data-token-context="title"
                             rows="1" maxlength="4000" placeholder="${S.placeholderTitle}"></textarea>
                 </div>
                 <div class="form-field">
                   <label>${S.subtitleLabel}</label>
-                  ${this._toolbarHTML()}
+                  <div data-toolbar-slot="subtitle"></div>
                   <textarea class="input" data-subtitle-input data-token-context="rich"
                             rows="1" maxlength="4000" placeholder="${S.placeholderSubtitle}"></textarea>
                 </div>
@@ -175,9 +176,18 @@ export function mountRenderMethods(MessageEditor) {
       this._previewEl = this.container.querySelector('[data-preview]');
 
       this._renderSettings();
+      this._refreshSettingsToolbars();
       this._renderBlocks();
       this._renderPreview();
       this._updateCount();
+    },
+
+    _refreshSettingsToolbars() {
+      const titleSlot = this.container.querySelector('[data-toolbar-slot="title"]');
+      if (titleSlot) titleSlot.innerHTML = this._toolbarHTML('title');
+
+      const subtitleSlot = this.container.querySelector('[data-toolbar-slot="subtitle"]');
+      if (subtitleSlot) subtitleSlot.innerHTML = this._toolbarHTML('rich');
     },
 
     _addMenuButtons() {
@@ -191,8 +201,9 @@ export function mountRenderMethods(MessageEditor) {
 
     _renderSettings() {
       const root = this.container;
+      const mode = this.config.displayMode || 'context';
       root.querySelectorAll('[data-mode-seg] .seg-btn').forEach((btn) => {
-        btn.classList.toggle('active', btn.dataset.value === this.config.displayMode);
+        btn.classList.toggle('active', btn.dataset.value === mode);
       });
       const colorInput = root.querySelector('[data-accent-color]');
       if (colorInput) colorInput.value = this.config.accentColor || '#5865F2';

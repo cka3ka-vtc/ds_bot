@@ -4,6 +4,7 @@ import { BUILTIN_NAMES, getBuiltinCommand } from '../../../shared/builtin-comman
 import { getNonBotMemberCount } from '../../core/guildCounts.js';
 import { buildComponentsFromConfig, FLAG_COMPONENTS_V2 } from '../../core/componentsBuilder.js';
 import { v2ConfigToEmbed, embedHasContent } from '../../core/v2-to-embed.js';
+import { v2ConfigToMarkdown } from '../../core/v2-to-markdown.js';
 import { saveProfileThrottled, snapshotOf } from './helpers.js';
 import { getCachedCommands } from './helper-cache.js';
 import {
@@ -11,15 +12,6 @@ import {
   defaultRoleSuccessRemoveResponse,
   defaultRoleErrorResponse,
 } from '../../../shared/role-button-responses.js';
-
-// custom_id: role_<section>_<roleId>_<buttonId>.
-// deferReply вызывается ДО roles.add/remove, иначе Discord шлёт
-// «Приложение не ответило вовремя» при медленном REST.
-//
-// Выбор ответа:
-//   hasRole === true  → нажатие снимет роль  → successRemoveResponse
-//   hasRole === false → нажатие выдаст роль  → successAddResponse
-//   ошибка            → errorResponse
 
 const ROLE_BUTTON_RE = /^role_[a-z0-9]+_(\d+)_([a-z0-9_]+)$/i;
 
@@ -121,7 +113,6 @@ async function handleRoleButton({ db, interaction, logger }) {
   const member = interaction.member;
   const hasRole = member.roles.cache.has(roleId);
 
-  // deferReply ДО roles.add/remove — снимает 3-секундный лимит Discord.
   try {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   } catch (err) {
@@ -150,21 +141,19 @@ async function handleRoleButton({ db, interaction, logger }) {
     return true;
   }
 
-  // Успех: выбираем ответ в зависимости от выполненного действия.
   const chosenCfg = hasRole ? successRemoveCfg : successAddCfg;
   await replyWithRoleResponse(interaction, chosenCfg, {
     roleName: role.name, roleMention: `<@&${role.id}>`,
     roleState: hasRole ? 'снята' : 'выдана',
-    roleAction: hasRole ? 'выдать её снова' : 'снять её',
+    roleAction: hasRole ? 'снята с тебя' : 'выдана тебе',
     fallbackText: hasRole
-      ? `↪️ Роль **${role.name}** снята`
+      ? `✅ Роль **${role.name}** снята`
       : `✅ Роль **${role.name}** выдана`,
     edited: true,
   });
   return true;
 }
 
-// ─── Cooldown slash-команд ───
 const CMD_COOLDOWNS = new Map();
 const CMD_COOLDOWN_CLEANUP_INTERVAL = 10 * 60_000;
 setInterval(() => {
@@ -374,11 +363,31 @@ export async function onInteraction({ db, registry, logger, payload }) {
   }
 
   const replyFlags = cmd.ephemeral ? MessageFlags.Ephemeral : undefined;
+  const mode = cfgObj?.displayMode || 'context';
 
   try {
     if (interaction.deferred || interaction.replied) return;
 
     if (hasBlocks) {
+      // 'context' — content markdown
+      if (mode === 'context') {
+        const markdown = v2ConfigToMarkdown(cfgObj, tokens);
+        if (markdown.trim()) {
+          try {
+            await interaction.reply({
+              content: markdown,
+              ...(replyFlags ? { flags: replyFlags } : {}),
+              allowedMentions: { parse: ['users'] },
+            });
+            try { db.incrementCommandUsage(botId, guildId, cmd.id); } catch {}
+            return;
+          } catch (err) {
+            logger.warn({ err, cmd: cmd.name }, 'custom command: context reply failed, fallback to embed');
+          }
+        }
+      }
+
+      // V2 (flat / embed / embed-color)
       let components = null;
       try {
         components = buildComponentsFromConfig(cfgObj, tokens);
@@ -412,7 +421,7 @@ export async function onInteraction({ db, registry, logger, payload }) {
       }
     }
 
-    const resolvedResponse = resolveCommandTokens(cmd.response, tokens) || '✅ Команда выполнена';
+    const resolvedResponse = resolveCommandTokens(cmd.response, tokens) || '⚙ Команда выполнилась';
 
     if (cmd.responseMode === 'embed') {
       const embed = new EmbedBuilder()
